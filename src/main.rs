@@ -2,18 +2,18 @@ mod decoder;
 mod instruction;
 
 use decoder::decode_instruction;
-use instruction::*;
 
-struct CPU {
+/*
+struct Cpu {
     registers: [u16; 16],
 }
 
-impl CPU {
-    fn new() -> CPU {
-        CPU { registers: [0; 16] }
+impl Cpu {
+    fn new() -> Self {
+        Self { registers: [0; 16] }
     }
 
-    fn print_registers(self: &mut Self) {
+    fn print_registers(&mut self) {
         print!(
             "AX: {:#06X} BX: {:#06X} CX: {:#06X} DX: {:#06X} ",
             self.registers[0], self.registers[1], self.registers[2], self.registers[3]
@@ -24,7 +24,7 @@ impl CPU {
         );
     }
 
-    fn execute(self: &mut Self, instruction: &Instruction) {
+    fn execute(&mut self, instruction: &Instruction) {
         println!("Executing: {:?}", instruction);
         match instruction.operation {
             Operation::Add => {
@@ -41,7 +41,7 @@ impl CPU {
         }
     }
 
-    fn get_source_value(self: &Self, operand: &Operand) -> u16 {
+    fn get_source_value(&self, operand: &Operand) -> u16 {
         match operand {
             Operand::Indirect(_, _) => 0,
             Operand::Register(encoding) => match encoding {
@@ -60,7 +60,7 @@ impl CPU {
     }
 
     fn set_register_value(
-        self: &mut Self,
+        &mut self,
         data_size: &DataSize,
         encoding: &RegisterEncoding,
         value: u16,
@@ -105,10 +105,10 @@ impl CPU {
         }
     }
 }
+*/
 
 fn main() {
-    let mut memory = Vec::with_capacity(1024);
-    memory.resize(1024, 0);
+    let mut memory = vec![0; 1024];
 
     memory[1] = 0b000001000;
 

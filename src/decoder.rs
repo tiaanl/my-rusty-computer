@@ -56,7 +56,7 @@ impl ModRMEncoding {
             0b01 => {
                 let encoding = IndirectMemoryEncoding::try_from_byte(byte)?;
                 let mut buf = [0u8; 1];
-                if let Ok(_) = extra_bytes.read_exact(&mut buf) {
+                if extra_bytes.read_exact(&mut buf).is_ok() {
                     Ok(ModRMEncoding::DisplacementByte(encoding, buf[0]))
                 } else {
                     Err("could not read extra byte")
@@ -65,8 +65,8 @@ impl ModRMEncoding {
             0b10 => {
                 let encoding = IndirectMemoryEncoding::try_from_byte(byte)?;
                 let mut buf = [0u8; 2];
-                if let Ok(_) = extra_bytes.read_exact(&mut buf) {
-                    let displacement = buf[0] as u16 + (buf[1] as u16) << 8;
+                if extra_bytes.read_exact(&mut buf).is_ok() {
+                    let displacement = (buf[0] as u16 + (buf[1] as u16)) << 8;
                     Ok(ModRMEncoding::DisplacementWord(encoding, displacement))
                 } else {
                     Err("could not read extra word")
@@ -88,7 +88,7 @@ impl ModRM {
         mod_rm_byte: u8,
         extra_bytes: &mut Reader,
     ) -> Result<Self, DecodeError> {
-        let mode = mod_rm_byte >> 6;
+        // let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte >> 3 & 6;
         let reg = mod_rm_byte & 6;
         if let Ok(encoding) = ModRMEncoding::try_from_byte(rm, extra_bytes) {
@@ -135,14 +135,12 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
 
     match op_code {
         0 => decode_with_mod_rm(data.split_at(1).1),
-        _ => return Err("invalid op code"),
+        _ => Err("invalid op code"),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::convert::TryFrom;
-
     use super::*;
 
     #[test]
