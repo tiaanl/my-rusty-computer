@@ -3,16 +3,16 @@ pub enum Operation {
     Add,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum RegisterEncoding {
-    AlAx = 0,
-    ClCx = 1,
-    DlDx = 2,
-    BlBx = 3,
-    AhSp = 4,
-    ChBp = 5,
-    DhSi = 6,
-    BhDi = 7,
+    AlAx,
+    ClCx,
+    DlDx,
+    BlBx,
+    AhSp,
+    ChBp,
+    DhSi,
+    BhDi,
 }
 
 #[derive(Debug)]
@@ -21,10 +21,23 @@ pub enum DataSize {
     Word,
 }
 
+#[derive(Debug, PartialEq)]
+pub enum IndirectMemoryEncoding {
+    BxSi,
+    BxDi,
+    BpSi,
+    BpDi,
+    Si,
+    Di,
+    Bp,
+    Bx,
+}
+
 #[derive(Debug)]
 pub enum Operand {
     None,
 
+    Indirect(IndirectMemoryEncoding, u16),
     Register(RegisterEncoding),
     Immediate(u16),
 }
@@ -35,4 +48,20 @@ pub struct Instruction {
     pub data_size: DataSize,
     pub destination: Operand,
     pub source: Operand,
+}
+
+impl Instruction {
+    pub fn new(
+        operation: Operation,
+        data_size: DataSize,
+        destination: Operand,
+        source: Operand,
+    ) -> Self {
+        Self {
+            operation,
+            data_size,
+            destination,
+            source,
+        }
+    }
 }

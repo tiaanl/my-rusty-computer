@@ -1,5 +1,7 @@
+mod decoder;
 mod instruction;
 
+use decoder::decode_instruction;
 use instruction::*;
 
 struct CPU {
@@ -36,12 +38,12 @@ impl CPU {
                     _ => panic!(),
                 }
             }
-            _ => println!("Other"),
         }
     }
 
     fn get_source_value(self: &Self, operand: &Operand) -> u16 {
-        return match operand {
+        match operand {
+            Operand::Indirect(_, _) => 0,
             Operand::Register(encoding) => match encoding {
                 RegisterEncoding::AlAx => self.registers[0],
                 RegisterEncoding::ClCx => self.registers[1],
@@ -54,7 +56,7 @@ impl CPU {
             },
             Operand::Immediate(value) => *value,
             Operand::None => panic!(),
-        };
+        }
     }
 
     fn set_register_value(
@@ -105,6 +107,17 @@ impl CPU {
 }
 
 fn main() {
+    let mut memory = Vec::with_capacity(1024);
+    memory.resize(1024, 0);
+
+    memory[1] = 0b000001000;
+
+    match decode_instruction(memory.as_slice()) {
+        Ok(instruction) => println!("instruction: {:?}", instruction),
+        Err(message) => println!("Error: {}", message),
+    }
+
+    /*
     let mut cpu = CPU::new();
 
     cpu.execute(&Instruction {
@@ -136,4 +149,5 @@ fn main() {
         source: Operand::Immediate(0x01),
     });
     cpu.print_registers();
+    */
 }
