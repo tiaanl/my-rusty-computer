@@ -3,14 +3,14 @@
 version = 3
 
 [[package]]
-name = "bytes"
-version = "1.0.1"
+name = "byteorder"
+version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
+checksum = "ae44d1a3d5a19df61dd0c8beb138458ac2a53a7ac09eba97d55592540004306b"
 
 [[package]]
 name = "ees-rs"
 version = "0.1.0"
 dependencies = [
- "bytes",
+ "byteorder",
 ]
