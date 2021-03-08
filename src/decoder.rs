@@ -134,18 +134,13 @@ impl Operand {
     }
 }
 
-fn decode_with_mod_rm(data: &[u8]) -> Result<Instruction, DecodeError> {
+fn operands_from_mod_rm(data: &[u8]) -> Result<(Operand, Operand), DecodeError> {
     let ModRM(encoding, register_encoding) =
         ModRM::try_from_mod_rm_byte(data[0], &mut data.as_ref())?;
 
-    let source = Operand::from_mod_rm_encoding(encoding)?;
-    let destination = Operand::Register(register_encoding);
-
-    Ok(Instruction::new(
-        Operation::Add,
-        DataSize::Byte,
-        destination,
-        source,
+    Ok((
+        Operand::from_mod_rm_encoding(encoding)?,
+        Operand::Register(register_encoding),
     ))
 }
 
@@ -155,7 +150,51 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
     println!("op_code = {}", op_code);
 
     match op_code {
-        0 => decode_with_mod_rm(data.split_at(1).1),
+        // ADD / Add
+
+        // 0 0 0 0 0 0 d w
+        0b00000000 => {
+            let (destination, source) = operands_from_mod_rm(data.split_at(1).1)?;
+            Ok(Instruction::new(
+                Operation::Add,
+                DataSize::Byte,
+                destination,
+                source,
+            ))
+        }
+        0x00000001 => {
+            let (destination, source) = operands_from_mod_rm(data.split_at(1).1)?;
+            Ok(Instruction::new(
+                Operation::Add,
+                DataSize::Word,
+                destination,
+                source,
+            ))
+        }
+        0x00000010 => {
+            let (source, destination) = operands_from_mod_rm(data.split_at(1).1)?;
+            Ok(Instruction::new(
+                Operation::Add,
+                DataSize::Byte,
+                destination,
+                source,
+            ))
+        }
+        0x00000011 => {
+            let (source, destination) = operands_from_mod_rm(data.split_at(1).1)?;
+            Ok(Instruction::new(
+                Operation::Add,
+                DataSize::Word,
+                destination,
+                source,
+            ))
+        }
+
+        // 1 0 0 0 0 0 s w
+        // 0b10000000 => todo!(),
+        // 0b10000001 => todo!(),
+        // 0b10000010 => todo!(),
+        // 0b10000011 => todo!(),
         _ => Err(DecodeError::InvalidOpCode(op_code)),
     }
 }

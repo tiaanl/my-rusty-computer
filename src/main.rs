@@ -113,7 +113,7 @@ fn main() {
     memory[1] = 0b000001000;
 
     match decode_instruction(memory.as_slice()) {
-        Ok(instruction) => println!("instruction: {:?}", instruction),
+        Ok(instruction) => println!("instruction: {}", instruction),
         Err(message) => println!("Error: {}", message),
     }
 
