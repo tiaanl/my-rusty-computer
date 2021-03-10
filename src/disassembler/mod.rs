@@ -71,10 +71,10 @@ fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSi
         }
         Operand::Register(encoding) => write!(f, "{}", (encoding, data_size).keyword())?,
         Operand::Immediate(value) => match data_size {
-            DataSize::Byte => write!(f, "0x{:#2X}", value)?,
-            DataSize::Word => write!(f, "0x{:#4X}", value)?,
+            DataSize::Byte => write!(f, "{:#04X}", value)?,
+            DataSize::Word => write!(f, "{:#06X}", value)?,
         },
-        _ => write!(f, "unknown operand")?,
+        // _ => write!(f, "unknown operand")?,
     }
     Ok(())
 }

@@ -35,8 +35,6 @@ pub enum IndirectMemoryEncoding {
 
 #[derive(Debug)]
 pub enum Operand {
-    None,
-
     Indirect(IndirectMemoryEncoding, u16),
     Register(RegisterEncoding),
     Immediate(u16),

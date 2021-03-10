@@ -1,7 +1,5 @@
 use std::fmt;
 
-use byteorder::{LittleEndian, ReadBytesExt};
-
 use crate::instruction::*;
 
 #[derive(PartialEq, Debug)]
@@ -64,11 +62,31 @@ pub enum ModRMEncoding {
     Register(RegisterEncoding),
 }
 
+trait ByteReader {
+    fn read_u8(&self) -> Result<u8, DecodeError>;
+    fn read_u16(&self) -> Result<u16, DecodeError>;
+}
+
+impl ByteReader for &[u8] {
+    fn read_u8(&self) -> Result<u8, DecodeError> {
+        if self.len() >= 1 {
+            Ok(self[0])
+        } else {
+            Err(DecodeError::CouldNotReadExtraBytes)
+        }
+    }
+
+    fn read_u16(&self) -> Result<u16, DecodeError> {
+        if self.len() >= 2 {
+            Ok(((self[0] as u16) << 8) + self[1] as u16)
+        } else {
+            Err(DecodeError::CouldNotReadExtraBytes)
+        }
+    }
+}
+
 impl ModRMEncoding {
-    fn try_from_byte<Reader: std::io::Read>(
-        byte: u8,
-        extra_bytes: &mut Reader,
-    ) -> Result<Self, DecodeError> {
+    fn try_from_byte(byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
         let mode = byte >> 6;
         match mode {
             0b00 => {
@@ -85,7 +103,7 @@ impl ModRMEncoding {
             }
             0b10 => {
                 let encoding = IndirectMemoryEncoding::try_from_byte(byte)?;
-                if let Ok(displacement) = extra_bytes.read_u16::<LittleEndian>() {
+                if let Ok(displacement) = extra_bytes.read_u16() {
                     Ok(ModRMEncoding::DisplacementWord(encoding, displacement))
                 } else {
                     Err(DecodeError::CouldNotReadExtraBytes)
@@ -100,13 +118,11 @@ impl ModRMEncoding {
     }
 }
 
+#[derive(Debug)]
 struct ModRM(ModRMEncoding, RegisterEncoding);
 
 impl ModRM {
-    fn try_from_mod_rm_byte<Reader: std::io::Read>(
-        mod_rm_byte: u8,
-        extra_bytes: &mut Reader,
-    ) -> Result<Self, DecodeError> {
+    fn try_from_mod_rm_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
         // let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte >> 3 & 6;
         let reg = mod_rm_byte & 6;
@@ -134,9 +150,8 @@ impl Operand {
     }
 }
 
-fn operands_from_mod_rm(data: &[u8]) -> Result<(Operand, Operand), DecodeError> {
-    let ModRM(encoding, register_encoding) =
-        ModRM::try_from_mod_rm_byte(data[0], &mut data.as_ref())?;
+fn operands_from_mod_rm(mod_rm: u8, extra_bytes: &[u8]) -> Result<(Operand, Operand), DecodeError> {
+    let ModRM(encoding, register_encoding) = ModRM::try_from_mod_rm_byte(mod_rm, extra_bytes)?;
 
     Ok((
         Operand::from_mod_rm_encoding(encoding)?,
@@ -144,17 +159,29 @@ fn operands_from_mod_rm(data: &[u8]) -> Result<(Operand, Operand), DecodeError> 
     ))
 }
 
+trait CodeAndExtra<'a> {
+    fn code_and_extra(&'a self) -> (u8, &'a [u8]);
+}
+
+impl<'a> CodeAndExtra<'a> for &[u8] {
+    fn code_and_extra(&'a self) -> (u8, &'a [u8]) {
+        let (code, extra) = self.split_at(1);
+        (code[0], extra)
+    }
+}
+
 pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
-    let op_code = data[0];
+    let (op_code, extra_bytes) = data.code_and_extra();
 
     println!("op_code = {}", op_code);
 
     match op_code {
         // ADD / Add
 
-        // 0 0 0 0 0 0 d w
+        // 0 0 0 0 0 0 d w - Reg/Memory with Register to Either
         0b00000000 => {
-            let (destination, source) = operands_from_mod_rm(data.split_at(1).1)?;
+            let (mod_rm, extra_bytes) = data.code_and_extra();
+            let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
                 DataSize::Byte,
@@ -162,8 +189,9 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
                 source,
             ))
         }
-        0x00000001 => {
-            let (destination, source) = operands_from_mod_rm(data.split_at(1).1)?;
+        0b00000001 => {
+            let (mod_rm, extra_bytes) = data.code_and_extra();
+            let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
                 DataSize::Word,
@@ -171,8 +199,9 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
                 source,
             ))
         }
-        0x00000010 => {
-            let (source, destination) = operands_from_mod_rm(data.split_at(1).1)?;
+        0b00000010 => {
+            let (mod_rm, extra_bytes) = data.code_and_extra();
+            let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
                 DataSize::Byte,
@@ -180,8 +209,9 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
                 source,
             ))
         }
-        0x00000011 => {
-            let (source, destination) = operands_from_mod_rm(data.split_at(1).1)?;
+        0b00000011 => {
+            let (mod_rm, extra_bytes) = data.code_and_extra();
+            let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
                 DataSize::Word,
@@ -190,11 +220,36 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
             ))
         }
 
-        // 1 0 0 0 0 0 s w
-        // 0b10000000 => todo!(),
-        // 0b10000001 => todo!(),
-        // 0b10000010 => todo!(),
-        // 0b10000011 => todo!(),
+        // 1 0 0 0 0 0 s w - Immediate to Register/Memory
+        0b10000000 => {
+            let (mod_rm_byte, extra_bytes) = extra_bytes.code_and_extra();
+            let ModRM(encoding, _) = ModRM::try_from_mod_rm_byte(mod_rm_byte, extra_bytes)?;
+            let immediate = extra_bytes.read_u8()?;
+            Ok(Instruction::new(
+                Operation::Add,
+                DataSize::Byte,
+                Operand::from_mod_rm_encoding(encoding)?,
+                Operand::Immediate(immediate as u16),
+            ))
+        }
+        /*
+        0b10000001 => {
+            let (mod_rm, mut extra_bytes) = extra_bytes.code_and_extra();
+            let mod_rm = ModRM::try_from_mod_rm_byte(mod_rm, &mut extra_bytes)?;
+            println!("{:?}", mod_rm);
+            Err(DecodeError::Unknown)
+        }
+        0b10000010 => {
+            let mod_rm = ModRM::try_from_mod_rm_byte(data[1], &mut data.as_ref())?;
+            println!("{:?}", mod_rm);
+            Err(DecodeError::Unknown)
+        }
+        0b10000011 => {
+            let mod_rm = ModRM::try_from_mod_rm_byte(data[1], &mut data.as_ref())?;
+            println!("{:?}", mod_rm);
+            Err(DecodeError::Unknown)
+        }
+        */
         _ => Err(DecodeError::InvalidOpCode(op_code)),
     }
 }
