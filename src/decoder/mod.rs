@@ -69,7 +69,7 @@ trait ByteReader {
 
 impl ByteReader for &[u8] {
     fn read_u8(&self) -> Result<u8, DecodeError> {
-        if self.len() >= 1 {
+        if !self.is_empty() {
             Ok(self[0])
         } else {
             Err(DecodeError::CouldNotReadExtraBytes)
