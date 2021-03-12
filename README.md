@@ -1,4 +1,4 @@
-# Eighty Eighty Six
+# My Rusty Computer
 8086 emulator
 
 ## Getting started
