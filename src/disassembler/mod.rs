@@ -1,8 +1,5 @@
 use std::fmt;
-
-use crate::instruction::{
-    DataSize, IndirectMemoryEncoding, Instruction, Operand, Operation, RegisterEncoding,
-};
+use crate::instructions::*;
 
 trait Keyword {
     fn keyword(&self) -> &'static str;

@@ -1,10 +1,5 @@
-mod decoder;
-mod disassembler;
-mod instruction;
+use mrc::instructions::*;
 
-use decoder::decode_instruction;
-
-/*
 struct Cpu {
     registers: [u16; 16],
 }
@@ -56,7 +51,6 @@ impl Cpu {
                 RegisterEncoding::BhDi => self.registers[7],
             },
             Operand::Immediate(value) => *value,
-            Operand::None => panic!(),
         }
     }
 
@@ -106,21 +100,9 @@ impl Cpu {
         }
     }
 }
-*/
 
 fn main() {
-    let mut memory = vec![0; 1024];
-
-    // memory[1] = 0b000001000;
-    memory[0] = 0b10000000;
-
-    match decode_instruction(memory.as_slice()) {
-        Ok(instruction) => println!("instruction: {}", instruction),
-        Err(message) => println!("Error: {}", message),
-    }
-
-    /*
-    let mut cpu = CPU::new();
+    let mut cpu = Cpu::new();
 
     cpu.execute(&Instruction {
         operation: Operation::Add,
@@ -151,5 +133,4 @@ fn main() {
         source: Operand::Immediate(0x01),
     });
     cpu.print_registers();
-    */
 }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::instruction::*;
+use crate::instructions::*;
 
 #[derive(PartialEq, Debug)]
 pub enum DecodeError {
