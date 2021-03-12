@@ -5,14 +5,14 @@ pub enum Operation {
 
 #[derive(PartialEq, Debug)]
 pub enum RegisterEncoding {
-    AlAx,
-    ClCx,
-    DlDx,
-    BlBx,
-    AhSp,
-    ChBp,
-    DhSi,
-    BhDi,
+    AlAx = 0b000,
+    ClCx = 0b001,
+    DlDx = 0b010,
+    BlBx = 0b011,
+    AhSp = 0b100,
+    ChBp = 0b101,
+    DhSi = 0b110,
+    BhDi = 0b111,
 }
 
 #[derive(Debug)]
@@ -23,14 +23,14 @@ pub enum DataSize {
 
 #[derive(Debug, PartialEq)]
 pub enum IndirectMemoryEncoding {
-    BxSi,
-    BxDi,
-    BpSi,
-    BpDi,
-    Si,
-    Di,
-    Bp,
-    Bx,
+    BxSi = 0b000,
+    BxDi = 0b001,
+    BpSi = 0b010,
+    BpDi = 0b011,
+    Si = 0b100,
+    Di = 0b101,
+    Bp = 0b110,
+    Bx = 0b111,
 }
 
 #[derive(Debug)]

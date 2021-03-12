@@ -1,6 +1,9 @@
+pub mod mod_rm;
+
 use std::fmt;
 
 use crate::instructions::*;
+use mod_rm::ModRMEncoding;
 
 #[derive(PartialEq, Debug)]
 pub enum DecodeError {
@@ -17,6 +20,7 @@ impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             DecodeError::InvalidOpCode(op_code) => write!(f, "invalid op code: {:#04x}", op_code),
+            DecodeError::InvalidModRMEncoding(mod_rm_byte) => write!(f, "invalid modR/M encoding: {:#04x}", mod_rm_byte),
             _ => write!(f, "unknown error"),
         }
     }
@@ -36,30 +40,6 @@ impl RegisterEncoding {
             _ => Err(DecodeError::InvalidRegisterEncoding(byte)),
         }
     }
-}
-
-impl IndirectMemoryEncoding {
-    fn try_from_byte(byte: u8) -> Result<Self, DecodeError> {
-        match byte {
-            0b000 => Ok(IndirectMemoryEncoding::BxSi),
-            0b001 => Ok(IndirectMemoryEncoding::BxDi),
-            0b010 => Ok(IndirectMemoryEncoding::BpSi),
-            0b011 => Ok(IndirectMemoryEncoding::BpDi),
-            0b100 => Ok(IndirectMemoryEncoding::Si),
-            0b101 => Ok(IndirectMemoryEncoding::Di),
-            0b110 => Ok(IndirectMemoryEncoding::Bp),
-            0b111 => Ok(IndirectMemoryEncoding::Bx),
-            _ => Err(DecodeError::InvalidIndirectMemoryOffset(byte)),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum ModRMEncoding {
-    Indirect(IndirectMemoryEncoding),
-    DisplacementByte(IndirectMemoryEncoding, u8),
-    DisplacementWord(IndirectMemoryEncoding, u16),
-    Register(RegisterEncoding),
 }
 
 trait ByteReader {
@@ -85,39 +65,6 @@ impl ByteReader for &[u8] {
     }
 }
 
-impl ModRMEncoding {
-    fn try_from_byte(byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
-        let mode = byte >> 6;
-        match mode {
-            0b00 => {
-                let encoding = IndirectMemoryEncoding::try_from_byte(byte)?;
-                Ok(ModRMEncoding::Indirect(encoding))
-            }
-            0b01 => {
-                let encoding = IndirectMemoryEncoding::try_from_byte(byte)?;
-                if let Ok(displacement) = extra_bytes.read_u8() {
-                    Ok(ModRMEncoding::DisplacementByte(encoding, displacement))
-                } else {
-                    Err(DecodeError::CouldNotReadExtraBytes)
-                }
-            }
-            0b10 => {
-                let encoding = IndirectMemoryEncoding::try_from_byte(byte)?;
-                if let Ok(displacement) = extra_bytes.read_u16() {
-                    Ok(ModRMEncoding::DisplacementWord(encoding, displacement))
-                } else {
-                    Err(DecodeError::CouldNotReadExtraBytes)
-                }
-            }
-            0b11 => {
-                let encoding = RegisterEncoding::try_from_byte(byte)?;
-                Ok(ModRMEncoding::Register(encoding))
-            }
-            _ => Err(DecodeError::InvalidModRMMode(mode)),
-        }
-    }
-}
-
 #[derive(Debug)]
 struct ModRM(ModRMEncoding, RegisterEncoding);
 
@@ -126,7 +73,7 @@ impl ModRM {
         // let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte >> 3 & 6;
         let reg = mod_rm_byte & 6;
-        if let Ok(encoding) = ModRMEncoding::try_from_byte(rm, extra_bytes) {
+        if let Ok(encoding) = ModRMEncoding::try_from_mod_rm_byte(mod_rm_byte, extra_bytes) {
             if let Ok(register) = RegisterEncoding::try_from_byte(reg) {
                 Ok(ModRM(encoding, register))
             } else {
@@ -172,15 +119,14 @@ impl<'a> CodeAndExtra<'a> for &[u8] {
 
 pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
     let (op_code, extra_bytes) = data.code_and_extra();
-
-    println!("op_code = {}", op_code);
+    println!("op_code, extra_bytes = {} {:?}", op_code, extra_bytes);
 
     match op_code {
         // ADD / Add
 
         // 0 0 0 0 0 0 d w - Reg/Memory with Register to Either
         0b00000000 => {
-            let (mod_rm, extra_bytes) = data.code_and_extra();
+            let (mod_rm, extra_bytes) = extra_bytes.code_and_extra();
             let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
@@ -190,7 +136,8 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
             ))
         }
         0b00000001 => {
-            let (mod_rm, extra_bytes) = data.code_and_extra();
+            let (mod_rm, extra_bytes) = extra_bytes.code_and_extra();
+            println!("mod_rm, extra_bytes = {} {:?}", mod_rm, extra_bytes);
             let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
@@ -200,7 +147,7 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
             ))
         }
         0b00000010 => {
-            let (mod_rm, extra_bytes) = data.code_and_extra();
+            let (mod_rm, extra_bytes) = extra_bytes.code_and_extra();
             let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
@@ -210,7 +157,7 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
             ))
         }
         0b00000011 => {
-            let (mod_rm, extra_bytes) = data.code_and_extra();
+            let (mod_rm, extra_bytes) = extra_bytes.code_and_extra();
             let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
@@ -295,62 +242,6 @@ mod tests {
         assert_eq!(
             RegisterEncoding::try_from_byte(8),
             Err(DecodeError::InvalidRegisterEncoding(8))
-        );
-    }
-
-    #[test]
-    fn indirect_memory_encoding() {
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(0).unwrap(),
-            IndirectMemoryEncoding::BxSi
-        );
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(1).unwrap(),
-            IndirectMemoryEncoding::BxDi
-        );
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(2).unwrap(),
-            IndirectMemoryEncoding::BpSi
-        );
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(3).unwrap(),
-            IndirectMemoryEncoding::BpDi
-        );
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(4).unwrap(),
-            IndirectMemoryEncoding::Si
-        );
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(5).unwrap(),
-            IndirectMemoryEncoding::Di
-        );
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(6).unwrap(),
-            IndirectMemoryEncoding::Bp
-        );
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(7).unwrap(),
-            IndirectMemoryEncoding::Bx
-        );
-        assert_eq!(
-            IndirectMemoryEncoding::try_from_byte(8),
-            Err(DecodeError::InvalidIndirectMemoryOffset(8))
-        );
-    }
-
-    #[test]
-    fn mod_rm_encoding() {
-        assert_eq!(
-            ModRMEncoding::try_from_byte(0, &mut [0u8; 1].as_ref()).unwrap(),
-            ModRMEncoding::Indirect(IndirectMemoryEncoding::BxSi)
-        );
-        assert_eq!(
-            ModRMEncoding::try_from_byte(1, &mut [0u8; 1].as_ref()).unwrap(),
-            ModRMEncoding::Indirect(IndirectMemoryEncoding::BxDi)
-        );
-        assert_eq!(
-            ModRMEncoding::try_from_byte(1, &mut [0u8; 1].as_ref()).unwrap(),
-            ModRMEncoding::Indirect(IndirectMemoryEncoding::BxDi)
         );
     }
 }
