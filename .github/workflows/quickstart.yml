@@ -1,4 +1,4 @@
-name: ees-rs
+name: my-rusty-computer
 
 on: [push]
 

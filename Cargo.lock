@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "ees-rs"
+name = "my-rusty-computer"
 version = "0.1.0"
