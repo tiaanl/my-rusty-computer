@@ -3,16 +3,17 @@ pub mod mod_rm;
 use std::fmt;
 
 use crate::instructions::*;
-use mod_rm::ModRMEncoding;
+pub use mod_rm::ModRM;
+use mod_rm::RegisterOrMemory;
 
 #[derive(PartialEq, Debug)]
 pub enum DecodeError {
     InvalidOpCode(u8),
     InvalidRegisterEncoding(u8),
-    InvalidIndirectMemoryOffset(u8),
+    InvalidIndirectMemoryEncoding(u8),
     InvalidModRMEncoding(u8),
     InvalidModRMMode(u8),
-    CouldNotCreateOperandFromModRMEncoding(ModRMEncoding),
+    CouldNotCreateOperandFromModRMEncoding(RegisterOrMemory),
     CouldNotReadExtraBytes,
 }
 
@@ -20,7 +21,9 @@ impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             DecodeError::InvalidOpCode(op_code) => write!(f, "invalid op code: {:#04x}", op_code),
-            DecodeError::InvalidModRMEncoding(mod_rm_byte) => write!(f, "invalid modR/M encoding: {:#04x}", mod_rm_byte),
+            DecodeError::InvalidModRMEncoding(mod_rm_byte) => {
+                write!(f, "invalid modR/M encoding: {:#04x}", mod_rm_byte)
+            }
             _ => write!(f, "unknown error"),
         }
     }
@@ -58,38 +61,20 @@ impl ByteReader for &[u8] {
 
     fn read_u16(&self) -> Result<u16, DecodeError> {
         if self.len() >= 2 {
-            Ok(((self[0] as u16) << 8) + self[1] as u16)
+            Ok(((self[1] as u16) << 8) + self[0] as u16)
         } else {
             Err(DecodeError::CouldNotReadExtraBytes)
         }
     }
 }
 
-#[derive(Debug)]
-struct ModRM(ModRMEncoding, RegisterEncoding);
-
-impl ModRM {
-    fn try_from_mod_rm_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
-        // let mode = mod_rm_byte >> 6;
-        let rm = mod_rm_byte >> 3 & 6;
-        let reg = mod_rm_byte & 6;
-        if let Ok(encoding) = ModRMEncoding::try_from_mod_rm_byte(mod_rm_byte, extra_bytes) {
-            if let Ok(register) = RegisterEncoding::try_from_byte(reg) {
-                Ok(ModRM(encoding, register))
-            } else {
-                Err(DecodeError::InvalidRegisterEncoding(reg))
-            }
-        } else {
-            Err(DecodeError::InvalidModRMEncoding(rm))
-        }
-    }
-}
-
 impl Operand {
-    fn from_mod_rm_encoding(encoding: ModRMEncoding) -> Result<Self, DecodeError> {
+    fn from_mod_rm_encoding(encoding: RegisterOrMemory) -> Result<Self, DecodeError> {
         match encoding {
-            ModRMEncoding::Indirect(encoding) => Ok(Operand::Indirect(encoding, 0)),
-            ModRMEncoding::Register(register_encoding) => Ok(Operand::Register(register_encoding)),
+            RegisterOrMemory::Indirect(encoding) => Ok(Operand::Indirect(encoding, 0)),
+            RegisterOrMemory::Register(register_encoding) => {
+                Ok(Operand::Register(register_encoding))
+            }
             _ => Err(DecodeError::CouldNotCreateOperandFromModRMEncoding(
                 encoding,
             )),
@@ -97,12 +82,12 @@ impl Operand {
     }
 }
 
-fn operands_from_mod_rm(mod_rm: u8, extra_bytes: &[u8]) -> Result<(Operand, Operand), DecodeError> {
-    let ModRM(encoding, register_encoding) = ModRM::try_from_mod_rm_byte(mod_rm, extra_bytes)?;
+fn operands_from_mod_rm(bytes: &[u8]) -> Result<(Operand, Operand), DecodeError> {
+    let ModRM(memory_or_register, register) = ModRM::try_from_bytes(bytes)?;
 
     Ok((
-        Operand::from_mod_rm_encoding(encoding)?,
-        Operand::Register(register_encoding),
+        Operand::from_mod_rm_encoding(memory_or_register)?,
+        Operand::Register(register),
     ))
 }
 
@@ -117,51 +102,52 @@ impl<'a> CodeAndExtra<'a> for &[u8] {
     }
 }
 
-pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
+pub struct DecodeResult {
+    pub bytes_read: usize,
+    pub instruction: Instruction,
+}
+
+pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult, DecodeError> {
     let (op_code, extra_bytes) = data.code_and_extra();
-    println!("op_code, extra_bytes = {} {:?}", op_code, extra_bytes);
+    // println!("op_code, extra_bytes = {} {:?}", op_code, extra_bytes);
 
     match op_code {
+        /*
         // ADD / Add
 
         // 0 0 0 0 0 0 d w - Reg/Memory with Register to Either
         0b00000000 => {
-            let (mod_rm, extra_bytes) = extra_bytes.code_and_extra();
-            let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
+            let (destination, source) = operands_from_mod_rm(extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
-                DataSize::Byte,
+                Some(DataSize::Byte),
                 destination,
                 source,
             ))
         }
         0b00000001 => {
-            let (mod_rm, extra_bytes) = extra_bytes.code_and_extra();
-            println!("mod_rm, extra_bytes = {} {:?}", mod_rm, extra_bytes);
-            let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
+            let (destination, source) = operands_from_mod_rm(extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
-                DataSize::Word,
+                Some(DataSize::Word),
                 destination,
                 source,
             ))
         }
         0b00000010 => {
-            let (mod_rm, extra_bytes) = extra_bytes.code_and_extra();
-            let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
+            let (destination, source) = operands_from_mod_rm(extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
-                DataSize::Byte,
+                Some(DataSize::Byte),
                 destination,
                 source,
             ))
         }
         0b00000011 => {
-            let (mod_rm, extra_bytes) = extra_bytes.code_and_extra();
-            let (destination, source) = operands_from_mod_rm(mod_rm, extra_bytes)?;
+            let (destination, source) = operands_from_mod_rm(extra_bytes)?;
             Ok(Instruction::new(
                 Operation::Add,
-                DataSize::Word,
+                Some(DataSize::Word),
                 destination,
                 source,
             ))
@@ -169,17 +155,15 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
 
         // 1 0 0 0 0 0 s w - Immediate to Register/Memory
         0b10000000 => {
-            let (mod_rm_byte, extra_bytes) = extra_bytes.code_and_extra();
-            let ModRM(encoding, _) = ModRM::try_from_mod_rm_byte(mod_rm_byte, extra_bytes)?;
+            let ModRM(encoding, _) = ModRM::try_from_bytes(extra_bytes)?;
             let immediate = extra_bytes.read_u8()?;
             Ok(Instruction::new(
                 Operation::Add,
-                DataSize::Byte,
+                Some(DataSize::Byte),
                 Operand::from_mod_rm_encoding(encoding)?,
                 Operand::Immediate(immediate as u16),
             ))
         }
-        /*
         0b10000001 => {
             let (mod_rm, mut extra_bytes) = extra_bytes.code_and_extra();
             let mod_rm = ModRM::try_from_mod_rm_byte(mod_rm, &mut extra_bytes)?;
@@ -197,6 +181,22 @@ pub fn decode_instruction(data: &[u8]) -> Result<Instruction, DecodeError> {
             Err(DecodeError::Unknown)
         }
         */
+        // JMP = Unconditional jump
+
+        // 1 1 1 0 1 0 1 0 -> Direct intersegment
+        0xEA => {
+            let (offset, segment) = extra_bytes.split_at(2);
+            let offset = offset.read_u16().unwrap();
+            let segment = segment.read_u16().unwrap();
+
+            Ok(DecodeResult {
+                bytes_read: 5,
+                instruction: Instruction {
+                    operation: Operation::Jmp,
+                    operands: OperandSet::SegmentAndOffset(segment, offset),
+                },
+            })
+        }
         _ => Err(DecodeError::InvalidOpCode(op_code)),
     }
 }

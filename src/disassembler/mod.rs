@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::instructions::*;
+use std::fmt;
 
 trait Keyword {
     fn keyword(&self) -> &'static str;
@@ -9,6 +9,7 @@ impl Keyword for Operation {
     fn keyword(&self) -> &'static str {
         match self {
             Operation::Add => "add",
+            Operation::Jmp => "jmp",
             // _ => "unknown",
         }
     }
@@ -41,23 +42,24 @@ impl Keyword for (&RegisterEncoding, &DataSize) {
     }
 }
 
-impl Keyword for IndirectMemoryEncoding {
+impl Keyword for AddressingMode {
     fn keyword(&self) -> &'static str {
         match self {
-            IndirectMemoryEncoding::BxSi => "bx+si",
-            IndirectMemoryEncoding::BxDi => "bx+di",
-            IndirectMemoryEncoding::BpSi => "bp+si",
-            IndirectMemoryEncoding::BpDi => "bp+di",
-            IndirectMemoryEncoding::Si => "si",
-            IndirectMemoryEncoding::Di => "di",
-            IndirectMemoryEncoding::Bp => "bp",
-            IndirectMemoryEncoding::Bx => "bx",
+            AddressingMode::BxSi => "bx+si",
+            AddressingMode::BxDi => "bx+di",
+            AddressingMode::BpSi => "bp+si",
+            AddressingMode::BpDi => "bp+di",
+            AddressingMode::Si => "si",
+            AddressingMode::Di => "di",
+            AddressingMode::Bp => "bp",
+            AddressingMode::Bx => "bx",
         }
     }
 }
 
 fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSize) -> fmt::Result {
     match operand {
+        Operand::None => write!(f, "[]")?,
         Operand::Indirect(encoding, displacement) => {
             write!(f, "[{}", encoding.keyword())?;
             if *displacement > 0 {
@@ -76,12 +78,24 @@ fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSi
     Ok(())
 }
 
+fn fmt_operand_set(f: &mut fmt::Formatter<'_>, operand_set: &OperandSet) -> fmt::Result {
+    match operand_set {
+        OperandSet::SegmentAndOffset(segment, offset) => {
+            write!(f, "{:#06X}:{:#06X}", segment, offset)?
+        }
+        OperandSet::DestinationAndSource(destination, source, data_size) => {
+            fmt_operand(f, destination, data_size)?;
+            write!(f, ", ")?;
+            fmt_operand(f, source, data_size)?;
+        }
+    }
+    Ok(())
+}
+
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:<10}", self.operation.keyword())?;
-        fmt_operand(f, &self.destination, &self.data_size)?;
-        write!(f, ", ")?;
-        fmt_operand(f, &self.source, &self.data_size)?;
+        fmt_operand_set(f, &self.operands)?;
 
         Ok(())
     }

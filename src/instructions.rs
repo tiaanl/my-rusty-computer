@@ -1,6 +1,7 @@
 #[derive(Debug)]
 pub enum Operation {
     Add,
+    Jmp,
 }
 
 #[derive(PartialEq, Debug)]
@@ -22,7 +23,7 @@ pub enum DataSize {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum IndirectMemoryEncoding {
+pub enum AddressingMode {
     BxSi = 0b000,
     BxDi = 0b001,
     BpSi = 0b010,
@@ -35,31 +36,20 @@ pub enum IndirectMemoryEncoding {
 
 #[derive(Debug)]
 pub enum Operand {
-    Indirect(IndirectMemoryEncoding, u16),
+    None,
+    Indirect(AddressingMode, u16),
     Register(RegisterEncoding),
     Immediate(u16),
 }
 
 #[derive(Debug)]
-pub struct Instruction {
-    pub operation: Operation,
-    pub data_size: DataSize,
-    pub destination: Operand,
-    pub source: Operand,
+pub enum OperandSet {
+    DestinationAndSource(Operand, Operand, DataSize),
+    SegmentAndOffset(u16, u16),
 }
 
-impl Instruction {
-    pub fn new(
-        operation: Operation,
-        data_size: DataSize,
-        destination: Operand,
-        source: Operand,
-    ) -> Self {
-        Self {
-            operation,
-            data_size,
-            destination,
-            source,
-        }
-    }
+#[derive(Debug)]
+pub struct Instruction {
+    pub operation: Operation,
+    pub operands: OperandSet,
 }
