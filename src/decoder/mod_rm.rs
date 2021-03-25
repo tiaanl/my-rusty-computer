@@ -1,5 +1,5 @@
 use super::DecodeError;
-use crate::instructions::{AddressingMode, RegisterEncoding};
+use crate::instructions::{AddressingMode, Operand, RegisterEncoding};
 
 impl AddressingMode {
     pub fn try_from_byte(byte: u8) -> Result<Self, DecodeError> {
@@ -28,9 +28,7 @@ pub enum RegisterOrMemory {
 }
 
 impl RegisterOrMemory {
-    pub fn try_from_bytes(extra_bytes: &[u8]) -> Result<Self, DecodeError> {
-        let mod_rm_byte = extra_bytes[0];
-        let extra_bytes = &extra_bytes[1..];
+    pub fn try_from(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
         let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte & 7;
 
@@ -54,18 +52,30 @@ impl RegisterOrMemory {
     }
 }
 
+impl Into<Operand> for RegisterOrMemory {
+    fn into(self) -> Operand {
+        match self {
+            RegisterOrMemory::Indirect(encoding) => Operand::Indirect(encoding, 0),
+            RegisterOrMemory::DisplacementByte(encoding, displacement) => {
+                Operand::Indirect(encoding, displacement as u16)
+            }
+            RegisterOrMemory::DisplacementWord(encoding, displacement) => {
+                Operand::Indirect(encoding, displacement)
+            }
+            RegisterOrMemory::Register(encoding) => Operand::Register(encoding),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ModRM(pub RegisterOrMemory, pub RegisterEncoding);
 
 impl ModRM {
-    pub fn try_from_bytes(bytes: &[u8]) -> Result<Self, DecodeError> {
-        let (bytes, extra_bytes) = bytes.split_at(1);
-
-        let mod_rm_byte = bytes[0];
+    pub fn try_from_bytes(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
         let rm = (mod_rm_byte >> 3) & 6;
         let reg = mod_rm_byte & 6;
 
-        if let Ok(memory_or_register) = RegisterOrMemory::try_from_bytes(extra_bytes) {
+        if let Ok(memory_or_register) = RegisterOrMemory::try_from(mod_rm_byte, extra_bytes) {
             if let Ok(register) = RegisterEncoding::try_from_byte(reg) {
                 Ok(ModRM(memory_or_register, register))
             } else {
@@ -126,19 +136,19 @@ mod test {
     #[test]
     fn mod_rm_encoding() {
         assert_eq!(
-            RegisterOrMemory::try_from_bytes(&[0b00000000]).unwrap(),
+            RegisterOrMemory::try_from(&[0b00000000]).unwrap(),
             RegisterOrMemory::Indirect(AddressingMode::BxSi)
         );
         assert_eq!(
-            RegisterOrMemory::try_from_bytes(&[0b01000001, 1]).unwrap(),
+            RegisterOrMemory::try_from(&[0b01000001, 1]).unwrap(),
             RegisterOrMemory::DisplacementByte(AddressingMode::BxDi, 1)
         );
         assert_eq!(
-            RegisterOrMemory::try_from_bytes(&[0b10000010, 2, 1]).unwrap(),
+            RegisterOrMemory::try_from(&[0b10000010, 2, 1]).unwrap(),
             RegisterOrMemory::DisplacementWord(AddressingMode::BpSi, 513)
         );
         assert_eq!(
-            RegisterOrMemory::try_from_bytes(&[0b11000011, 2, 1]).unwrap(),
+            RegisterOrMemory::try_from(&[0b11000011, 2, 1]).unwrap(),
             RegisterOrMemory::Register(RegisterEncoding::BlBx)
         );
     }

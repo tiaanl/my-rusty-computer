@@ -3,6 +3,7 @@ pub enum Operation {
     Add,
     Cli,
     Jmp,
+    Mov,
 }
 
 #[derive(PartialEq, Debug)]
@@ -15,6 +16,14 @@ pub enum RegisterEncoding {
     ChBp = 0b101,
     DhSi = 0b110,
     BhDi = 0b111,
+}
+
+#[derive(Debug)]
+pub enum SegmentEncoding {
+    Es,
+    Cs,
+    Ss,
+    Ds,
 }
 
 #[derive(Debug)]
@@ -37,9 +46,9 @@ pub enum AddressingMode {
 
 #[derive(Debug)]
 pub enum Operand {
-    None,
     Indirect(AddressingMode, u16),
     Register(RegisterEncoding),
+    Segment(SegmentEncoding),
     Immediate(u16),
 }
 

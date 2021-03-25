@@ -11,6 +11,7 @@ impl Keyword for Operation {
             Operation::Add => "add",
             Operation::Cli => "cli",
             Operation::Jmp => "jmp",
+            Operation::Mov => "mov",
         }
     }
 }
@@ -42,6 +43,19 @@ impl Keyword for (&RegisterEncoding, &DataSize) {
     }
 }
 
+impl Keyword for SegmentEncoding {
+    fn keyword(&self) -> &'static str {
+        use SegmentEncoding::*;
+
+        match self {
+            Es => "es",
+            Cs => "cs",
+            Ss => "ss",
+            Ds => "ds",
+        }
+    }
+}
+
 impl Keyword for AddressingMode {
     fn keyword(&self) -> &'static str {
         match self {
@@ -59,7 +73,6 @@ impl Keyword for AddressingMode {
 
 fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSize) -> fmt::Result {
     match operand {
-        Operand::None => write!(f, "[]")?,
         Operand::Indirect(encoding, displacement) => {
             write!(f, "[{}", encoding.keyword())?;
             if *displacement > 0 {
@@ -69,6 +82,7 @@ fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSi
             }
         }
         Operand::Register(encoding) => write!(f, "{}", (encoding, data_size).keyword())?,
+        Operand::Segment(encoding) => write!(f, "{}", encoding.keyword())?,
         Operand::Immediate(value) => match data_size {
             DataSize::Byte => write!(f, "{:#04X}", value)?,
             DataSize::Word => write!(f, "{:#06X}", value)?,
