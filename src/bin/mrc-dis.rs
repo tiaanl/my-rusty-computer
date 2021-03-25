@@ -2,7 +2,11 @@ use mrc::decoder::{decode_instruction, DecodeResult};
 use std::io::Read;
 
 fn main() {
-    let mut file = std::fs::File::open("C:\\Code\\my-rusty-computer\\data\\bios.bin").unwrap();
+    let bios_path = std::env::current_dir()
+        .unwrap()
+        .join("data")
+        .join("bios.bin");
+    let mut file = std::fs::File::open(bios_path.to_str().unwrap()).unwrap();
     let mut buffer = vec![];
     file.read_to_end(&mut buffer).unwrap();
 

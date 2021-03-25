@@ -22,23 +22,23 @@ impl Cpu {
 
     fn execute(&mut self, instruction: &Instruction) {
         println!("Executing: {:?}", instruction);
-        match instruction.operation {
-            Operation::Add => {
-                // Get the source value.
-                let source_value = self.get_source_value(&instruction.source);
-
-                match &instruction.destination {
-                    Operand::Register(encoding) => {
-                        self.set_register_value(&instruction.data_size, encoding, source_value)
-                    }
-                    _ => panic!(),
-                }
-            }
-        }
+        // match instruction.operation {
+        //     Operation::Add => {
+        //         // Get the source value.
+        //         let source_value = self.get_source_value(&instruction.operands);
+        //                         match &instruction.destination {
+        //             Operand::Register(encoding) => {
+        //                 self.set_register_value(&instruction.data_size, encoding, source_value)
+        //             }
+        //             _ => panic!(),
+        //         }
+        //     }
+        // }
     }
 
-    fn get_source_value(&self, operand: &Operand) -> u16 {
+    fn get_operand_value(&self, operand: &Operand) -> u16 {
         match operand {
+            Operand::None => unreachable!(),
             Operand::Indirect(_, _) => 0,
             Operand::Register(encoding) => match encoding {
                 RegisterEncoding::AlAx => self.registers[0],
@@ -106,31 +106,42 @@ fn main() {
 
     cpu.execute(&Instruction {
         operation: Operation::Add,
-        data_size: DataSize::Word,
-        destination: Operand::Register(RegisterEncoding::AlAx),
-        source: Operand::Immediate(10),
+        operands: OperandSet::DestinationAndSource(
+            Operand::Register(RegisterEncoding::AlAx),
+            Operand::Immediate(10),
+            DataSize::Word,
+        ),
     });
 
     cpu.print_registers();
     cpu.execute(&Instruction {
         operation: Operation::Add,
-        data_size: DataSize::Word,
-        destination: Operand::Register(RegisterEncoding::AlAx),
-        source: Operand::Immediate(10),
+        operands: OperandSet::DestinationAndSource(
+            Operand::Register(RegisterEncoding::AlAx),
+            Operand::Immediate(10),
+            DataSize::Word,
+        ),
     });
+
     cpu.print_registers();
     cpu.execute(&Instruction {
         operation: Operation::Add,
-        data_size: DataSize::Byte,
-        destination: Operand::Register(RegisterEncoding::AhSp),
-        source: Operand::Immediate(0xB0),
+        operands: OperandSet::DestinationAndSource(
+            Operand::Register(RegisterEncoding::AhSp),
+            Operand::Immediate(0xB0),
+            DataSize::Byte,
+        ),
     });
+
     cpu.print_registers();
     cpu.execute(&Instruction {
         operation: Operation::Add,
-        data_size: DataSize::Byte,
-        destination: Operand::Register(RegisterEncoding::AlAx),
-        source: Operand::Immediate(0x01),
+        operands: OperandSet::DestinationAndSource(
+            Operand::Register(RegisterEncoding::AlAx),
+            Operand::Immediate(0x01),
+            DataSize::Byte,
+        ),
     });
+
     cpu.print_registers();
 }
