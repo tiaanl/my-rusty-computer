@@ -9,8 +9,8 @@ impl Keyword for Operation {
     fn keyword(&self) -> &'static str {
         match self {
             Operation::Add => "add",
+            Operation::Cli => "cli",
             Operation::Jmp => "jmp",
-            // _ => "unknown",
         }
     }
 }
@@ -80,6 +80,7 @@ fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSi
 
 fn fmt_operand_set(f: &mut fmt::Formatter<'_>, operand_set: &OperandSet) -> fmt::Result {
     match operand_set {
+        OperandSet::None => {}
         OperandSet::SegmentAndOffset(segment, offset) => {
             write!(f, "{:#06X}:{:#06X}", segment, offset)?
         }

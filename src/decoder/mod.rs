@@ -197,6 +197,18 @@ pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult, DecodeError> {
                 },
             })
         }
+
+        // Processor control
+
+        // CLI
+        // 1 1 1 1 1 0 1 0 -> Clear interrupt
+        0xFA => Ok(DecodeResult {
+            bytes_read: 1,
+            instruction: Instruction {
+                operation: Operation::Cli,
+                operands: OperandSet::None,
+            },
+        }),
         _ => Err(DecodeError::InvalidOpCode(op_code)),
     }
 }

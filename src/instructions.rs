@@ -1,6 +1,7 @@
 #[derive(Debug)]
 pub enum Operation {
     Add,
+    Cli,
     Jmp,
 }
 
@@ -44,6 +45,7 @@ pub enum Operand {
 
 #[derive(Debug)]
 pub enum OperandSet {
+    None,
     DestinationAndSource(Operand, Operand, DataSize),
     SegmentAndOffset(u16, u16),
 }
