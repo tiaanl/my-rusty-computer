@@ -125,7 +125,8 @@ pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult, DecodeError> {
 
         // MOV -> Move
         //
-        0xB8 => {
+        0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB6 | 0xB7 | 0xB8 | 0xB9 | 0xBA | 0xBB
+        | 0xBC | 0xBD | 0xBE | 0xBF => {
             // 1 0 1 1 w reg => Immediate to register
             let data_size = DataSize::try_from_encoding(op_code >> 3 & 0b1)?;
             let destination = Operand::Register(RegisterEncoding::try_from_byte(op_code & 0b111)?);
