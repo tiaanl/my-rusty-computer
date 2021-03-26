@@ -1,38 +1,15 @@
-pub mod mod_rm;
+mod decode;
+mod errors;
+mod mod_rm;
 
-use std::fmt;
+pub use decode::{decode_instruction, DecodeResult};
+pub use errors::DecodeError;
+pub use mod_rm::ModRM;
 
 use crate::instructions::*;
-pub use mod_rm::ModRM;
-use mod_rm::RegisterOrMemory;
-
-#[derive(PartialEq, Debug)]
-pub enum DecodeError {
-    CouldNotCreateOperandFromModRMEncoding(RegisterOrMemory),
-    CouldNotReadExtraBytes,
-    InvalidDataSizeEncoding(u8),
-    InvalidIndirectMemoryEncoding(u8),
-    InvalidModRMEncoding(u8),
-    InvalidModRMMode(u8),
-    InvalidOpCode(u8),
-    InvalidRegisterEncoding(u8),
-    InvalidSegmentEncoding(u8),
-}
-
-impl fmt::Display for DecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            DecodeError::InvalidOpCode(op_code) => write!(f, "invalid op code: {:#04x}", op_code),
-            DecodeError::InvalidModRMEncoding(mod_rm_byte) => {
-                write!(f, "invalid modR/M encoding: {:#04x}", mod_rm_byte)
-            }
-            _ => write!(f, "unknown error"),
-        }
-    }
-}
 
 impl RegisterEncoding {
-    fn try_from_byte(byte: u8) -> Result<Self, DecodeError> {
+    fn try_from_encoding(byte: u8) -> Result<Self, DecodeError> {
         match byte {
             0b000 => Ok(RegisterEncoding::AlAx),
             0b001 => Ok(RegisterEncoding::ClCx),
@@ -43,6 +20,14 @@ impl RegisterEncoding {
             0b110 => Ok(RegisterEncoding::DhSi),
             0b111 => Ok(RegisterEncoding::BhDi),
             _ => Err(DecodeError::InvalidRegisterEncoding(byte)),
+        }
+    }
+
+    fn try_from_mod_rm_byte(mod_rm_byte: u8) -> Result<Self, DecodeError> {
+        if mod_rm_byte >> 6 == 0b11 {
+            RegisterEncoding::try_from_encoding(mod_rm_byte >> 3 & 0b111)
+        } else {
+            Err(DecodeError::InvalidModRMMode(mod_rm_byte))
         }
     }
 }
@@ -59,7 +44,7 @@ impl SegmentEncoding {
     }
 }
 
-trait ByteReader {
+pub trait ByteReader {
     fn read_u8(&self) -> Result<u8, DecodeError>;
     fn read_u16(&self) -> Result<u16, DecodeError>;
 }
@@ -99,105 +84,6 @@ impl DataSize {
     }
 }
 
-trait CodeAndExtra<'a> {
-    fn byte_and_extra(&'a self) -> (u8, &'a [u8]);
-}
-
-impl<'a> CodeAndExtra<'a> for &[u8] {
-    fn byte_and_extra(&'a self) -> (u8, &'a [u8]) {
-        let (code, extra) = self.split_at(1);
-        (code[0], extra)
-    }
-}
-
-pub struct DecodeResult {
-    pub bytes_read: usize,
-    pub instruction: Instruction,
-}
-
-pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult, DecodeError> {
-    let (op_code, extra_bytes) = data.byte_and_extra();
-    // println!("op_code, extra_bytes = {} {:?}", op_code, extra_bytes);
-
-    match op_code {
-        // Data transfer
-        //
-
-        // MOV -> Move
-        //
-        0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB6 | 0xB7 | 0xB8 | 0xB9 | 0xBA | 0xBB
-        | 0xBC | 0xBD | 0xBE | 0xBF => {
-            // 1 0 1 1 w reg => Immediate to register
-            let data_size = DataSize::try_from_encoding(op_code >> 3 & 0b1)?;
-            let destination = Operand::Register(RegisterEncoding::try_from_byte(op_code & 0b111)?);
-            let source = Operand::Immediate(match data_size {
-                DataSize::Byte => extra_bytes.read_u8()? as u16,
-                DataSize::Word => extra_bytes.read_u16()?,
-            });
-
-            Ok(DecodeResult {
-                bytes_read: 1 + data_size.in_bytes(),
-                instruction: Instruction {
-                    operation: Operation::Mov,
-                    operands: OperandSet::DestinationAndSource(destination, source, data_size),
-                },
-            })
-        }
-        0x8E => {
-            // Register/memory to segment register
-            // 1 0 0 0 1 1 1 0 | mod 0 segment r/m
-
-            let (mod_rm_byte, extra_bytes) = extra_bytes.byte_and_extra();
-            let segment_encoding = mod_rm_byte >> 3 & 0b11;
-            let destination: Operand =
-                Operand::Segment(SegmentEncoding::try_from_encoding(segment_encoding)?);
-            let register_or_memory = RegisterOrMemory::try_from(mod_rm_byte, extra_bytes)?;
-
-            Ok(DecodeResult {
-                bytes_read: 2,
-                instruction: Instruction {
-                    operation: Operation::Mov,
-                    operands: OperandSet::DestinationAndSource(
-                        destination,
-                        register_or_memory.into(),
-                        DataSize::Word,
-                    ),
-                },
-            })
-        }
-
-        // JMP = Unconditional jump
-
-        // 1 1 1 0 1 0 1 0 -> Direct intersegment
-        0xEA => {
-            let (offset, segment) = extra_bytes.split_at(2);
-            let offset = offset.read_u16().unwrap();
-            let segment = segment.read_u16().unwrap();
-
-            Ok(DecodeResult {
-                bytes_read: 5,
-                instruction: Instruction {
-                    operation: Operation::Jmp,
-                    operands: OperandSet::SegmentAndOffset(segment, offset),
-                },
-            })
-        }
-
-        // Processor control
-
-        // CLI
-        // 1 1 1 1 1 0 1 0 -> Clear interrupt
-        0xFA => Ok(DecodeResult {
-            bytes_read: 1,
-            instruction: Instruction {
-                operation: Operation::Cli,
-                operands: OperandSet::None,
-            },
-        }),
-        _ => Err(DecodeError::InvalidOpCode(op_code)),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,40 +91,40 @@ mod tests {
     #[test]
     fn register_encoding_from_byte() {
         assert_eq!(
-            RegisterEncoding::try_from_byte(0).unwrap(),
+            RegisterEncoding::try_from_mod_rm_byte(0b11_000_000).unwrap(),
             RegisterEncoding::AlAx
         );
         assert_eq!(
-            RegisterEncoding::try_from_byte(1).unwrap(),
+            RegisterEncoding::try_from_mod_rm_byte(0b11_001_000).unwrap(),
             RegisterEncoding::ClCx
         );
         assert_eq!(
-            RegisterEncoding::try_from_byte(2).unwrap(),
+            RegisterEncoding::try_from_mod_rm_byte(0b11_010_000).unwrap(),
             RegisterEncoding::DlDx
         );
         assert_eq!(
-            RegisterEncoding::try_from_byte(3).unwrap(),
+            RegisterEncoding::try_from_mod_rm_byte(0b11_011_000).unwrap(),
             RegisterEncoding::BlBx
         );
         assert_eq!(
-            RegisterEncoding::try_from_byte(4).unwrap(),
+            RegisterEncoding::try_from_mod_rm_byte(0b11_100_000).unwrap(),
             RegisterEncoding::AhSp
         );
         assert_eq!(
-            RegisterEncoding::try_from_byte(5).unwrap(),
+            RegisterEncoding::try_from_mod_rm_byte(0b11_101_000).unwrap(),
             RegisterEncoding::ChBp
         );
         assert_eq!(
-            RegisterEncoding::try_from_byte(6).unwrap(),
+            RegisterEncoding::try_from_mod_rm_byte(0b11_110_000).unwrap(),
             RegisterEncoding::DhSi
         );
         assert_eq!(
-            RegisterEncoding::try_from_byte(7).unwrap(),
+            RegisterEncoding::try_from_mod_rm_byte(0b11_111_000).unwrap(),
             RegisterEncoding::BhDi
         );
         assert_eq!(
-            RegisterEncoding::try_from_byte(8),
-            Err(DecodeError::InvalidRegisterEncoding(8))
+            RegisterEncoding::try_from_mod_rm_byte(0b00_000_000),
+            Err(DecodeError::InvalidModRMMode(0b00))
         );
     }
 }

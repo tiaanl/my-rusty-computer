@@ -63,5 +63,28 @@ pub enum OperandSet {
 #[derive(Debug)]
 pub struct Instruction {
     pub operation: Operation,
+    pub segment_override: Option<SegmentEncoding>,
     pub operands: OperandSet,
+}
+
+impl Instruction {
+    pub fn new(operation: Operation, operands: OperandSet) -> Self {
+        Self {
+            operation,
+            segment_override: None,
+            operands,
+        }
+    }
+
+    pub fn with_segment_override(
+        operation: Operation,
+        segment_override: SegmentEncoding,
+        operands: OperandSet,
+    ) -> Self {
+        Self {
+            operation,
+            segment_override: Some(segment_override),
+            operands,
+        }
+    }
 }

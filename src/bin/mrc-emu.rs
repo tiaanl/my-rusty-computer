@@ -114,44 +114,44 @@ impl Cpu {
 fn main() {
     let mut cpu = Cpu::new();
 
-    cpu.execute(&Instruction {
-        operation: Operation::Add,
-        operands: OperandSet::DestinationAndSource(
+    cpu.execute(&Instruction::new(
+        Operation::Add,
+        OperandSet::DestinationAndSource(
             Operand::Register(RegisterEncoding::AlAx),
             Operand::Immediate(10),
             DataSize::Word,
         ),
-    });
+    ));
 
     cpu.print_registers();
-    cpu.execute(&Instruction {
-        operation: Operation::Add,
-        operands: OperandSet::DestinationAndSource(
+    cpu.execute(&Instruction::new(
+        Operation::Add,
+        OperandSet::DestinationAndSource(
             Operand::Register(RegisterEncoding::AlAx),
             Operand::Immediate(10),
             DataSize::Word,
         ),
-    });
+    ));
 
     cpu.print_registers();
-    cpu.execute(&Instruction {
-        operation: Operation::Add,
-        operands: OperandSet::DestinationAndSource(
+    cpu.execute(&Instruction::new(
+        Operation::Add,
+        OperandSet::DestinationAndSource(
             Operand::Register(RegisterEncoding::AhSp),
             Operand::Immediate(0xB0),
             DataSize::Byte,
         ),
-    });
+    ));
 
     cpu.print_registers();
-    cpu.execute(&Instruction {
-        operation: Operation::Add,
-        operands: OperandSet::DestinationAndSource(
+    cpu.execute(&Instruction::new(
+        Operation::Add,
+        OperandSet::DestinationAndSource(
             Operand::Register(RegisterEncoding::AlAx),
             Operand::Immediate(0x01),
             DataSize::Byte,
         ),
-    });
+    ));
 
     cpu.print_registers();
 }

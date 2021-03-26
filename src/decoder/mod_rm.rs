@@ -1,4 +1,5 @@
 use super::DecodeError;
+use crate::decoder::ByteReader;
 use crate::instructions::{AddressingMode, Operand, RegisterEncoding};
 
 impl AddressingMode {
@@ -39,15 +40,15 @@ impl RegisterOrMemory {
             )?)),
             0b01 => Ok(RegisterOrMemory::DisplacementByte(
                 AddressingMode::try_from_byte(rm)?,
-                extra_bytes[0],
+                extra_bytes.read_u8()?,
             )),
             0b10 => Ok(RegisterOrMemory::DisplacementWord(
                 AddressingMode::try_from_byte(rm)?,
-                ((extra_bytes[0] as u16) << 8) + (extra_bytes[1] as u16),
+                extra_bytes.read_u16()?,
             )),
-            0b11 => Ok(RegisterOrMemory::Register(RegisterEncoding::try_from_byte(
-                rm,
-            )?)),
+            0b11 => Ok(RegisterOrMemory::Register(
+                RegisterEncoding::try_from_encoding(rm)?,
+            )),
             _ => Err(DecodeError::InvalidModRMEncoding(mod_rm_byte)),
         }
     }
@@ -73,19 +74,13 @@ impl Into<Operand> for RegisterOrMemory {
 pub struct ModRM(pub RegisterOrMemory, pub RegisterEncoding);
 
 impl ModRM {
-    pub fn try_from_bytes(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
-        let rm = (mod_rm_byte >> 3) & 6;
+    pub fn try_from_mod_rm_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
         let reg = mod_rm_byte & 6;
 
-        if let Ok(memory_or_register) = RegisterOrMemory::try_from(mod_rm_byte, extra_bytes) {
-            if let Ok(register) = RegisterEncoding::try_from_byte(reg) {
-                Ok(ModRM(memory_or_register, register))
-            } else {
-                Err(DecodeError::InvalidRegisterEncoding(reg))
-            }
-        } else {
-            Err(DecodeError::InvalidModRMEncoding(rm))
-        }
+        Ok(ModRM(
+            RegisterOrMemory::try_from(mod_rm_byte, extra_bytes)?,
+            RegisterEncoding::try_from_mod_rm_byte(reg)?,
+        ))
     }
 }
 
