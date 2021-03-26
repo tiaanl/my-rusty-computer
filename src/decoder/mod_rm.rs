@@ -21,6 +21,7 @@ impl AddressingMode {
 
 #[derive(Debug, PartialEq)]
 pub enum RegisterOrMemory {
+    Direct(u16),
     Indirect(AddressingMode),
     DisplacementByte(AddressingMode, u8),
     DisplacementWord(AddressingMode, u16),
@@ -30,7 +31,7 @@ pub enum RegisterOrMemory {
 impl RegisterOrMemory {
     pub fn try_from(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
         let mode = mod_rm_byte >> 6;
-        let rm = mod_rm_byte & 7;
+        let rm = mod_rm_byte & 0b111;
 
         match mode {
             0b00 => Ok(RegisterOrMemory::Indirect(AddressingMode::try_from_byte(
@@ -55,6 +56,7 @@ impl RegisterOrMemory {
 impl Into<Operand> for RegisterOrMemory {
     fn into(self) -> Operand {
         match self {
+            RegisterOrMemory::Direct(offset) => Operand::Direct(offset),
             RegisterOrMemory::Indirect(encoding) => Operand::Indirect(encoding, 0),
             RegisterOrMemory::DisplacementByte(encoding, displacement) => {
                 Operand::Indirect(encoding, displacement as u16)
@@ -134,22 +136,141 @@ mod test {
     }
 
     #[test]
-    fn mod_rm_encoding() {
+    fn register_or_memory() {
+        // Indirect
         assert_eq!(
-            RegisterOrMemory::try_from(&[0b00000000]).unwrap(),
+            RegisterOrMemory::try_from(0b00_000_000, &[]).unwrap(),
             RegisterOrMemory::Indirect(AddressingMode::BxSi)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(&[0b01000001, 1]).unwrap(),
+            RegisterOrMemory::try_from(0b00_000_001, &[]).unwrap(),
+            RegisterOrMemory::Indirect(AddressingMode::BxDi)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b00_000_010, &[]).unwrap(),
+            RegisterOrMemory::Indirect(AddressingMode::BpSi)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b00_000_011, &[]).unwrap(),
+            RegisterOrMemory::Indirect(AddressingMode::BpDi)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b00_000_100, &[]).unwrap(),
+            RegisterOrMemory::Indirect(AddressingMode::Si)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b00_000_101, &[]).unwrap(),
+            RegisterOrMemory::Indirect(AddressingMode::Di)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b00_000_110, &[]).unwrap(),
+            RegisterOrMemory::Indirect(AddressingMode::Bp)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b00_000_111, &[]).unwrap(),
+            RegisterOrMemory::Indirect(AddressingMode::Bx)
+        );
+
+        // DisplacementByte
+        assert_eq!(
+            RegisterOrMemory::try_from(0b01_000_000, &[0x01]).unwrap(),
+            RegisterOrMemory::DisplacementByte(AddressingMode::BxSi, 1)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b01_000_001, &[0x01]).unwrap(),
             RegisterOrMemory::DisplacementByte(AddressingMode::BxDi, 1)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(&[0b10000010, 2, 1]).unwrap(),
-            RegisterOrMemory::DisplacementWord(AddressingMode::BpSi, 513)
+            RegisterOrMemory::try_from(0b01_000_010, &[0x01]).unwrap(),
+            RegisterOrMemory::DisplacementByte(AddressingMode::BpSi, 1)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(&[0b11000011, 2, 1]).unwrap(),
+            RegisterOrMemory::try_from(0b01_000_011, &[0x01]).unwrap(),
+            RegisterOrMemory::DisplacementByte(AddressingMode::BpDi, 1)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b01_000_100, &[0x01]).unwrap(),
+            RegisterOrMemory::DisplacementByte(AddressingMode::Si, 1)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b01_000_101, &[0x01]).unwrap(),
+            RegisterOrMemory::DisplacementByte(AddressingMode::Di, 1)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b01_000_110, &[0x01]).unwrap(),
+            RegisterOrMemory::DisplacementByte(AddressingMode::Bp, 1)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b01_000_111, &[0x01]).unwrap(),
+            RegisterOrMemory::DisplacementByte(AddressingMode::Bx, 1)
+        );
+
+        // DisplacementWord
+        assert_eq!(
+            RegisterOrMemory::try_from(0b10_000_000, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::DisplacementWord(AddressingMode::BxSi, 257)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b10_000_001, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::DisplacementWord(AddressingMode::BxDi, 257)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b10_000_010, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::DisplacementWord(AddressingMode::BpSi, 257)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b10_000_011, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::DisplacementWord(AddressingMode::BpDi, 257)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b10_000_100, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::DisplacementWord(AddressingMode::Si, 257)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b10_000_101, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::DisplacementWord(AddressingMode::Di, 257)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b10_000_110, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::DisplacementWord(AddressingMode::Bp, 257)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b10_000_111, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::DisplacementWord(AddressingMode::Bx, 257)
+        );
+
+        // Register
+        assert_eq!(
+            RegisterOrMemory::try_from(0b11_000_000, &[]).unwrap(),
+            RegisterOrMemory::Register(RegisterEncoding::AlAx)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b11_000_001, &[]).unwrap(),
+            RegisterOrMemory::Register(RegisterEncoding::ClCx)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b11_000_010, &[]).unwrap(),
+            RegisterOrMemory::Register(RegisterEncoding::DlDx)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b11_000_011, &[]).unwrap(),
             RegisterOrMemory::Register(RegisterEncoding::BlBx)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b11_000_100, &[]).unwrap(),
+            RegisterOrMemory::Register(RegisterEncoding::AhSp)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b11_000_101, &[]).unwrap(),
+            RegisterOrMemory::Register(RegisterEncoding::ChBp)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b11_000_110, &[]).unwrap(),
+            RegisterOrMemory::Register(RegisterEncoding::DhSi)
+        );
+        assert_eq!(
+            RegisterOrMemory::try_from(0b11_000_111, &[]).unwrap(),
+            RegisterOrMemory::Register(RegisterEncoding::BhDi)
         );
     }
 }

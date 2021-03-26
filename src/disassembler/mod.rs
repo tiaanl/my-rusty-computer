@@ -73,6 +73,9 @@ impl Keyword for AddressingMode {
 
 fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSize) -> fmt::Result {
     match operand {
+        Operand::Direct(displacement) => {
+            write!(f, "[{:#06x}]", displacement)?;
+        }
         Operand::Indirect(encoding, displacement) => {
             write!(f, "[{}", encoding.keyword())?;
             if *displacement > 0 {

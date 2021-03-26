@@ -2,11 +2,15 @@ use mrc::instructions::*;
 
 struct Cpu {
     registers: [u16; 16],
+    segments: [u16; 4],
 }
 
 impl Cpu {
     fn new() -> Self {
-        Self { registers: [0; 16] }
+        Self {
+            registers: [0; 16],
+            segments: [0; 4],
+        }
     }
 
     fn print_registers(&mut self) {
@@ -38,7 +42,7 @@ impl Cpu {
 
     fn get_operand_value(&self, operand: &Operand) -> u16 {
         match operand {
-            Operand::None => unreachable!(),
+            Operand::Direct(_) => todo!(),
             Operand::Indirect(_, _) => 0,
             Operand::Register(encoding) => match encoding {
                 RegisterEncoding::AlAx => self.registers[0],
@@ -49,6 +53,12 @@ impl Cpu {
                 RegisterEncoding::ChBp => self.registers[5],
                 RegisterEncoding::DhSi => self.registers[6],
                 RegisterEncoding::BhDi => self.registers[7],
+            },
+            Operand::Segment(encoding) => match encoding {
+                SegmentEncoding::Es => self.segments[0],
+                SegmentEncoding::Cs => self.segments[1],
+                SegmentEncoding::Ss => self.segments[2],
+                SegmentEncoding::Ds => self.segments[3],
             },
             Operand::Immediate(value) => *value,
         }

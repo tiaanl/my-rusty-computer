@@ -46,6 +46,7 @@ pub enum AddressingMode {
 
 #[derive(Debug)]
 pub enum Operand {
+    Direct(u16),
     Indirect(AddressingMode, u16),
     Register(RegisterEncoding),
     Segment(SegmentEncoding),
