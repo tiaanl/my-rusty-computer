@@ -70,7 +70,7 @@ impl ByteReader for &[u8] {
 }
 
 impl DataSize {
-    fn try_from_encoding(encoding: u8) -> Result<DataSize> {
+    fn try_from_low_bits(encoding: u8) -> Result<DataSize> {
         match encoding {
             0b0 => Ok(DataSize::Byte),
             0b1 => Ok(DataSize::Word),

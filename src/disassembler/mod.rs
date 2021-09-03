@@ -183,6 +183,9 @@ fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSi
 fn fmt_operand_set(f: &mut fmt::Formatter<'_>, operand_set: &OperandSet) -> fmt::Result {
     match operand_set {
         OperandSet::None => {}
+        OperandSet::Destination(destination, data_size) => {
+            fmt_operand(f, destination, data_size)?;
+        }
         OperandSet::DestinationAndSource(destination, source, data_size) => {
             fmt_operand(f, destination, data_size)?;
             write!(f, ", ")?;

@@ -152,9 +152,10 @@ pub enum Operand {
 #[derive(Debug)]
 pub enum OperandSet {
     None,
+    Destination(Operand, DataSize),
     DestinationAndSource(Operand, Operand, DataSize),
-    SegmentAndOffset(u16, u16),
     Offset(u16),
+    SegmentAndOffset(u16, u16),
 }
 
 #[derive(Debug)]

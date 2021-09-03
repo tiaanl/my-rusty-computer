@@ -62,8 +62,8 @@ pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult> {
         // 1 0 1 1 w reg
         0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB6 | 0xB7 | 0xB8 | 0xB9 | 0xBA | 0xBB
         | 0xBC | 0xBD | 0xBE | 0xBF => {
-            let data_size = DataSize::try_from_encoding(op_code >> 3 & 0b1)?;
-            let destination = Operand::Register(Register::try_from_mod_rm_byte(op_code & 0b111)?);
+            let data_size = DataSize::try_from_low_bits(op_code >> 3 & 0b1)?;
+            let destination = Operand::Register(Register::try_from_low_bits(op_code & 0b111)?);
             let source = Operand::Immediate(match data_size {
                 DataSize::Byte => extra_bytes.read_u8()? as u16,
                 DataSize::Word => extra_bytes.read_u16()?,
@@ -77,10 +77,10 @@ pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult> {
                 ),
             })
         }
-        0x8E => {
-            // Register/memory to segment register
-            // 1 0 0 0 1 1 1 0 | mod 0 segment r/m
 
+        // Register/memory to segment register
+        // 1 0 0 0 1 1 1 0 | mod 0 segment r/m
+        0x8E => {
             let (mod_rm_byte, extra_bytes) = extra_bytes.byte_and_extra();
             let segment_encoding = mod_rm_byte >> 3 & 0b11;
             let destination: Operand =
@@ -100,6 +100,35 @@ pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult> {
             })
         }
 
+        // PUSH = Push
+
+        // Register
+        // 0 1 0 1 1 reg
+        0x5A => Ok(DecodeResult {
+            bytes_read: 1,
+            instruction: Instruction::new(
+                Operation::Pop,
+                OperandSet::Destination(
+                    Operand::Register(Register::try_from_low_bits(op_code & 0b111)?),
+                    DataSize::Word,
+                ),
+            ),
+        }),
+
+        // Control transfer
+
+        // CALL = Call
+
+        // Direct within segment
+        // 1 1 1 0 1 0 0 0 | displacement low | displacement high
+        0xE8 => Ok(DecodeResult {
+            bytes_read: 3,
+            instruction: Instruction::new(
+                Operation::Call,
+                OperandSet::Offset(extra_bytes.read_u16()?),
+            ),
+        }),
+
         // JMP = Unconditional jump
 
         // Direct intersegment
@@ -117,20 +146,6 @@ pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult> {
                 ),
             })
         }
-
-        // Control transfer
-
-        // CALL = Call
-
-        // Direct within segment
-        // 1 1 1 0 1 0 0 0 | displacement low | displacement high
-        0xE8 => Ok(DecodeResult {
-            bytes_read: 2,
-            instruction: Instruction::new(
-                Operation::Call,
-                OperandSet::Offset(extra_bytes.read_u16()?),
-            ),
-        }),
 
         // Processor control
 

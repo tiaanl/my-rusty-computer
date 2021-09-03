@@ -29,14 +29,17 @@ fn main() {
     // println!("{:?}", buffer);
 
     // let mut current_address = 0usize;
-    let mut current_address: usize = 0x22;
+    let mut current_address: usize = 0x22 + 3;
     while current_address < buffer.len() {
         match decode_instruction(&buffer[current_address..]) {
             Ok(DecodeResult {
                 bytes_read,
                 instruction,
             }) => {
-                println!("{:#010x}   {}", current_address, instruction);
+                println!(
+                    "({})    {:#010x}   {}",
+                    bytes_read, current_address, instruction
+                );
                 current_address += bytes_read;
             }
             Err(err) => {
