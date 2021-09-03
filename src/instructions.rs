@@ -1,11 +1,105 @@
 #[derive(Debug)]
 pub enum Operation {
-    Add,
-    Call,
-    Cli,
-    Jmp,
+    // Data transfer
     Mov,
+    Push,
+    Pop,
+    Xchg,
+    In,
+    Out,
+    Xlat,
+    Lea,
+    Lds,
+    Les,
+    Lahf,
+    Sahf,
+    Pushf,
+    Popf,
+
+    // Arithmetic
+    Add,
+    Adc,
+    Inc,
+    Aaa,
+    Baa,
+    Sub,
+    Ssb,
+    Dec,
+    Neg,
+    Cmp,
+    Aas,
+    Das,
+    Mul,
+    Imul,
+    Aam,
+    Div,
+    Idiv,
+    Aad,
+    Cbw,
+    Cwd,
+
+    // Logic
+    Not,
+    Shl,
+    Shr,
+    Sar,
+    Rol,
+    Ror,
+    Rcl,
+    Rcr,
+    And,
+    Test,
+    Or,
+    Xor,
+
+    // String manipulation
+    Rep,
+    Movs,
+    Cmps,
+    Scas,
+    Lods,
+    Stos,
+
+    // Control transfer
+    Call,
+    Jmp,
+    Ret,
+    Je,
+    Jl,
+    Jle,
+    Jb,
+    Jbe,
+    Jp,
+    Jo,
+    Js,
+    Jne,
+    Jnl,
+    Jnle,
+    Jnb,
+    Jnbe,
+    Jnp,
+    Jno,
+    Jns,
+    Loop,
+    Loopz,
+    Loopnz,
+    Jcxz,
+    Int,
+    Into,
+    IRet,
+
+    // Processor control
+    Clc,
+    Cmc,
+    Stc,
+    Cld,
+    Std,
+    Cli,
     Sti,
+    Hlt,
+    Wait,
+    Esc,
+    Lock,
 }
 
 #[derive(PartialEq, Debug)]
@@ -21,7 +115,7 @@ pub enum Register {
 }
 
 #[derive(Debug)]
-pub enum SegmentEncoding {
+pub enum Segment {
     Es,
     Cs,
     Ss,
@@ -51,7 +145,7 @@ pub enum Operand {
     Direct(u16),
     Indirect(AddressingMode, u16),
     Register(Register),
-    Segment(SegmentEncoding),
+    Segment(Segment),
     Immediate(u16),
 }
 
@@ -66,7 +160,7 @@ pub enum OperandSet {
 #[derive(Debug)]
 pub struct Instruction {
     pub operation: Operation,
-    pub segment_override: Option<SegmentEncoding>,
+    pub segment_override: Option<Segment>,
     pub operands: OperandSet,
 }
 
@@ -81,7 +175,7 @@ impl Instruction {
 
     pub fn with_segment_override(
         operation: Operation,
-        segment_override: SegmentEncoding,
+        segment_override: Segment,
         operands: OperandSet,
     ) -> Self {
         Self {

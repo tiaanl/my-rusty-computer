@@ -55,10 +55,10 @@ impl Cpu {
                 RegisterEncoding::BhDi => self.registers[7],
             },
             Operand::Segment(encoding) => match encoding {
-                SegmentEncoding::Es => self.segments[0],
-                SegmentEncoding::Cs => self.segments[1],
-                SegmentEncoding::Ss => self.segments[2],
-                SegmentEncoding::Ds => self.segments[3],
+                Segment::Es => self.segments[0],
+                Segment::Cs => self.segments[1],
+                Segment::Ss => self.segments[2],
+                Segment::Ds => self.segments[3],
             },
             Operand::Immediate(value) => *value,
         }

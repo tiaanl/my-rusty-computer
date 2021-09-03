@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use mrc::decoder::{decode_instruction, Decoded};
+use mrc::decoder::{decode_instruction, DecodeResult};
 use std::io::Read;
 
 fn main() {
@@ -32,7 +32,7 @@ fn main() {
     let mut current_address: usize = 0x22;
     while current_address < buffer.len() {
         match decode_instruction(&buffer[current_address..]) {
-            Ok(Decoded {
+            Ok(DecodeResult {
                 bytes_read,
                 instruction,
             }) => {

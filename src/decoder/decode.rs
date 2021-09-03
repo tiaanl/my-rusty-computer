@@ -2,7 +2,7 @@ use crate::decoder::mod_rm::RegisterOrMemory;
 pub use crate::decoder::{ByteReader, ModRM};
 use crate::decoder::{Error, Result};
 use crate::instructions::{
-    DataSize, Instruction, Operand, OperandSet, Operation, Register, SegmentEncoding,
+    DataSize, Instruction, Operand, OperandSet, Operation, Register, Segment,
 };
 
 trait ByteAndExtra<'a> {
@@ -17,13 +17,13 @@ impl<'a> ByteAndExtra<'a> for &[u8] {
 }
 
 /// Holds the result for a call to [decode_instruction].
-pub struct Decoded {
+pub struct DecodeResult {
     pub bytes_read: usize,
     pub instruction: Instruction,
 }
 
 /// Takes a byte slice and tries to convert it into an [Instruction].
-pub fn decode_instruction(data: &[u8]) -> Result<Decoded> {
+pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult> {
     let (op_code, extra_bytes) = data.byte_and_extra();
     println!(
         "op_code, extra_bytes = {} ({:#04X}) {:?}",
@@ -41,7 +41,7 @@ pub fn decode_instruction(data: &[u8]) -> Result<Decoded> {
             let (mod_rm_byte, mod_rm_extra_bytes) = extra_bytes.byte_and_extra();
             let mod_rm = ModRM::try_from_mod_rm_byte(mod_rm_byte, mod_rm_extra_bytes)?;
 
-            Ok(Decoded {
+            Ok(DecodeResult {
                 bytes_read: 2,
                 instruction: Instruction::new(
                     Operation::Add,
@@ -69,7 +69,7 @@ pub fn decode_instruction(data: &[u8]) -> Result<Decoded> {
                 DataSize::Word => extra_bytes.read_u16()?,
             });
 
-            Ok(Decoded {
+            Ok(DecodeResult {
                 bytes_read: 1 + data_size.in_bytes(),
                 instruction: Instruction::new(
                     Operation::Mov,
@@ -84,10 +84,10 @@ pub fn decode_instruction(data: &[u8]) -> Result<Decoded> {
             let (mod_rm_byte, extra_bytes) = extra_bytes.byte_and_extra();
             let segment_encoding = mod_rm_byte >> 3 & 0b11;
             let destination: Operand =
-                Operand::Segment(SegmentEncoding::try_from_encoding(segment_encoding)?);
+                Operand::Segment(Segment::try_from_encoding(segment_encoding)?);
             let register_or_memory = RegisterOrMemory::try_from(mod_rm_byte, extra_bytes)?;
 
-            Ok(Decoded {
+            Ok(DecodeResult {
                 bytes_read: 2,
                 instruction: Instruction::new(
                     Operation::Mov,
@@ -109,7 +109,7 @@ pub fn decode_instruction(data: &[u8]) -> Result<Decoded> {
             let offset = offset.read_u16().unwrap();
             let segment = segment.read_u16().unwrap();
 
-            Ok(Decoded {
+            Ok(DecodeResult {
                 bytes_read: 5,
                 instruction: Instruction::new(
                     Operation::Jmp,
@@ -124,7 +124,7 @@ pub fn decode_instruction(data: &[u8]) -> Result<Decoded> {
 
         // Direct within segment
         // 1 1 1 0 1 0 0 0 | displacement low | displacement high
-        0xE8 => Ok(Decoded {
+        0xE8 => Ok(DecodeResult {
             bytes_read: 2,
             instruction: Instruction::new(
                 Operation::Call,
@@ -138,7 +138,7 @@ pub fn decode_instruction(data: &[u8]) -> Result<Decoded> {
 
         // Clear interrupt
         // 1 1 1 1 1 0 1 0
-        0xFA => Ok(Decoded {
+        0xFA => Ok(DecodeResult {
             bytes_read: 1,
             instruction: Instruction::new(Operation::Cli, OperandSet::None),
         }),
@@ -147,7 +147,7 @@ pub fn decode_instruction(data: &[u8]) -> Result<Decoded> {
 
         // Set interrupt
         // 1 1 1 1 1 0 1 0
-        0xFB => Ok(Decoded {
+        0xFB => Ok(DecodeResult {
             bytes_read: 1,
             instruction: Instruction::new(Operation::Sti, OperandSet::None),
         }),

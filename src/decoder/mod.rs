@@ -2,7 +2,7 @@ mod decode;
 mod errors;
 mod mod_rm;
 
-pub use decode::{decode_instruction, Decoded};
+pub use decode::{decode_instruction, DecodeResult};
 pub use errors::{Error, Result};
 pub use mod_rm::ModRM;
 
@@ -34,7 +34,7 @@ impl Register {
     }
 }
 
-impl SegmentEncoding {
+impl Segment {
     fn try_from_encoding(encoding: u8) -> Result<Self> {
         match encoding {
             0b00 => Ok(Self::Es),
