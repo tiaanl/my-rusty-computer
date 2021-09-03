@@ -2,7 +2,7 @@ use crate::decoder::mod_rm::RegisterOrMemory;
 use std::fmt;
 
 #[derive(PartialEq, Debug)]
-pub enum DecodeError {
+pub enum Error {
     CouldNotCreateOperandFromModRMEncoding(RegisterOrMemory),
     CouldNotReadExtraBytes,
     InvalidDataSizeEncoding(u8),
@@ -14,11 +14,13 @@ pub enum DecodeError {
     InvalidSegmentEncoding(u8),
 }
 
-impl fmt::Display for DecodeError {
+pub type Result<T> = std::result::Result<T, Error>;
+
+impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            DecodeError::InvalidOpCode(op_code) => write!(f, "invalid op code: {:#04x}", op_code),
-            DecodeError::InvalidModRMEncoding(mod_rm_byte) => {
+            Error::InvalidOpCode(op_code) => write!(f, "invalid op code: {:#04x}", op_code),
+            Error::InvalidModRMEncoding(mod_rm_byte) => {
                 write!(f, "invalid modR/M encoding: {:#04x}", mod_rm_byte)
             }
             _ => write!(f, "unknown error"),

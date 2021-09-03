@@ -9,35 +9,37 @@ impl Keyword for Operation {
     fn keyword(&self) -> &'static str {
         match self {
             Operation::Add => "add",
+            Operation::Call => "call",
             Operation::Cli => "cli",
             Operation::Jmp => "jmp",
             Operation::Mov => "mov",
+            Operation::Sti => "sti",
         }
     }
 }
 
-impl Keyword for (&RegisterEncoding, &DataSize) {
+impl Keyword for (&Register, &DataSize) {
     fn keyword(&self) -> &'static str {
         match self.1 {
             DataSize::Byte => match self.0 {
-                RegisterEncoding::AlAx => "al",
-                RegisterEncoding::ClCx => "cl",
-                RegisterEncoding::DlDx => "dl",
-                RegisterEncoding::BlBx => "bl",
-                RegisterEncoding::AhSp => "ah",
-                RegisterEncoding::ChBp => "ch",
-                RegisterEncoding::DhSi => "dh",
-                RegisterEncoding::BhDi => "bh",
+                Register::AlAx => "al",
+                Register::ClCx => "cl",
+                Register::DlDx => "dl",
+                Register::BlBx => "bl",
+                Register::AhSp => "ah",
+                Register::ChBp => "ch",
+                Register::DhSi => "dh",
+                Register::BhDi => "bh",
             },
             DataSize::Word => match self.0 {
-                RegisterEncoding::AlAx => "ax",
-                RegisterEncoding::ClCx => "cx",
-                RegisterEncoding::DlDx => "dx",
-                RegisterEncoding::BlBx => "bx",
-                RegisterEncoding::AhSp => "sp",
-                RegisterEncoding::ChBp => "bp",
-                RegisterEncoding::DhSi => "si",
-                RegisterEncoding::BhDi => "di",
+                Register::AlAx => "ax",
+                Register::ClCx => "cx",
+                Register::DlDx => "dx",
+                Register::BlBx => "bx",
+                Register::AhSp => "sp",
+                Register::ChBp => "bp",
+                Register::DhSi => "si",
+                Register::BhDi => "di",
             },
         }
     }
@@ -98,14 +100,15 @@ fn fmt_operand(f: &mut fmt::Formatter<'_>, operand: &Operand, data_size: &DataSi
 fn fmt_operand_set(f: &mut fmt::Formatter<'_>, operand_set: &OperandSet) -> fmt::Result {
     match operand_set {
         OperandSet::None => {}
-        OperandSet::SegmentAndOffset(segment, offset) => {
-            write!(f, "{:#06X}:{:#06X}", segment, offset)?
-        }
         OperandSet::DestinationAndSource(destination, source, data_size) => {
             fmt_operand(f, destination, data_size)?;
             write!(f, ", ")?;
             fmt_operand(f, source, data_size)?;
         }
+        OperandSet::SegmentAndOffset(segment, offset) => {
+            write!(f, "{:#06X}:{:#06X}", segment, offset)?
+        }
+        OperandSet::Offset(offset) => write!(f, "{:#06X}", offset)?,
     }
     Ok(())
 }

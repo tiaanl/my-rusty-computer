@@ -1,9 +1,8 @@
-use super::DecodeError;
-use crate::decoder::ByteReader;
-use crate::instructions::{AddressingMode, Operand, RegisterEncoding};
+use crate::decoder::{ByteReader, Error, Result};
+use crate::instructions::{AddressingMode, Operand, Register};
 
 impl AddressingMode {
-    pub fn try_from_byte(byte: u8) -> Result<Self, DecodeError> {
+    pub fn try_from_byte(byte: u8) -> Result<Self> {
         use AddressingMode::*;
 
         match byte {
@@ -15,7 +14,7 @@ impl AddressingMode {
             0b101 => Ok(Di),
             0b110 => Ok(Bp),
             0b111 => Ok(Bx),
-            _ => Err(DecodeError::InvalidIndirectMemoryEncoding(byte)),
+            _ => Err(Error::InvalidIndirectMemoryEncoding(byte)),
         }
     }
 }
@@ -26,11 +25,11 @@ pub enum RegisterOrMemory {
     Indirect(AddressingMode),
     DisplacementByte(AddressingMode, u8),
     DisplacementWord(AddressingMode, u16),
-    Register(RegisterEncoding),
+    Register(Register),
 }
 
 impl RegisterOrMemory {
-    pub fn try_from(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
+    pub fn try_from(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self> {
         let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte & 0b111;
 
@@ -46,10 +45,8 @@ impl RegisterOrMemory {
                 AddressingMode::try_from_byte(rm)?,
                 extra_bytes.read_u16()?,
             )),
-            0b11 => Ok(RegisterOrMemory::Register(
-                RegisterEncoding::try_from_encoding(rm)?,
-            )),
-            _ => Err(DecodeError::InvalidModRMEncoding(mod_rm_byte)),
+            0b11 => Ok(RegisterOrMemory::Register(Register::try_from_low_bits(rm)?)),
+            _ => Err(Error::InvalidModRMEncoding(mod_rm_byte)),
         }
     }
 }
@@ -70,17 +67,26 @@ impl Into<Operand> for RegisterOrMemory {
     }
 }
 
+impl From<Register> for Operand {
+    fn from(register_encoding: Register) -> Self {
+        Self::Register(register_encoding)
+    }
+}
+
 #[derive(Debug)]
-pub struct ModRM(pub RegisterOrMemory, pub RegisterEncoding);
+pub struct ModRM {
+    pub register: Register,
+    pub register_or_memory: RegisterOrMemory,
+}
 
 impl ModRM {
-    pub fn try_from_mod_rm_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self, DecodeError> {
+    pub fn try_from_mod_rm_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self> {
         let reg = mod_rm_byte & 6;
 
-        Ok(ModRM(
-            RegisterOrMemory::try_from(mod_rm_byte, extra_bytes)?,
-            RegisterEncoding::try_from_mod_rm_byte(reg)?,
-        ))
+        Ok(ModRM {
+            register: Register::try_from_low_bits(reg)?,
+            register_or_memory: RegisterOrMemory::try_from(mod_rm_byte, extra_bytes)?,
+        })
     }
 }
 
@@ -124,7 +130,7 @@ mod test {
         );
 
         if let Err(err) = AddressingMode::try_from_byte(77) {
-            assert_eq!(err, DecodeError::InvalidIndirectMemoryEncoding(77))
+            assert_eq!(err, Error::InvalidIndirectMemoryEncoding(77))
         } else {
             assert!(false, "does not return error");
         }

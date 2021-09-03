@@ -2,77 +2,79 @@ mod decode;
 mod errors;
 mod mod_rm;
 
-pub use decode::{decode_instruction, DecodeResult};
-pub use errors::DecodeError;
+pub use decode::{decode_instruction, Decoded};
+pub use errors::{Error, Result};
 pub use mod_rm::ModRM;
 
 use crate::instructions::*;
 
-impl RegisterEncoding {
-    fn try_from_encoding(byte: u8) -> Result<Self, DecodeError> {
+impl Register {
+    fn try_from_low_bits(byte: u8) -> Result<Self> {
+        assert!(byte <= 0b111);
+
         match byte {
-            0b000 => Ok(RegisterEncoding::AlAx),
-            0b001 => Ok(RegisterEncoding::ClCx),
-            0b010 => Ok(RegisterEncoding::DlDx),
-            0b011 => Ok(RegisterEncoding::BlBx),
-            0b100 => Ok(RegisterEncoding::AhSp),
-            0b101 => Ok(RegisterEncoding::ChBp),
-            0b110 => Ok(RegisterEncoding::DhSi),
-            0b111 => Ok(RegisterEncoding::BhDi),
-            _ => Err(DecodeError::InvalidRegisterEncoding(byte)),
+            0b000 => Ok(Register::AlAx),
+            0b001 => Ok(Register::ClCx),
+            0b010 => Ok(Register::DlDx),
+            0b011 => Ok(Register::BlBx),
+            0b100 => Ok(Register::AhSp),
+            0b101 => Ok(Register::ChBp),
+            0b110 => Ok(Register::DhSi),
+            0b111 => Ok(Register::BhDi),
+            _ => Err(Error::InvalidRegisterEncoding(byte)),
         }
     }
 
-    fn try_from_mod_rm_byte(mod_rm_byte: u8) -> Result<Self, DecodeError> {
+    fn try_from_mod_rm_byte(mod_rm_byte: u8) -> Result<Self> {
         if mod_rm_byte >> 6 == 0b11 {
-            RegisterEncoding::try_from_encoding(mod_rm_byte >> 3 & 0b111)
+            Register::try_from_low_bits(mod_rm_byte >> 3 & 0b111)
         } else {
-            Err(DecodeError::InvalidModRMMode(mod_rm_byte))
+            Err(Error::InvalidModRMMode(mod_rm_byte))
         }
     }
 }
 
 impl SegmentEncoding {
-    fn try_from_encoding(encoding: u8) -> Result<Self, DecodeError> {
+    fn try_from_encoding(encoding: u8) -> Result<Self> {
         match encoding {
             0b00 => Ok(Self::Es),
             0b01 => Ok(Self::Cs),
             0b10 => Ok(Self::Ss),
             0b11 => Ok(Self::Ds),
-            _ => Err(DecodeError::InvalidSegmentEncoding(encoding)),
+            _ => Err(Error::InvalidSegmentEncoding(encoding)),
         }
     }
 }
 
 pub trait ByteReader {
-    fn read_u8(&self) -> Result<u8, DecodeError>;
-    fn read_u16(&self) -> Result<u16, DecodeError>;
+    fn read_u8(&self) -> Result<u8>;
+    fn read_u16(&self) -> Result<u16>;
 }
 
 impl ByteReader for &[u8] {
-    fn read_u8(&self) -> Result<u8, DecodeError> {
+    fn read_u8(&self) -> Result<u8> {
         if !self.is_empty() {
             Ok(self[0])
         } else {
-            Err(DecodeError::CouldNotReadExtraBytes)
+            Err(Error::CouldNotReadExtraBytes)
         }
     }
 
-    fn read_u16(&self) -> Result<u16, DecodeError> {
+    fn read_u16(&self) -> Result<u16> {
         if self.len() >= 2 {
             Ok(((self[1] as u16) << 8) + self[0] as u16)
         } else {
-            Err(DecodeError::CouldNotReadExtraBytes)
+            Err(Error::CouldNotReadExtraBytes)
         }
     }
 }
 
 impl DataSize {
-    fn try_from_encoding(encoding: u8) -> Result<DataSize, DecodeError> {
+    fn try_from_encoding(encoding: u8) -> Result<DataSize> {
         match encoding {
             0b0 => Ok(DataSize::Byte),
             0b1 => Ok(DataSize::Word),
-            _ => Err(DecodeError::InvalidDataSizeEncoding(encoding)),
+            _ => Err(Error::InvalidDataSizeEncoding(encoding)),
         }
     }
 
@@ -124,7 +126,7 @@ mod tests {
         );
         assert_eq!(
             RegisterEncoding::try_from_mod_rm_byte(0b00_000_000),
-            Err(DecodeError::InvalidModRMMode(0b00))
+            Err(Error::InvalidModRMMode(0b00))
         );
     }
 }
