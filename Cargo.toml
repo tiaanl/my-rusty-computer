@@ -24,3 +24,4 @@ name = "simple_cpu"
 path = "src/bin/simple_cpu.rs"
 
 [dependencies]
+clap = "2.33.3"

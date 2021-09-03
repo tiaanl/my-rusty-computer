@@ -1,18 +1,34 @@
+use clap::{App, Arg};
 use mrc::decoder::{decode_instruction, DecodeResult};
 use std::io::Read;
 
 fn main() {
-    let bios_path = std::env::current_dir()
-        .unwrap()
-        .join("data")
-        .join("bios.bin");
-    let mut file = std::fs::File::open(bios_path.to_str().unwrap()).unwrap();
+    let matches = App::new("mrc-dis")
+        .version("0.1")
+        .arg(
+            Arg::with_name("binary")
+                .value_name("BINARY")
+                .help("The binary file to disassemble.")
+                .takes_value(true),
+        )
+        .get_matches();
+
     let mut buffer = vec![];
-    file.read_to_end(&mut buffer).unwrap();
+
+    if let Some(binary) = matches.value_of("binary") {
+        if let Ok(mut file) = std::fs::File::open(binary) {
+            file.read_to_end(&mut buffer).unwrap();
+        }
+    }
+
+    if buffer.len() == 0 {
+        println!("Could not read binary file.");
+        return;
+    }
 
     // println!("{:?}", buffer);
 
-    let mut current_address = 1010usize;
+    let mut current_address = 0usize;
     while current_address < buffer.len() {
         match decode_instruction(&buffer[current_address..]) {
             Ok(DecodeResult {
