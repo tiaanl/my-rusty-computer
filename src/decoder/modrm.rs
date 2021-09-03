@@ -1,5 +1,5 @@
 use crate::decoder::{ByteReader, Error, Result};
-use crate::instructions::{AddressingMode, Operand, Register};
+use crate::instructions::{AddressingMode, OperandType, Register};
 
 impl AddressingMode {
     pub fn try_from_byte(byte: u8) -> Result<Self> {
@@ -29,64 +29,83 @@ pub enum RegisterOrMemory {
 }
 
 impl RegisterOrMemory {
-    pub fn try_from(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self> {
+    pub fn try_from(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<(Self, usize)> {
         let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte & 0b111;
 
         match mode {
-            0b00 => Ok(RegisterOrMemory::Indirect(AddressingMode::try_from_byte(
-                rm,
-            )?)),
-            0b01 => Ok(RegisterOrMemory::DisplacementByte(
-                AddressingMode::try_from_byte(rm)?,
-                extra_bytes.read_u8()?,
+            0b00 => match rm {
+                0b110 => Ok((RegisterOrMemory::Direct(extra_bytes.read_u16()?), 2)),
+                _ => Ok((
+                    RegisterOrMemory::Indirect(AddressingMode::try_from_byte(rm)?),
+                    0,
+                )),
+            },
+            0b01 => Ok((
+                RegisterOrMemory::DisplacementByte(
+                    AddressingMode::try_from_byte(rm)?,
+                    extra_bytes.read_u8()?,
+                ),
+                1,
             )),
-            0b10 => Ok(RegisterOrMemory::DisplacementWord(
-                AddressingMode::try_from_byte(rm)?,
-                extra_bytes.read_u16()?,
+            0b10 => Ok((
+                RegisterOrMemory::DisplacementWord(
+                    AddressingMode::try_from_byte(rm)?,
+                    extra_bytes.read_u16()?,
+                ),
+                2,
             )),
-            0b11 => Ok(RegisterOrMemory::Register(Register::try_from_low_bits(rm)?)),
-            _ => Err(Error::InvalidModRMEncoding(mod_rm_byte)),
+            0b11 => Ok((
+                RegisterOrMemory::Register(Register::try_from_low_bits(rm)?),
+                0,
+            )),
+            _ => Err(Error::InvalidModRmEncoding(mod_rm_byte)),
         }
     }
 }
 
-impl Into<Operand> for RegisterOrMemory {
-    fn into(self) -> Operand {
-        match self {
-            RegisterOrMemory::Direct(offset) => Operand::Direct(offset),
-            RegisterOrMemory::Indirect(encoding) => Operand::Indirect(encoding, 0),
+impl From<RegisterOrMemory> for OperandType {
+    fn from(register_or_memory: RegisterOrMemory) -> Self {
+        match register_or_memory {
+            RegisterOrMemory::Direct(offset) => OperandType::Direct(offset),
+            RegisterOrMemory::Indirect(encoding) => OperandType::Indirect(encoding, 0),
             RegisterOrMemory::DisplacementByte(encoding, displacement) => {
-                Operand::Indirect(encoding, displacement as u16)
+                OperandType::Indirect(encoding, displacement as u16)
             }
             RegisterOrMemory::DisplacementWord(encoding, displacement) => {
-                Operand::Indirect(encoding, displacement)
+                OperandType::Indirect(encoding, displacement)
             }
-            RegisterOrMemory::Register(encoding) => Operand::Register(encoding),
+            RegisterOrMemory::Register(encoding) => OperandType::Register(encoding),
         }
     }
 }
 
-impl From<Register> for Operand {
+impl From<Register> for OperandType {
     fn from(register_encoding: Register) -> Self {
         Self::Register(register_encoding)
     }
 }
 
 #[derive(Debug)]
-pub struct ModRM {
+pub struct Modrm {
     pub register: Register,
     pub register_or_memory: RegisterOrMemory,
 }
 
-impl ModRM {
-    pub fn try_from_mod_rm_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<Self> {
-        let reg = mod_rm_byte & 6;
+impl Modrm {
+    pub fn try_from_mod_rm_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<(Self, usize)> {
+        let register = Register::try_from_low_bits(mod_rm_byte >> 3 & 0b111)?;
 
-        Ok(ModRM {
-            register: Register::try_from_low_bits(reg)?,
-            register_or_memory: RegisterOrMemory::try_from(mod_rm_byte, extra_bytes)?,
-        })
+        let (register_or_memory, extra_bytes_read) =
+            RegisterOrMemory::try_from(mod_rm_byte, extra_bytes)?;
+
+        Ok((
+            Modrm {
+                register,
+                register_or_memory,
+            },
+            extra_bytes_read,
+        ))
     }
 }
 

@@ -19,9 +19,5 @@ path = "src/bin/mrc-dis.rs"
 name = "mrc-emu"
 path = "src/bin/mrc-emu.rs"
 
-[[bin]]
-name = "simple_cpu"
-path = "src/bin/simple_cpu.rs"
-
 [dependencies]
 clap = "2.33.3"

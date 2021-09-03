@@ -23,7 +23,7 @@ pub enum Operation {
     Aaa,
     Baa,
     Sub,
-    Ssb,
+    Sbb,
     Dec,
     Neg,
     Cmp,
@@ -122,12 +122,6 @@ pub enum Segment {
     Ds,
 }
 
-#[derive(Debug)]
-pub enum DataSize {
-    Byte,
-    Word,
-}
-
 #[derive(Debug, PartialEq)]
 pub enum AddressingMode {
     BxSi,
@@ -140,8 +134,14 @@ pub enum AddressingMode {
     Bx,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum OperandSize {
+    Byte,
+    Word,
+}
+
 #[derive(Debug)]
-pub enum Operand {
+pub enum OperandType {
     Direct(u16),
     Indirect(AddressingMode, u16),
     Register(Register),
@@ -150,10 +150,13 @@ pub enum Operand {
 }
 
 #[derive(Debug)]
+pub struct Operand(pub OperandType, pub OperandSize);
+
+#[derive(Debug)]
 pub enum OperandSet {
     None,
-    Destination(Operand, DataSize),
-    DestinationAndSource(Operand, Operand, DataSize),
+    Destination(Operand),
+    DestinationAndSource(Operand, Operand),
     Offset(u16),
     SegmentAndOffset(u16, u16),
 }
