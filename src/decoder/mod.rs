@@ -1,6 +1,7 @@
 mod decode;
 mod errors;
 mod modrm;
+mod operations;
 
 pub use decode::{decode_instruction, DecodeResult};
 pub use errors::{Error, Result};

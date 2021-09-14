@@ -1,10 +1,10 @@
+use crate::decoder::{operations, Error, Result};
 pub use crate::decoder::{ByteReader, Modrm};
-use crate::decoder::{Error, Result};
 use crate::instructions::{
     Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
 };
 
-trait ByteAndExtra<'a> {
+pub trait ByteAndExtra<'a> {
     fn byte_and_extra(&'a self) -> (u8, &'a [u8]);
 }
 
@@ -33,71 +33,14 @@ pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult> {
         // Arithmetic
 
         // ADD -> Add
-
-        // Register/Memory with register to either
-        // 0 0 0 0 0 0 d w | mod reg r/m
         0x00 | 0x01 | 0x02 | 0x03 => {
-            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-            let (mod_rm_byte, mod_rm_extra_bytes) = extra_bytes.byte_and_extra();
-            let (mod_rm, mod_rm_extra_bytes_read) =
-                Modrm::try_from_mod_rm_byte(mod_rm_byte, mod_rm_extra_bytes)?;
-
-            Ok(DecodeResult {
-                bytes_read: 2 + mod_rm_extra_bytes_read,
-                instruction: Instruction::new(
-                    Operation::Add,
-                    OperandSet::DestinationAndSource(
-                        Operand(OperandType::Register(mod_rm.register), operand_size),
-                        Operand(mod_rm.register_or_memory.into(), operand_size),
-                    ),
-                ),
-            })
+            operations::arithmetic::add::register_memory_with_register_to_either(
+                op_code,
+                extra_bytes,
+            )
         }
-
-        // Immediate to register/memory
-        // 1 0 0 0 0 0 s w | mod 0 0 0 r/m | data | data if sw = 01
         0x80 | 0x81 | 0x82 | 0x83 => {
-            let mut bytes_read: usize = 1; // op_code
-
-            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-            bytes_read += operand_size.in_bytes(); // we are going to read an immediate
-
-            let (mod_rm_byte, extra_bytes) = extra_bytes.byte_and_extra();
-            bytes_read += 1; // mod r/m byte
-
-            let (mod_rm, extra_bytes_read) = Modrm::try_from_mod_rm_byte(mod_rm_byte, extra_bytes)?;
-            bytes_read += extra_bytes_read; // bytes used by mod r/m
-
-            let (_, extra_bytes) = extra_bytes.split_at(extra_bytes_read);
-
-            let operation = match (mod_rm_byte >> 3) & 0b111 {
-                0b000 => Operation::Add,
-                0b001 => Operation::Adc,
-                0b010 => Operation::And,
-                0b011 => Operation::Xor,
-                0b100 => Operation::Or,
-                0b101 => Operation::Sbb,
-                0b110 => Operation::Sub,
-                0b111 => Operation::Cmp,
-                _ => unreachable!(),
-            };
-
-            Ok(DecodeResult {
-                bytes_read,
-                instruction: Instruction::new(
-                    operation,
-                    OperandSet::DestinationAndSource(
-                        Operand(mod_rm.register_or_memory.into(), operand_size),
-                        Operand(
-                            OperandType::Immediate(match operand_size {
-                                OperandSize::Byte => extra_bytes.read_u8()?.into(),
-                                OperandSize::Word => extra_bytes.read_u16()?,
-                            }),
-                            operand_size,
-                        ),
-                    ),
-                ),
-            })
+            operations::arithmetic::add::immediate_to_register_memory(op_code, extra_bytes)
         }
 
         // DEC = Decrement
@@ -118,100 +61,26 @@ pub fn decode_instruction(data: &[u8]) -> Result<DecodeResult> {
         // Data transfer
 
         // MOV -> Move
-
-        // Register/memory to/from register
-        // 1 0 0 0 1 0 d w
         0x88 | 0x89 | 0x8A | 0x8B => {
-            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-            let direction = op_code >> 1 & 0b1;
-            let (mod_rm_byte, mod_rm_extra_bytes) = extra_bytes.byte_and_extra();
-            let (mod_rm, mod_rm_extra_bytes_read) =
-                Modrm::try_from_mod_rm_byte(mod_rm_byte, mod_rm_extra_bytes)?;
-
-            let destination = Operand(mod_rm.register.into(), operand_size);
-            let source = Operand(mod_rm.register_or_memory.into(), operand_size);
-
-            Ok(DecodeResult {
-                bytes_read: 2 + mod_rm_extra_bytes_read,
-                instruction: Instruction::new(
-                    Operation::Mov,
-                    match direction {
-                        0 => OperandSet::DestinationAndSource(source, destination),
-                        _ => OperandSet::DestinationAndSource(destination, source),
-                    },
-                ),
-            })
+            operations::data_transfer::mov::register_memory_to_from_register(op_code, extra_bytes)
         }
-
-        // Immediate to register
-        // 1 0 1 1 w reg
+        0x8C => operations::data_transfer::mov::segment_register_to_register_memory(
+            op_code,
+            extra_bytes,
+        ),
+        0x8E => operations::data_transfer::mov::register_memory_to_segment_register(
+            op_code,
+            extra_bytes,
+        ),
+        0xC6 | 0xC7 => {
+            operations::data_transfer::mov::immediate_to_register_memory(op_code, extra_bytes)
+        }
         0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB6 | 0xB7 | 0xB8 | 0xB9 | 0xBA | 0xBB
         | 0xBC | 0xBD | 0xBE | 0xBF => {
-            let operand_size = OperandSize::try_from_low_bits(op_code >> 3 & 0b1)?;
-            let destination = Operand(
-                OperandType::Register(Register::try_from_low_bits(op_code & 0b111)?),
-                operand_size,
-            );
-            let source = Operand(
-                OperandType::Immediate(match operand_size {
-                    OperandSize::Byte => extra_bytes.read_u8()?.into(),
-                    OperandSize::Word => extra_bytes.read_u16()?,
-                }),
-                operand_size,
-            );
-
-            Ok(DecodeResult {
-                bytes_read: 1 + operand_size.in_bytes(),
-                instruction: Instruction::new(
-                    Operation::Mov,
-                    OperandSet::DestinationAndSource(destination, source),
-                ),
-            })
+            operations::data_transfer::mov::immediate_to_register(op_code, extra_bytes)
         }
-
-        // Register/memory to segment register
-        // 1 0 0 0 1 1 1 0 | mod 0 segment r/m
-        0x8E => {
-            let (modrm_byte, extra_bytes) = extra_bytes.byte_and_extra();
-            let (modrm, extra_bytes_read) = Modrm::try_from_mod_rm_byte(modrm_byte, extra_bytes)?;
-
-            let destination: Operand = Operand(
-                OperandType::Segment(Segment::try_from_low_bits(modrm_byte >> 3 & 0b111)?),
-                OperandSize::Word,
-            );
-
-            let source = Operand(modrm.register_or_memory.into(), OperandSize::Word);
-
-            Ok(DecodeResult {
-                bytes_read: 2 + extra_bytes_read,
-                instruction: Instruction::new(
-                    Operation::Mov,
-                    OperandSet::DestinationAndSource(destination, source),
-                ),
-            })
-        }
-
-        // Segment register to register/memory
-        // 1 0 0 0 1 1 0 0 | mod 0 segment r/m
-        0x8C => {
-            let (mod_rm_byte, extra_bytes) = extra_bytes.byte_and_extra();
-            let (mod_rm, extra_bytes_read) = Modrm::try_from_mod_rm_byte(mod_rm_byte, extra_bytes)?;
-
-            let destination = Operand(mod_rm.register_or_memory.into(), OperandSize::Word);
-
-            let source: Operand = Operand(
-                OperandType::Segment(Segment::try_from_low_bits(mod_rm_byte >> 3 & 0b111)?),
-                OperandSize::Word,
-            );
-
-            Ok(DecodeResult {
-                bytes_read: 2 + extra_bytes_read,
-                instruction: Instruction::new(
-                    Operation::Mov,
-                    OperandSet::DestinationAndSource(destination, source),
-                ),
-            })
-        }
+        0xA0 | 0xA1 => operations::data_transfer::mov::memory_to_accumulator(op_code, extra_bytes),
+        0xA2 | 0xA3 => operations::data_transfer::mov::accumulator_to_memory(op_code, extra_bytes),
 
         // PUSH = Push
 

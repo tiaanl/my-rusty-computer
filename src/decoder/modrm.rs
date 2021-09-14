@@ -29,7 +29,7 @@ pub enum RegisterOrMemory {
 }
 
 impl RegisterOrMemory {
-    pub fn try_from(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<(Self, usize)> {
+    pub fn try_from_modrm(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<(Self, usize)> {
         let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte & 0b111;
 
@@ -93,17 +93,20 @@ pub struct Modrm {
 }
 
 impl Modrm {
-    pub fn try_from_mod_rm_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<(Self, usize)> {
+    pub fn try_from_byte(mod_rm_byte: u8, extra_bytes: &[u8]) -> Result<(Self, &[u8], usize)> {
         let register = Register::try_from_low_bits(mod_rm_byte >> 3 & 0b111)?;
 
         let (register_or_memory, extra_bytes_read) =
-            RegisterOrMemory::try_from(mod_rm_byte, extra_bytes)?;
+            RegisterOrMemory::try_from_modrm(mod_rm_byte, extra_bytes)?;
+
+        let (_, rest) = extra_bytes.split_at(extra_bytes_read);
 
         Ok((
             Modrm {
                 register,
                 register_or_memory,
             },
+            rest,
             extra_bytes_read,
         ))
     }
@@ -159,136 +162,136 @@ mod test {
     fn register_or_memory() {
         // Indirect
         assert_eq!(
-            RegisterOrMemory::try_from(0b00_000_000, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b00_000_000, &[]).unwrap(),
             (RegisterOrMemory::Indirect(AddressingMode::BxSi), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b00_000_001, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b00_000_001, &[]).unwrap(),
             (RegisterOrMemory::Indirect(AddressingMode::BxDi), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b00_000_010, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b00_000_010, &[]).unwrap(),
             (RegisterOrMemory::Indirect(AddressingMode::BpSi), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b00_000_011, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b00_000_011, &[]).unwrap(),
             (RegisterOrMemory::Indirect(AddressingMode::BpDi), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b00_000_100, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b00_000_100, &[]).unwrap(),
             (RegisterOrMemory::Indirect(AddressingMode::Si), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b00_000_101, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b00_000_101, &[]).unwrap(),
             (RegisterOrMemory::Indirect(AddressingMode::Di), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b00_000_110, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b00_000_110, &[0x01, 0x01]).unwrap(),
             (RegisterOrMemory::Direct(0x0101), 2)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b00_000_111, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b00_000_111, &[]).unwrap(),
             (RegisterOrMemory::Indirect(AddressingMode::Bx), 0)
         );
 
         // DisplacementByte
         assert_eq!(
-            RegisterOrMemory::try_from(0b01_000_000, &[0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b01_000_000, &[0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementByte(AddressingMode::BxSi, 1),
                 1
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b01_000_001, &[0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b01_000_001, &[0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementByte(AddressingMode::BxDi, 1),
                 1
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b01_000_010, &[0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b01_000_010, &[0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementByte(AddressingMode::BpSi, 1),
                 1
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b01_000_011, &[0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b01_000_011, &[0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementByte(AddressingMode::BpDi, 1),
                 1
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b01_000_100, &[0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b01_000_100, &[0x01]).unwrap(),
             (RegisterOrMemory::DisplacementByte(AddressingMode::Si, 1), 1)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b01_000_101, &[0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b01_000_101, &[0x01]).unwrap(),
             (RegisterOrMemory::DisplacementByte(AddressingMode::Di, 1), 1)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b01_000_110, &[0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b01_000_110, &[0x01]).unwrap(),
             (RegisterOrMemory::DisplacementByte(AddressingMode::Bp, 1), 1)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b01_000_111, &[0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b01_000_111, &[0x01]).unwrap(),
             (RegisterOrMemory::DisplacementByte(AddressingMode::Bx, 1), 1)
         );
 
         // DisplacementWord
         assert_eq!(
-            RegisterOrMemory::try_from(0b10_000_000, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b10_000_000, &[0x01, 0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementWord(AddressingMode::BxSi, 257),
                 2
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b10_000_001, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b10_000_001, &[0x01, 0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementWord(AddressingMode::BxDi, 257),
                 2
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b10_000_010, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b10_000_010, &[0x01, 0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementWord(AddressingMode::BpSi, 257),
                 2
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b10_000_011, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b10_000_011, &[0x01, 0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementWord(AddressingMode::BpDi, 257),
                 2
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b10_000_100, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b10_000_100, &[0x01, 0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementWord(AddressingMode::Si, 257),
                 2
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b10_000_101, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b10_000_101, &[0x01, 0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementWord(AddressingMode::Di, 257),
                 2
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b10_000_110, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b10_000_110, &[0x01, 0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementWord(AddressingMode::Bp, 257),
                 2
             )
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b10_000_111, &[0x01, 0x01]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b10_000_111, &[0x01, 0x01]).unwrap(),
             (
                 RegisterOrMemory::DisplacementWord(AddressingMode::Bx, 257),
                 2
@@ -297,35 +300,35 @@ mod test {
 
         // Register
         assert_eq!(
-            RegisterOrMemory::try_from(0b11_000_000, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b11_000_000, &[]).unwrap(),
             (RegisterOrMemory::Register(Register::AlAx), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b11_000_001, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b11_000_001, &[]).unwrap(),
             (RegisterOrMemory::Register(Register::ClCx), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b11_000_010, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b11_000_010, &[]).unwrap(),
             (RegisterOrMemory::Register(Register::DlDx), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b11_000_011, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b11_000_011, &[]).unwrap(),
             (RegisterOrMemory::Register(Register::BlBx), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b11_000_100, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b11_000_100, &[]).unwrap(),
             (RegisterOrMemory::Register(Register::AhSp), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b11_000_101, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b11_000_101, &[]).unwrap(),
             (RegisterOrMemory::Register(Register::ChBp), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b11_000_110, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b11_000_110, &[]).unwrap(),
             (RegisterOrMemory::Register(Register::DhSi), 0)
         );
         assert_eq!(
-            RegisterOrMemory::try_from(0b11_000_111, &[]).unwrap(),
+            RegisterOrMemory::try_from_modrm(0b11_000_111, &[]).unwrap(),
             (RegisterOrMemory::Register(Register::BhDi), 0)
         );
     }
