@@ -1,7 +1,7 @@
-use crate::decoder::decode::ByteAndExtra;
-use crate::decoder::errors::Result;
-use crate::decoder::{ByteReader, DecodeResult, Modrm};
-use crate::instructions::{Instruction, Operand, OperandSet, OperandSize, OperandType, Operation};
+use crate::decode::ByteAndExtra;
+use crate::errors::Result;
+use crate::{ByteReader, ByteSize, DecodeResult, LowBitsDecoder, Modrm};
+use mrc_x86::{Instruction, Operand, OperandSet, OperandSize, OperandType, Operation};
 
 // Register/Memory with register to either
 // 0 0 0 0 0 0 d w | mod reg r/m
@@ -27,7 +27,7 @@ pub fn immediate_to_register_memory(op_code: u8, bytes: &[u8]) -> Result<DecodeR
     let mut bytes_read: usize = 1; // op_code
 
     let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-    bytes_read += operand_size.in_bytes(); // we are going to read an immediate
+    bytes_read += operand_size.byte_size(); // we are going to read an immediate
 
     let (modrm_byte, bytes) = bytes.byte_and_extra();
 
@@ -47,7 +47,7 @@ pub fn immediate_to_register_memory(op_code: u8, bytes: &[u8]) -> Result<DecodeR
     };
 
     // Add the amount of bytes we will read for the immediate value.
-    bytes_read += operand_size.in_bytes();
+    bytes_read += operand_size.byte_size();
 
     Ok(DecodeResult {
         bytes_read,

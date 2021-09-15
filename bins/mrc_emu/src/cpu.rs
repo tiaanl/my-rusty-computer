@@ -1,19 +1,43 @@
-use mrc::instructions::*;
+use crate::memory::MemoryManager;
+use mrc_x86::{Instruction, OperandSet, OperandSize, OperandType, Operation, Register, Segment};
+use std::cmp::Ordering;
 
-struct Cpu {
-    registers: [u16; 16],
-    segments: [u16; 4],
+pub type SegmentAndOffset = usize;
+
+pub fn segment_and_offset(segment: u16, offset: u16) -> SegmentAndOffset {
+    (segment << 4 + offset).into()
 }
 
-impl Cpu {
-    fn new() -> Self {
+const REG_AX: usize = 0x0;
+const REG_BX: usize = 0x1;
+const REG_CX: usize = 0x2;
+const REG_DX: usize = 0x3;
+const REG_BP: usize = 0x4;
+const REG_SP: usize = 0x5;
+const REG_SI: usize = 0x6;
+const REG_DI: usize = 0x7;
+
+pub struct Cpu<'a> {
+    registers: [u16; 8],
+    segments: [u16; 4],
+    ip: u16,
+    flags: u16,
+
+    memory_manager: &'a mut MemoryManager,
+}
+
+impl<'a> Cpu<'a> {
+    pub fn new(memory_manager: &'a mut MemoryManager) -> Self {
         Self {
-            registers: [0; 16],
+            registers: [0; 8],
             segments: [0; 4],
+            ip: 0,
+            flags: 0,
+            memory_manager,
         }
     }
 
-    fn print_registers(&mut self) {
+    pub fn print_registers(&mut self) {
         print!(
             "AX: {:#06X} BX: {:#06X} CX: {:#06X} DX: {:#06X} ",
             self.registers[0], self.registers[1], self.registers[2], self.registers[3]
@@ -24,8 +48,12 @@ impl Cpu {
         );
     }
 
+    pub fn start(&mut self) {
+        self.print_registers();
+    }
+
     fn execute(&mut self, instruction: &Instruction) {
-        println!("Executing: {:?}", instruction);
+        println!("Executing: {}", instruction);
 
         match instruction.operation {
             Operation::Add => {
@@ -59,14 +87,14 @@ impl Cpu {
             OperandType::Direct(_) => todo!(),
             OperandType::Indirect(_, _) => 0,
             OperandType::Register(encoding) => match encoding {
-                Register::AlAx => self.registers[0],
-                Register::ClCx => self.registers[1],
-                Register::DlDx => self.registers[2],
-                Register::BlBx => self.registers[3],
-                Register::AhSp => self.registers[4],
-                Register::ChBp => self.registers[5],
-                Register::DhSi => self.registers[6],
-                Register::BhDi => self.registers[7],
+                Register::AlAx => self.registers[REG_AX],
+                Register::ClCx => self.registers[REG_BX],
+                Register::DlDx => self.registers[REG_CX],
+                Register::BlBx => self.registers[REG_DX],
+                Register::AhSp => self.registers[REG_SP],
+                Register::ChBp => self.registers[REG_BP],
+                Register::DhSi => self.registers[REG_SI],
+                Register::BhDi => self.registers[REG_DI],
             },
             OperandType::Segment(encoding) => match encoding {
                 Segment::Es => self.segments[0],
@@ -138,47 +166,5 @@ impl Cpu {
                 BhDi => self.registers[7] = value,
             },
         }
-    }
-}
-
-fn main() {
-    let mut cpu = Cpu::new();
-
-    let instructions = vec![
-        Instruction::new(
-            Operation::Add,
-            OperandSet::DestinationAndSource(
-                Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
-                Operand(OperandType::Immediate(10), OperandSize::Word),
-            ),
-        ),
-        Instruction::new(
-            Operation::Add,
-            OperandSet::DestinationAndSource(
-                Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
-                Operand(OperandType::Immediate(10), OperandSize::Word),
-            ),
-        ),
-        Instruction::new(
-            Operation::Add,
-            OperandSet::DestinationAndSource(
-                Operand(OperandType::Register(Register::AhSp), OperandSize::Byte),
-                Operand(OperandType::Immediate(0xB0), OperandSize::Byte),
-            ),
-        ),
-        Instruction::new(
-            Operation::Add,
-            OperandSet::DestinationAndSource(
-                Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
-                Operand(OperandType::Immediate(0x01), OperandSize::Byte),
-            ),
-        ),
-    ];
-
-    cpu.print_registers();
-
-    for instruction in instructions {
-        cpu.execute(&instruction);
-        cpu.print_registers();
     }
 }

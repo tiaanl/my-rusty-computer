@@ -1,4 +1,4 @@
-use crate::decoder::modrm::RegisterOrMemory;
+use crate::modrm::RegisterOrMemory;
 use std::fmt;
 
 #[derive(PartialEq, Debug)]

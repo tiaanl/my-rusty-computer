@@ -1,6 +1,6 @@
-use crate::decoder::{operations, Error, Result};
-pub use crate::decoder::{ByteReader, Modrm};
-use crate::instructions::{
+use crate::errors::Result;
+use crate::{operations, ByteReader, Error, LowBitsDecoder};
+use mrc_x86::{
     Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
 };
 

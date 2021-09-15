@@ -1,8 +1,8 @@
-use crate::decoder::decode::ByteAndExtra;
-use crate::decoder::{ByteReader, Result};
-use crate::decoder::{DecodeResult, Modrm};
-use crate::instructions::{
-    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register,
+use crate::decode::ByteAndExtra;
+use crate::errors::Result;
+use crate::{ByteReader, ByteSize, DecodeResult, LowBitsDecoder, Modrm};
+use mrc_x86::{
+    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
 };
 
 // 1 0 0 0 1 0 d w | mod reg r/m
@@ -14,7 +14,7 @@ pub fn register_memory_to_from_register(op_code: u8, bytes: &[u8]) -> Result<Dec
     let (modrm, _, bytes_read) = Modrm::try_from_byte(modrm_byte, bytes)?;
     assert_eq!(bytes_read, 0);
 
-    let destination = Operand(modrm.register.into(), operand_size);
+    let destination = Operand(OperandType::Register(modrm.register), operand_size);
     let source = Operand(modrm.register_or_memory.into(), operand_size);
 
     let operand_set = match direction {
@@ -44,7 +44,7 @@ pub fn immediate_to_register_memory(op_code: u8, bytes: &[u8]) -> Result<DecodeR
     let source = Operand(OperandType::Immediate(immediate), operand_size);
 
     Ok(DecodeResult {
-        bytes_read: 1 + 1 + bytes_read + operand_size.in_bytes(), // op_code + modrm + data + immediate_size
+        bytes_read: 1 + 1 + bytes_read + operand_size.byte_size(), // op_code + modrm + data + immediate_size
         instruction: Instruction::new(
             Operation::Mov,
             OperandSet::DestinationAndSource(destination, source),
@@ -69,7 +69,7 @@ pub fn immediate_to_register(op_code: u8, bytes: &[u8]) -> Result<DecodeResult> 
     };
 
     Ok(DecodeResult {
-        bytes_read: 1 + operand_size.in_bytes(), // op_code + immediate_size
+        bytes_read: 1 + operand_size.byte_size(), // op_code + immediate_size
         instruction: Instruction::new(
             Operation::Mov,
             OperandSet::DestinationAndSource(register, immediate),
@@ -122,9 +122,7 @@ pub fn register_memory_to_segment_register(_: u8, bytes: &[u8]) -> Result<Decode
     let register_or_memory = Operand(modrm.register_or_memory.into(), OperandSize::Word);
 
     let segment_register = Operand(
-        OperandType::Segment(crate::decoder::Segment::try_from_low_bits(
-            modrm_byte >> 3 & 0b11,
-        )?),
+        OperandType::Segment(Segment::try_from_low_bits(modrm_byte >> 3 & 0b11)?),
         OperandSize::Word,
     );
 
@@ -146,9 +144,7 @@ pub fn segment_register_to_register_memory(_: u8, bytes: &[u8]) -> Result<Decode
     let register_or_memory = Operand(modrm.register_or_memory.into(), OperandSize::Word);
 
     let segment_register = Operand(
-        OperandType::Segment(crate::decoder::Segment::try_from_low_bits(
-            modrm_byte >> 3 & 0b11,
-        )?),
+        OperandType::Segment(Segment::try_from_low_bits(modrm_byte >> 3 & 0b11)?),
         OperandSize::Word,
     );
 

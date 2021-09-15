@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use mrc::decoder::{decode_instruction, DecodeResult};
+use mrc_decoder::{decode_instruction, DecodeResult};
 use std::io::Read;
 
 fn main() {
@@ -21,15 +21,15 @@ fn main() {
         }
     }
 
-    if buffer.len() == 0 {
+    if buffer.is_empty() {
         println!("Could not read binary file.");
         return;
     }
 
     // println!("{:?}", buffer);
 
-    // let mut current_address = 0usize;
-    let mut current_address: usize = 0x8F;
+    let mut current_address = 0usize;
+    // let mut current_address: usize = 0x8F;
     while current_address < buffer.len() {
         match decode_instruction(&buffer[current_address..]) {
             Ok(DecodeResult {

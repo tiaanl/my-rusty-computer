@@ -1,23 +1,8 @@
-[package]
-name = "my-rusty-computer"
-version = "0.1.0"
-authors = ["Tiaan Louw <tiaanl@gmail.com>"]
-description = "This create contains several modules that operate on the Intel(tm) 8086 CPU instruction set."
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-name = "mrc"
-path = "src/lib.rs"
-
-[[bin]]
-name = "mrc-dis"
-path = "src/bin/mrc-dis.rs"
-
-[[bin]]
-name = "mrc-emu"
-path = "src/bin/mrc-emu.rs"
-
-[dependencies]
-clap = "2.33.3"
+[workspace]
+members = [
+    "crates/mrc_x86",
+    "crates/mrc_decoder",
+    "bins/mrc_dis",
+    "bins/mrc_emu",
+    "bins/simple_cpu",
+]

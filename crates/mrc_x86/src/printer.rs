@@ -1,4 +1,7 @@
-use crate::instructions::*;
+use crate::{
+    AddressingMode, Instruction, Operand, OperandSet, OperandSize, OperandType, Operation,
+    Register, Segment,
+};
 use std::fmt;
 use std::fmt::Formatter;
 

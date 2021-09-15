@@ -1,3 +1,5 @@
+extern crate mrc_x86;
+
 mod decode;
 mod errors;
 mod modrm;
@@ -6,10 +8,17 @@ mod operations;
 pub use decode::{decode_instruction, DecodeResult};
 pub use errors::{Error, Result};
 pub use modrm::Modrm;
+use mrc_x86::{OperandSize, Register, Segment};
 
-use crate::instructions::*;
+trait LowBitsDecoder<T> {
+    fn try_from_low_bits(bits: u8) -> Result<T>;
+}
 
-impl Register {
+trait ByteSize<T> {
+    fn byte_size(&self) -> usize;
+}
+
+impl LowBitsDecoder<Register> for Register {
     fn try_from_low_bits(byte: u8) -> Result<Self> {
         assert!(byte <= 0b111);
 
@@ -27,7 +36,7 @@ impl Register {
     }
 }
 
-impl Segment {
+impl LowBitsDecoder<Self> for Segment {
     fn try_from_low_bits(byte: u8) -> Result<Self> {
         assert!(byte <= 0b11);
 
@@ -64,7 +73,7 @@ impl ByteReader for &[u8] {
     }
 }
 
-impl OperandSize {
+impl LowBitsDecoder<Self> for OperandSize {
     fn try_from_low_bits(encoding: u8) -> Result<OperandSize> {
         match encoding {
             0b0 => Ok(OperandSize::Byte),
@@ -72,8 +81,10 @@ impl OperandSize {
             _ => Err(Error::InvalidDataSizeEncoding(encoding)),
         }
     }
+}
 
-    fn in_bytes(&self) -> usize {
+impl ByteSize<Self> for OperandSize {
+    fn byte_size(&self) -> usize {
         match self {
             OperandSize::Byte => 1,
             OperandSize::Word => 2,

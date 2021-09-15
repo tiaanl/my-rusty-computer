@@ -1,0 +1,7 @@
+[package]
+name = "simple-cpu"
+version = "0.0.1"
+edition = "2018"
+
+[dependencies]
+mrc_x86 = { path = "../../crates/mrc_x86" }

@@ -1,3 +1,5 @@
+pub mod printer;
+
 #[derive(Debug)]
 pub enum Operation {
     // Data transfer

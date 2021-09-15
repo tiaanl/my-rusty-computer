@@ -1,0 +1,8 @@
+[package]
+name = "mrc-dis"
+version = "0.0.1"
+edition = "2018"
+
+[dependencies]
+mrc_decoder = { path = "../../crates/mrc_decoder" }
+clap = "2.33.3"

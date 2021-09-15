@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unreachable_code)]
+
 use std::io::Read;
 use std::path::Path;
 
@@ -5,7 +8,7 @@ fn load_bin_into_memory<P: AsRef<Path>>(path: P, memory: &mut Vec<u8>) -> std::i
     let mut file = std::fs::File::open(path)?;
     let bytes_read = file.read_to_end(memory)?;
 
-    // println!("bytes read: {:#06X}", bytes_read);
+    println!("bytes read: {:#06X}", bytes_read);
 
     Ok(())
 }
@@ -242,18 +245,18 @@ impl<'a> CPU<'a> {
 
     fn set_flag(&mut self, flag: Flag) {
         match flag {
-            Flag::Carry => self.flags |= (1 << 0x0),
-            Flag::Reserved1 => self.flags |= (1 << 0x1),
-            Flag::Parity => self.flags |= (1 << 0x2),
-            Flag::Reserved3 => self.flags |= (1 << 0x3),
-            Flag::Adjust => self.flags |= (1 << 0x4),
-            Flag::Reserved5 => self.flags |= (1 << 0x5),
-            Flag::Zero => self.flags |= (1 << 0x6),
-            Flag::Sign => self.flags |= (1 << 0x7),
-            Flag::Trap => self.flags |= (1 << 0x8),
-            Flag::Interrupt => self.flags |= (1 << 0x9),
-            Flag::Direction => self.flags |= (1 << 0xA),
-            Flag::Overflow => self.flags |= (1 << 0xB),
+            Flag::Carry => self.flags |= 1 << 0x0,
+            Flag::Reserved1 => self.flags |= 1 << 0x1,
+            Flag::Parity => self.flags |= 1 << 0x2,
+            Flag::Reserved3 => self.flags |= 1 << 0x3,
+            Flag::Adjust => self.flags |= 1 << 0x4,
+            Flag::Reserved5 => self.flags |= 1 << 0x5,
+            Flag::Zero => self.flags |= 1 << 0x6,
+            Flag::Sign => self.flags |= 1 << 0x7,
+            Flag::Trap => self.flags |= 1 << 0x8,
+            Flag::Interrupt => self.flags |= 1 << 0x9,
+            Flag::Direction => self.flags |= 1 << 0xA,
+            Flag::Overflow => self.flags |= 1 << 0xB,
         }
     }
 
