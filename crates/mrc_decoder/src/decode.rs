@@ -1,7 +1,8 @@
 use crate::errors::Result;
 use crate::{it_read_u16, it_read_u8, operations, Error, LowBitsDecoder};
 use mrc_x86::{
-    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
+    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Repeat,
+    Segment,
 };
 
 pub trait DataIterator {
@@ -209,18 +210,35 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
         )),
 
         // Processor control
+        0xD8 | 0xD9 | 0xDA | 0xDB | 0xDC | 0xDD | 0xDE | 0xDF => {
+            operations::processor_control::escape_to_external_device(op_code, it)
+        }
+        0x9B => operations::processor_control::wait(op_code, it),
+        0xF0 => operations::processor_control::bus_lock_prefix(op_code, it),
+        0xF4 => operations::processor_control::halt(op_code, it),
+        0xF5 => operations::processor_control::complimentary_carry(op_code, it),
+        0xF8 => operations::processor_control::clear_carry(op_code, it),
+        0xF9 => operations::processor_control::set_carry(op_code, it),
+        0xFA => operations::processor_control::clear_interrupt(op_code, it),
+        0xFB => operations::processor_control::set_interrupt(op_code, it),
+        0xFC => operations::processor_control::clear_direction(op_code, it),
+        0xFD => operations::processor_control::set_direction(op_code, it),
 
-        // CLI
+        // String manipulation
+        0xA4 | 0xA5 => operations::string_manipulation::movs::move_byte_word(op_code, it),
 
-        // Clear interrupt
-        // 1 1 1 1 1 0 1 0
-        0xFA => Ok(Instruction::new(Operation::Cli, OperandSet::None)),
+        // Overrides
+        0xF2 => {
+            let mut instruction = decode_instruction(it)?;
+            instruction.repeat = Some(Repeat::NotEqual);
+            Ok(instruction)
+        }
 
-        // STI
-
-        // Set interrupt
-        // 1 1 1 1 1 0 1 0
-        0xFB => Ok(Instruction::new(Operation::Sti, OperandSet::None)),
+        0xF3 => {
+            let mut instruction = decode_instruction(it)?;
+            instruction.repeat = Some(Repeat::Equal);
+            Ok(instruction)
+        }
 
         _ => Err(Error::InvalidOpCode(op_code)),
     }

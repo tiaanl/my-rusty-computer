@@ -55,12 +55,17 @@ pub enum Operation {
     Xor,
 
     // String manipulation
-    Rep,
-    Movs,
-    Cmps,
-    Scas,
-    Lods,
-    Stos,
+    // Rep,
+    Cmpsb,
+    Cmpsw,
+    Lodsb,
+    Lodsw,
+    Movsb,
+    Movsw,
+    Scasb,
+    Scasw,
+    Stosb,
+    Stosw,
 
     // Control transfer
     Call,
@@ -164,9 +169,16 @@ pub enum OperandSet {
 }
 
 #[derive(Debug)]
+pub enum Repeat {
+    Equal,
+    NotEqual,
+}
+
+#[derive(Debug)]
 pub struct Instruction {
     pub operation: Operation,
     pub segment_override: Option<Segment>,
+    pub repeat: Option<Repeat>,
     pub operands: OperandSet,
 }
 
@@ -175,18 +187,7 @@ impl Instruction {
         Self {
             operation,
             segment_override: None,
-            operands,
-        }
-    }
-
-    pub fn with_segment_override(
-        operation: Operation,
-        segment_override: Segment,
-        operands: OperandSet,
-    ) -> Self {
-        Self {
-            operation,
-            segment_override: Some(segment_override),
+            repeat: None,
             operands,
         }
     }

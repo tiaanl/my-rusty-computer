@@ -79,9 +79,9 @@ impl Flags {
         self.value |= shift;
     }
 
-    // fn unset(&mut self, shift: u16) {
-    //     self.value &= !shift;
-    // }
+    fn clear(&mut self, shift: u16) {
+        self.value &= !shift;
+    }
 
     fn is_set(&self, shift: u16) -> bool {
         (self.value & shift) != 0
@@ -205,6 +205,14 @@ impl Cpu {
                 _ => todo!(),
             },
 
+            Operation::Cld => {
+                self.flags.clear(FLAG_SHIFT_DIRECTION);
+            }
+
+            Operation::Cli => {
+                self.flags.clear(FLAG_SHIFT_INTERRUPT);
+            }
+
             Operation::Mov => match &instruction.operands {
                 OperandSet::DestinationAndSource(destination, source) => {
                     let value = self.get_operand_value(source);
@@ -221,15 +229,66 @@ impl Cpu {
                 _ => todo!("OperandSet not supported!"),
             },
 
+            Operation::Movsb => {
+                let mut cx = self.get_register_value(&Register::ClCx, &OperandSize::Word);
+
+                let ds = self.get_segment_value(SEG_DS);
+                let si = self.get_register_value(&Register::DhSi, &OperandSize::Byte);
+                let es = self.get_segment_value(SEG_ES);
+                let di = self.get_register_value(&Register::BhDi, &OperandSize::Byte);
+
+                loop {
+                    let byte = match self
+                        .memory_manager
+                        .borrow()
+                        .read_u8(segment_and_offset(ds, si))
+                    {
+                        Ok(byte) => byte,
+                        Err(err) => panic!("Could not read byte: {:?}", err),
+                    };
+
+                    if let Err(err) = self
+                        .memory_manager
+                        .borrow_mut()
+                        .write_u8(segment_and_offset(es, di), byte)
+                    {
+                        panic!("Could not read byte: {:?}", err);
+                    }
+
+                    cx -= 1;
+
+                    if cx == 0 {
+                        break;
+                    }
+                }
+            }
+
+            Operation::Std => {
+                self.flags.set(FLAG_SHIFT_DIRECTION);
+            }
+
+            Operation::Sti => {
+                self.flags.set(FLAG_SHIFT_INTERRUPT);
+            }
+
             _ => {
-                todo!("Unknown instruction!");
+                todo!("Unknown instruction! {}", instruction.operation);
             }
         }
     }
 
     fn get_operand_value(&self, operand: &Operand) -> u16 {
         match &operand.0 {
-            OperandType::Direct(_) => todo!(),
+            OperandType::Direct(offset) => {
+                match self
+                    .memory_manager
+                    .borrow()
+                    .read_u8(segment_and_offset(self.get_segment_value(SEG_DS), *offset))
+                {
+                    Ok(value) => value.into(),
+                    Err(err) => panic!("Could not get direct memory value: {:?}", err),
+                }
+            }
             OperandType::Indirect(_, _) => todo!(),
             OperandType::Register(register) => self.get_register_value(&register, &operand.1),
             OperandType::Segment(encoding) => match encoding {
@@ -314,6 +373,10 @@ impl Cpu {
                 BhDi => self.registers[REG_DI] = value,
             },
         }
+    }
+
+    fn get_segment_value(&self, segment: usize) -> u16 {
+        self.segments[segment]
     }
 
     fn set_segment_value(&mut self, segment: &Segment, value: u16) {

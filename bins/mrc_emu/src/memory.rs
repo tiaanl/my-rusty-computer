@@ -27,8 +27,9 @@ impl MemoryInterface for PhysicalMemory {
         Ok(self.data[so])
     }
 
-    fn write_u8(&mut self, _: SegmentAndOffset, _: u8) -> Result<(), MemoryError> {
-        todo!()
+    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError> {
+        self.data[so] = value;
+        Ok(())
     }
 }
 
@@ -73,7 +74,12 @@ impl MemoryInterface for MemoryManager {
         Err(MemoryError::NoInterface(so))
     }
 
-    fn write_u8(&mut self, _: SegmentAndOffset, _: u8) -> Result<(), MemoryError> {
-        todo!()
+    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError> {
+        for container in &mut self.interfaces {
+            if so >= container.start && so < container.start + container.size {
+                return container.interface.write_u8(so, value);
+            }
+        }
+        Err(MemoryError::NoInterface(so))
     }
 }
