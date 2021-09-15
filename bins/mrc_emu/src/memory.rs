@@ -1,52 +1,33 @@
 use crate::cpu::SegmentAndOffset;
 
-enum MemoryError {
-    OutsideBounds,
-    ReadError(std::io::Error),
-    NoInterface,
+#[derive(Debug)]
+pub enum MemoryError {
+    NoInterface(usize),
 }
 
 pub trait MemoryInterface {
     fn read_u8(&self, so: SegmentAndOffset) -> Result<u8, MemoryError>;
-    fn read_u16(&self, so: SegmentAndOffset) -> Result<u16, MemoryError>;
     fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError>;
-    fn write_u16(&mut self, so: SegmentAndOffset, value: u16) -> Result<(), MemoryError>;
 }
 
 pub struct PhysicalMemory {
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 impl PhysicalMemory {
-    pub fn new() -> Self {
+    pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            data: Vec::with_capacity(0xFFFFF),
+            data: vec![0; capacity],
         }
     }
 }
 
 impl MemoryInterface for PhysicalMemory {
     fn read_u8(&self, so: SegmentAndOffset) -> Result<u8, MemoryError> {
-        let (_, buf) = self.data.split_at(so.into());
-        Ok(buf[0])
+        Ok(self.data[so])
     }
 
-    fn read_u16(&self, so: SegmentAndOffset) -> Result<u16, MemoryError> {
-        let mut buf = [0u8; 2];
-        if let Some(byte) = self.data.get(so) {
-            buf[0] = *byte;
-        }
-        if let Some(byte) = self.data.get(so + 1) {
-            buf[0] = *byte;
-        }
-        Ok(u16::from_be_bytes(buf))
-    }
-
-    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError> {
-        todo!()
-    }
-
-    fn write_u16(&mut self, so: SegmentAndOffset, value: u16) -> Result<(), MemoryError> {
+    fn write_u8(&mut self, _: SegmentAndOffset, _: u8) -> Result<(), MemoryError> {
         todo!()
     }
 }
@@ -85,22 +66,14 @@ impl MemoryManager {
 impl MemoryInterface for MemoryManager {
     fn read_u8(&self, so: SegmentAndOffset) -> Result<u8, MemoryError> {
         for container in &self.interfaces {
-            if so >= container.start && so < container.start + container.start {
+            if so >= container.start && so < container.start + container.size {
                 return container.interface.read_u8(so);
             }
         }
-        Err(MemoryError::NoInterface)
+        Err(MemoryError::NoInterface(so))
     }
 
-    fn read_u16(&self, so: SegmentAndOffset) -> Result<u16, MemoryError> {
-        todo!()
-    }
-
-    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError> {
-        todo!()
-    }
-
-    fn write_u16(&mut self, so: SegmentAndOffset, value: u16) -> Result<(), MemoryError> {
+    fn write_u8(&mut self, _: SegmentAndOffset, _: u8) -> Result<(), MemoryError> {
         todo!()
     }
 }

@@ -5,7 +5,7 @@ mod errors;
 mod modrm;
 mod operations;
 
-pub use decode::{decode_instruction, DecodeResult};
+pub use decode::{decode_instruction, DataIterator};
 pub use errors::{Error, Result};
 pub use modrm::Modrm;
 use mrc_x86::{OperandSize, Register, Segment};
@@ -71,6 +71,16 @@ impl ByteReader for &[u8] {
             Err(Error::CouldNotReadExtraBytes)
         }
     }
+}
+
+fn it_read_u8<It: DataIterator>(it: &mut It) -> u8 {
+    it.consume()
+}
+
+fn it_read_u16<It: DataIterator>(it: &mut It) -> u16 {
+    let first = it.consume();
+    let second = it.consume();
+    ((second as u16) << 4) + first as u16
 }
 
 impl LowBitsDecoder<Self> for OperandSize {

@@ -78,6 +78,7 @@ version = "0.0.1"
 dependencies = [
  "byteorder",
  "clap",
+ "mrc_decoder",
  "mrc_x86",
 ]
 

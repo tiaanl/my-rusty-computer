@@ -1,11 +1,21 @@
-use crate::memory::MemoryManager;
-use mrc_x86::{Instruction, OperandSet, OperandSize, OperandType, Operation, Register, Segment};
-use std::cmp::Ordering;
+use crate::memory::{MemoryInterface, MemoryManager};
+use mrc_decoder::DataIterator;
+use mrc_x86::{
+    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
+};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub type SegmentAndOffset = usize;
 
 pub fn segment_and_offset(segment: u16, offset: u16) -> SegmentAndOffset {
-    (segment << 4 + offset).into()
+    ((segment << 4) + offset).into()
+}
+
+pub fn into_segment_and_offset(addr: usize) -> (u16, u16) {
+    let offset = (addr & 0x00FF) as u16;
+    let segment = (addr >> 16) as u16;
+    (segment, offset)
 }
 
 const REG_AX: usize = 0x0;
@@ -17,24 +27,101 @@ const REG_SP: usize = 0x5;
 const REG_SI: usize = 0x6;
 const REG_DI: usize = 0x7;
 
-pub struct Cpu<'a> {
-    registers: [u16; 8],
-    segments: [u16; 4],
-    ip: u16,
-    flags: u16,
+const SEG_ES: usize = 0x0;
+const SEG_CS: usize = 0x1;
+const SEG_SS: usize = 0x2;
+const SEG_DS: usize = 0x3;
 
-    memory_manager: &'a mut MemoryManager,
+#[derive(Clone)]
+struct CpuIterator {
+    memory_manager: Rc<RefCell<MemoryManager>>,
+    position: usize,
 }
 
-impl<'a> Cpu<'a> {
-    pub fn new(memory_manager: &'a mut MemoryManager) -> Self {
-        Self {
+impl<'a> DataIterator for CpuIterator {
+    fn peek(&self) -> u8 {
+        self.memory_manager.borrow().read_u8(self.position).unwrap()
+    }
+
+    fn consume(&mut self) -> u8 {
+        let b = self.peek();
+        self.advance();
+        b
+    }
+
+    fn advance(&mut self) {
+        self.position += 1
+    }
+}
+
+//                              111111
+//                              5432109876543210
+const FLAG_SHIFT_CARRY: u16 = 1 << 0;
+const FLAG_SHIFT_PARITY: u16 = 1 << 2;
+const FLAG_SHIFT_AUX_CARRY: u16 = 1 << 4;
+const FLAG_SHIFT_ZERO: u16 = 1 << 6;
+const FLAG_SHIFT_SIGN: u16 = 1 << 7;
+const FLAG_SHIFT_TRAP: u16 = 1 << 8;
+const FLAG_SHIFT_INTERRUPT: u16 = 1 << 9;
+const FLAG_SHIFT_DIRECTION: u16 = 1 << 10;
+const FLAG_SHIFT_OVERFLOW: u16 = 1 << 11;
+
+struct Flags {
+    value: u16,
+}
+
+impl Flags {
+    fn new() -> Self {
+        Self { value: 0 }
+    }
+
+    fn set(&mut self, shift: u16) {
+        self.value |= shift;
+    }
+
+    // fn unset(&mut self, shift: u16) {
+    //     self.value &= !shift;
+    // }
+
+    fn is_set(&self, shift: u16) -> bool {
+        (self.value & shift) != 0
+    }
+}
+
+pub struct Cpu {
+    registers: [u16; 8],
+    segments: [u16; 4],
+    pub ip: SegmentAndOffset,
+    flags: Flags,
+
+    memory_manager: Rc<RefCell<MemoryManager>>,
+}
+
+impl Cpu {
+    pub fn new(memory_manager: Rc<RefCell<MemoryManager>>) -> Self {
+        let mut cpu = Self {
             registers: [0; 8],
             segments: [0; 4],
             ip: 0,
-            flags: 0,
+            flags: Flags::new(),
             memory_manager,
-        }
+        };
+
+        cpu.registers[REG_AX] = 0x0000;
+        cpu.registers[REG_CX] = 0x00FF;
+        cpu.registers[REG_DX] = 0x01DD;
+        cpu.registers[REG_BX] = 0x0000;
+        cpu.registers[REG_BP] = 0x091C;
+        cpu.registers[REG_SP] = 0x0000;
+        cpu.registers[REG_SI] = 0x0000;
+        cpu.registers[REG_DI] = 0x0000;
+        // cpu.segments[SEG_ES] = 0x01DD;
+        // cpu.segments[SEG_CS] = 0x01ED;
+        // cpu.segments[SEG_SS] = 0x01DD;
+        // cpu.segments[SEG_DS] = 0x01ED;
+        cpu.flags.set(FLAG_SHIFT_INTERRUPT);
+
+        cpu
     }
 
     pub fn print_registers(&mut self) {
@@ -46,28 +133,65 @@ impl<'a> Cpu<'a> {
             "SP: {:#06X} BP: {:#06X} SI: {:#06X} DI: {:#06X}",
             self.registers[4], self.registers[5], self.registers[6], self.registers[7]
         );
+        print!(
+            "ES: {:#06X} CS: {:#06X} SS: {:#06X} DS: {:#06X} ",
+            self.segments[SEG_ES],
+            self.segments[SEG_CS],
+            self.segments[SEG_SS],
+            self.segments[SEG_DS]
+        );
+        print!("IP: {:#06X} flags:", self.ip);
+        print!(" C{}", self.flags.is_set(FLAG_SHIFT_CARRY) as u8);
+        print!(" P{}", self.flags.is_set(FLAG_SHIFT_PARITY) as u8);
+        print!(" A{}", self.flags.is_set(FLAG_SHIFT_AUX_CARRY) as u8);
+        print!(" Z{}", self.flags.is_set(FLAG_SHIFT_ZERO) as u8);
+        print!(" S{}", self.flags.is_set(FLAG_SHIFT_SIGN) as u8);
+        print!(" T{}", self.flags.is_set(FLAG_SHIFT_TRAP) as u8);
+        print!(" I{}", self.flags.is_set(FLAG_SHIFT_INTERRUPT) as u8);
+        print!(" D{}", self.flags.is_set(FLAG_SHIFT_DIRECTION) as u8);
+        println!(" O{}", self.flags.is_set(FLAG_SHIFT_OVERFLOW) as u8);
     }
 
     pub fn start(&mut self) {
         self.print_registers();
+
+        let mut it = CpuIterator {
+            memory_manager: Rc::clone(&self.memory_manager),
+            position: self.ip,
+        };
+
+        loop {
+            match mrc_decoder::decode_instruction(&mut it) {
+                Ok(instruction) => {
+                    let (segment, offset) = into_segment_and_offset(self.ip);
+                    println!("{:#06X}:{:#06X}    {}", segment, offset, instruction);
+                    self.ip = it.position;
+                    self.execute(&instruction);
+                    self.print_registers();
+                }
+
+                Err(err) => {
+                    eprintln!("{}", err);
+                    break;
+                }
+            }
+        }
     }
 
     fn execute(&mut self, instruction: &Instruction) {
-        println!("Executing: {}", instruction);
-
         match instruction.operation {
             Operation::Add => {
                 if let OperandSet::DestinationAndSource(destination, source) = &instruction.operands
                 {
-                    let source_value = self.get_operand_value(&source.0);
+                    let source_value = self.get_operand_value(&source);
 
                     println!("source_value: {}", source_value);
 
                     match &destination.0 {
                         OperandType::Register(register) => {
                             let new_value =
-                                self.get_register_value(&source.1, register) + source_value;
-                            self.set_register_value(&destination.1, register, new_value);
+                                self.get_register_value(register, &source.1) + source_value;
+                            self.set_register_value(register, &destination.1, new_value);
                         }
                         _ => unreachable!("not supported"),
                     }
@@ -76,95 +200,128 @@ impl<'a> Cpu<'a> {
                 }
             }
 
+            Operation::Call => match instruction.operands {
+                OperandSet::Offset(offset) => self.ip += offset as usize,
+                _ => todo!(),
+            },
+
+            Operation::Mov => match &instruction.operands {
+                OperandSet::DestinationAndSource(destination, source) => {
+                    let value = self.get_operand_value(source);
+                    match destination {
+                        Operand(OperandType::Register(register), operand_size) => {
+                            self.set_register_value(register, operand_size, value);
+                        }
+                        Operand(OperandType::Segment(segment), _) => {
+                            self.set_segment_value(segment, value);
+                        }
+                        _ => todo!("Destination operand not supported in MOV"),
+                    }
+                }
+                _ => todo!("OperandSet not supported!"),
+            },
+
             _ => {
-                println!("Unknown instruction!");
+                todo!("Unknown instruction!");
             }
         }
     }
 
-    fn get_operand_value(&self, operand_type: &OperandType) -> u16 {
-        match operand_type {
+    fn get_operand_value(&self, operand: &Operand) -> u16 {
+        match &operand.0 {
             OperandType::Direct(_) => todo!(),
-            OperandType::Indirect(_, _) => 0,
-            OperandType::Register(encoding) => match encoding {
-                Register::AlAx => self.registers[REG_AX],
-                Register::ClCx => self.registers[REG_BX],
-                Register::DlDx => self.registers[REG_CX],
-                Register::BlBx => self.registers[REG_DX],
-                Register::AhSp => self.registers[REG_SP],
-                Register::ChBp => self.registers[REG_BP],
-                Register::DhSi => self.registers[REG_SI],
-                Register::BhDi => self.registers[REG_DI],
-            },
+            OperandType::Indirect(_, _) => todo!(),
+            OperandType::Register(register) => self.get_register_value(&register, &operand.1),
             OperandType::Segment(encoding) => match encoding {
-                Segment::Es => self.segments[0],
-                Segment::Cs => self.segments[1],
-                Segment::Ss => self.segments[2],
-                Segment::Ds => self.segments[3],
+                Segment::Es => self.segments[SEG_ES],
+                Segment::Cs => self.segments[SEG_CS],
+                Segment::Ss => self.segments[SEG_SS],
+                Segment::Ds => self.segments[SEG_DS],
             },
             OperandType::Immediate(value) => *value,
         }
     }
 
-    fn get_register_value(&self, operand_size: &OperandSize, register: &Register) -> u16 {
+    fn get_register_value(&self, register: &Register, operand_size: &OperandSize) -> u16 {
         use Register::*;
 
         match operand_size {
             OperandSize::Byte => match register {
-                AlAx => self.registers[0] & 0x00FF,
-                ClCx => self.registers[1] & 0x00FF,
-                DlDx => self.registers[2] & 0x00FF,
-                BlBx => self.registers[3] & 0x00FF,
-                AhSp => self.registers[4] & 0xFF00,
-                ChBp => self.registers[5] & 0xFF00,
-                DhSi => self.registers[6] & 0xFF00,
-                BhDi => self.registers[7] & 0xFF00,
+                AlAx => self.registers[REG_AX] & 0x00FF,
+                ClCx => self.registers[REG_CX] & 0x00FF,
+                DlDx => self.registers[REG_DX] & 0x00FF,
+                BlBx => self.registers[REG_BX] & 0x00FF,
+                AhSp => self.registers[REG_AX] & 0xFF00,
+                ChBp => self.registers[REG_CX] & 0xFF00,
+                DhSi => self.registers[REG_BX] & 0xFF00,
+                BhDi => self.registers[REG_BX] & 0xFF00,
             },
             OperandSize::Word => match register {
-                AlAx => self.registers[0],
-                ClCx => self.registers[1],
-                DlDx => self.registers[2],
-                BlBx => self.registers[3],
-                AhSp => self.registers[4],
-                ChBp => self.registers[5],
-                DhSi => self.registers[6],
-                BhDi => self.registers[7],
+                AlAx => self.registers[REG_AX],
+                ClCx => self.registers[REG_CX],
+                DlDx => self.registers[REG_DX],
+                BlBx => self.registers[REG_BX],
+                AhSp => self.registers[REG_SP],
+                ChBp => self.registers[REG_BP],
+                DhSi => self.registers[REG_SI],
+                BhDi => self.registers[REG_DI],
             },
         }
     }
 
-    fn set_register_value(&mut self, data_size: &OperandSize, encoding: &Register, value: u16) {
+    fn set_register_value(&mut self, register: &Register, data_size: &OperandSize, value: u16) {
         use Register::*;
 
         match data_size {
-            OperandSize::Byte => match encoding {
-                AlAx => self.registers[0] = (self.registers[0] & 0xFF00) + (value & 0x00FF),
-                ClCx => self.registers[1] = (self.registers[1] & 0xFF00) + (value & 0x00FF),
-                DlDx => self.registers[2] = (self.registers[2] & 0xFF00) + (value & 0x00FF),
-                BlBx => self.registers[3] = (self.registers[3] & 0xFF00) + (value & 0x00FF),
+            OperandSize::Byte => match register {
+                AlAx => {
+                    self.registers[REG_AX] = (self.registers[REG_AX] & 0xFF00) + (value & 0x00FF)
+                }
+                ClCx => {
+                    self.registers[REG_CX] = (self.registers[REG_CX] & 0xFF00) + (value & 0x00FF)
+                }
+                DlDx => {
+                    self.registers[REG_DX] = (self.registers[REG_DX] & 0xFF00) + (value & 0x00FF)
+                }
+                BlBx => {
+                    self.registers[REG_BX] = (self.registers[REG_BX] & 0xFF00) + (value & 0x00FF)
+                }
                 AhSp => {
-                    self.registers[0] = (self.registers[0] & 0x00ff) + ((value & 0x00FF) << 0x08)
+                    self.registers[REG_AX] =
+                        (self.registers[REG_AX] & 0x00ff) + ((value & 0x00FF) << 0x08)
                 }
                 ChBp => {
-                    self.registers[1] = (self.registers[1] & 0x00ff) + ((value & 0x00FF) << 0x08)
+                    self.registers[REG_CX] =
+                        (self.registers[REG_CX] & 0x00ff) + ((value & 0x00FF) << 0x08)
                 }
                 DhSi => {
-                    self.registers[2] = (self.registers[2] & 0x00ff) + ((value & 0x00FF) << 0x08)
+                    self.registers[REG_DX] =
+                        (self.registers[REG_DX] & 0x00ff) + ((value & 0x00FF) << 0x08)
                 }
                 BhDi => {
-                    self.registers[3] = (self.registers[3] & 0x00ff) + ((value & 0x00FF) << 0x08)
+                    self.registers[REG_BX] =
+                        (self.registers[REG_BX] & 0x00ff) + ((value & 0x00FF) << 0x08)
                 }
             },
-            OperandSize::Word => match encoding {
-                AlAx => self.registers[0] = value,
-                ClCx => self.registers[1] = value,
-                DlDx => self.registers[2] = value,
-                BlBx => self.registers[3] = value,
-                AhSp => self.registers[4] = value,
-                ChBp => self.registers[5] = value,
-                DhSi => self.registers[6] = value,
-                BhDi => self.registers[7] = value,
+            OperandSize::Word => match register {
+                AlAx => self.registers[REG_AX] = value,
+                ClCx => self.registers[REG_CX] = value,
+                DlDx => self.registers[REG_DX] = value,
+                BlBx => self.registers[REG_BX] = value,
+                AhSp => self.registers[REG_SP] = value,
+                ChBp => self.registers[REG_BP] = value,
+                DhSi => self.registers[REG_SI] = value,
+                BhDi => self.registers[REG_DI] = value,
             },
+        }
+    }
+
+    fn set_segment_value(&mut self, segment: &Segment, value: u16) {
+        match segment {
+            Segment::Es => self.segments[SEG_ES] = value,
+            Segment::Cs => self.segments[SEG_CS] = value,
+            Segment::Ss => self.segments[SEG_SS] = value,
+            Segment::Ds => self.segments[SEG_DS] = value,
         }
     }
 }
