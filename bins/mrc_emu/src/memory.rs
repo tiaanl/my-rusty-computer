@@ -2,7 +2,7 @@ use crate::cpu::SegmentAndOffset;
 
 #[derive(Debug)]
 pub enum MemoryError {
-    NoInterface(usize),
+    NoInterface(u32),
 }
 
 pub trait MemoryInterface {
@@ -24,18 +24,18 @@ impl PhysicalMemory {
 
 impl MemoryInterface for PhysicalMemory {
     fn read_u8(&self, so: SegmentAndOffset) -> Result<u8, MemoryError> {
-        Ok(self.data[so])
+        Ok(self.data[so as usize])
     }
 
     fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError> {
-        self.data[so] = value;
+        self.data[so as usize] = value;
         Ok(())
     }
 }
 
 struct InterfaceContainer {
     start: SegmentAndOffset,
-    size: usize,
+    size: u32,
     interface: Box<dyn MemoryInterface>,
 }
 
@@ -50,12 +50,7 @@ impl MemoryManager {
         }
     }
 
-    pub fn map(
-        &mut self,
-        start: SegmentAndOffset,
-        size: usize,
-        interface: Box<dyn MemoryInterface>,
-    ) {
+    pub fn map(&mut self, start: SegmentAndOffset, size: u32, interface: Box<dyn MemoryInterface>) {
         self.interfaces.push(InterfaceContainer {
             start: start.clone(),
             size,

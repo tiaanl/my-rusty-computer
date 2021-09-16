@@ -1,10 +1,9 @@
-use crate::decode::DataIterator;
 use crate::errors::Result;
-use crate::{LowBitsDecoder, Modrm};
+use crate::{DataIterator, LowBitsDecoder, Modrm};
 use mrc_x86::{Instruction, Operand, OperandSet, OperandSize, OperandType, Operation};
 
-// 0 0 0 0 0 0 d w | mod reg r/m
-pub fn register_memory_with_register_to_either<It: DataIterator>(
+// 0 0 0 0 1 0 d w | mod reg r/m
+pub fn register_memory_and_register_to_either<It: DataIterator>(
     op_code: u8,
     it: &mut It,
 ) -> Result<Instruction> {
@@ -13,7 +12,7 @@ pub fn register_memory_with_register_to_either<It: DataIterator>(
     let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
     Ok(Instruction::new(
-        Operation::Add,
+        Operation::Or,
         OperandSet::DestinationAndSource(
             Operand(OperandType::Register(modrm.register), operand_size),
             Operand(modrm.register_or_memory.into(), operand_size),

@@ -6,7 +6,7 @@ use mrc_x86::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub type SegmentAndOffset = usize;
+pub type SegmentAndOffset = u32;
 
 pub fn segment_and_offset(segment: u16, offset: u16) -> SegmentAndOffset {
     ((segment << 4) + offset).into()
@@ -35,7 +35,7 @@ const SEG_DS: usize = 0x3;
 #[derive(Clone)]
 struct CpuIterator {
     memory_manager: Rc<RefCell<MemoryManager>>,
-    position: usize,
+    position: SegmentAndOffset,
 }
 
 impl<'a> DataIterator for CpuIterator {
@@ -91,7 +91,7 @@ impl Flags {
 pub struct Cpu {
     registers: [u16; 8],
     segments: [u16; 4],
-    pub ip: SegmentAndOffset,
+    pub ip: u16,
     flags: Flags,
 
     memory_manager: Rc<RefCell<MemoryManager>>,
@@ -157,15 +157,18 @@ impl Cpu {
 
         let mut it = CpuIterator {
             memory_manager: Rc::clone(&self.memory_manager),
-            position: self.ip,
+            position: segment_and_offset(self.segments[SEG_CS], self.ip),
         };
 
         loop {
+            let start_position = it.position;
             match mrc_decoder::decode_instruction(&mut it) {
                 Ok(instruction) => {
-                    let (segment, offset) = into_segment_and_offset(self.ip);
-                    println!("{:#06X}:{:#06X}    {}", segment, offset, instruction);
-                    self.ip = it.position;
+                    println!(
+                        "{:#06X}:{:#06X}    {}",
+                        self.segments[SEG_CS], self.ip, instruction
+                    );
+                    self.ip += (it.position - start_position) as u16;
                     self.execute(&instruction);
                     self.print_registers();
                 }
@@ -201,7 +204,7 @@ impl Cpu {
             }
 
             Operation::Call => match instruction.operands {
-                OperandSet::Offset(offset) => self.ip += offset as usize,
+                OperandSet::Offset(offset) => self.ip += offset,
                 _ => todo!(),
             },
 
@@ -211,6 +214,51 @@ impl Cpu {
 
             Operation::Cli => {
                 self.flags.clear(FLAG_SHIFT_INTERRUPT);
+            }
+
+            Operation::Inc => match &instruction.operands {
+                OperandSet::Destination(destination) => {
+                    let value = self.get_operand_value(destination);
+                    self.set_operand_value(destination, value + 1);
+                }
+                _ => panic!(),
+            },
+
+            Operation::Je => match &instruction.operands {
+                OperandSet::Offset(offset) => {
+                    if self.flags.is_set(FLAG_SHIFT_ZERO) {
+                        self.ip += offset
+                    }
+                }
+                _ => panic!(),
+            },
+
+            Operation::Or => {
+                match &instruction.operands {
+                    OperandSet::None => {}
+                    OperandSet::Destination(_) => {}
+                    OperandSet::DestinationAndSource(destination, source) => {
+                        let source_value = self.get_operand_value(source);
+                        let destination_value = self.get_operand_value(destination);
+
+                        self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+
+                        match destination.1 {
+                            OperandSize::Byte => {
+                                let result = destination_value as u8 | source_value as u8;
+                                self.set_byte_result_flags(result);
+                            }
+                            OperandSize::Word => {
+                                let result = destination_value | source_value;
+                                self.set_word_result_flags(result);
+                            }
+                        }
+
+                        // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
+                    }
+                    OperandSet::Offset(_) => {}
+                    OperandSet::SegmentAndOffset(_, _) => {}
+                }
             }
 
             Operation::Mov => match &instruction.operands {
@@ -301,6 +349,16 @@ impl Cpu {
         }
     }
 
+    fn set_operand_value(&mut self, operand: &Operand, value: u16) {
+        match &operand.0 {
+            OperandType::Register(register) => {
+                self.set_register_value(&register, &operand.1, value)
+            }
+            OperandType::Segment(segment) => self.set_segment_value(segment, value),
+            _ => todo!(),
+        }
+    }
+
     fn get_register_value(&self, register: &Register, operand_size: &OperandSize) -> u16 {
         use Register::*;
 
@@ -386,5 +444,21 @@ impl Cpu {
             Segment::Ss => self.segments[SEG_SS] = value,
             Segment::Ds => self.segments[SEG_DS] = value,
         }
+    }
+
+    fn set_byte_result_flags(&mut self, result: u8) {
+        if result == 0 {
+            self.flags.set(FLAG_SHIFT_ZERO);
+        }
+        // TODO: Set signed flag.
+        // TODO: Set parity flag.
+    }
+
+    fn set_word_result_flags(&mut self, result: u16) {
+        if result == 0 {
+            self.flags.set(FLAG_SHIFT_ZERO);
+        }
+        // TODO: Set signed flag.
+        // TODO: Set parity flag.
     }
 }

@@ -16,15 +16,20 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
     let op_code = it.consume();
 
     match op_code {
+        // Multi
+        0x80 | 0x81 | 0x82 | 0x83 => operations::immediate_to_register_memory(op_code, it),
+
         // Arithmetic
 
         // ADD -> Add
         0x00 | 0x01 | 0x02 | 0x03 => {
             operations::arithmetic::add::register_memory_with_register_to_either(op_code, it)
         }
-        0x80 | 0x81 | 0x82 | 0x83 => {
-            operations::arithmetic::add::immediate_to_register_memory(op_code, it)
+
+        0x40 | 0x41 | 0x42 | 0x43 | 0x44 | 0x45 | 0x46 | 0x47 => {
+            operations::arithmetic::inc::register(op_code, it)
         }
+
         // DEC = Decrement
 
         // Register
@@ -130,6 +135,11 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
 
         // Logic
 
+        // OR
+        0x08 | 0x09 | 0x0A | 0x0B => {
+            operations::logic::or::register_memory_and_register_to_either(op_code, it)
+        }
+
         // TEST = And function to flags, no result
 
         // Immediate data to accumulator
@@ -223,6 +233,8 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
         0xFB => operations::processor_control::set_interrupt(op_code, it),
         0xFC => operations::processor_control::clear_direction(op_code, it),
         0xFD => operations::processor_control::set_direction(op_code, it),
+
+        0xFE => operations::arithmetic::inc::register_memory(op_code, it),
 
         // String manipulation
         0xA4 | 0xA5 => operations::string_manipulation::movs::move_byte_word(op_code, it),
