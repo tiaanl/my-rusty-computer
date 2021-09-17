@@ -79,6 +79,13 @@ pub struct Modrm {
 }
 
 impl Modrm {
+    pub fn new(register: Register, register_or_memory: RegisterOrMemory) -> Self {
+        Self {
+            register,
+            register_or_memory,
+        }
+    }
+
     pub fn try_from_byte<It: DataIterator>(mod_rm_byte: u8, it: &mut It) -> Result<Self> {
         let register = Register::try_from_low_bits(mod_rm_byte >> 3 & 0b111)?;
 
@@ -88,6 +95,62 @@ impl Modrm {
             register,
             register_or_memory,
         })
+    }
+}
+
+fn encoding_for_register(register: &Register) -> u8 {
+    match register {
+        Register::AlAx => 0b000,
+        Register::ClCx => 0b001,
+        Register::DlDx => 0b010,
+        Register::BlBx => 0b011,
+        Register::AhSp => 0b100,
+        Register::ChBp => 0b101,
+        Register::DhSi => 0b110,
+        Register::BhDi => 0b111,
+    }
+}
+
+fn encoding_for_addressing_mode(addressing_mode: &AddressingMode) -> u8 {
+    match addressing_mode {
+        AddressingMode::BxSi => 0b000,
+        AddressingMode::BxDi => 0b001,
+        AddressingMode::BpSi => 0b010,
+        AddressingMode::BpDi => 0b011,
+        AddressingMode::Si => 0b100,
+        AddressingMode::Di => 0b101,
+        AddressingMode::Bp => 0b110,
+        AddressingMode::Bx => 0b111,
+    }
+}
+
+impl From<Modrm> for u8 {
+    fn from(modrm: Modrm) -> Self {
+        let mut byte: u8 = match modrm.register_or_memory {
+            RegisterOrMemory::Direct(_) => 0b00,
+            RegisterOrMemory::Indirect(_) => 0b00,
+            RegisterOrMemory::DisplacementByte(_, _) => 0b01,
+            RegisterOrMemory::DisplacementWord(_, _) => 0b10,
+            RegisterOrMemory::Register(_) => 0b11,
+        } << 6;
+
+        byte |= encoding_for_register(&modrm.register) << 3;
+
+        byte |= match &modrm.register_or_memory {
+            RegisterOrMemory::Direct(_) => 0b110,
+            RegisterOrMemory::Indirect(addressing_mode) => {
+                encoding_for_addressing_mode(addressing_mode)
+            }
+            RegisterOrMemory::DisplacementByte(addressing_mode, _) => {
+                encoding_for_addressing_mode(addressing_mode)
+            }
+            RegisterOrMemory::DisplacementWord(addressing_mode, _) => {
+                encoding_for_addressing_mode(addressing_mode)
+            }
+            RegisterOrMemory::Register(register) => encoding_for_register(register),
+        };
+
+        byte
     }
 }
 
@@ -313,4 +376,52 @@ mod test {
         );
     }
     */
+
+    macro_rules! test_modrm_to_byte {
+        ($expected:expr,$register:expr,$register_or_memory:expr) => {{
+            let byte: u8 = Modrm::new($register, $register_or_memory).into();
+            assert_eq!($expected, byte);
+        }};
+    }
+
+    #[test]
+    fn modrm_to_byte_register_indirect() {
+        test_modrm_to_byte!(
+            0b00011001,
+            Register::BlBx,
+            RegisterOrMemory::Indirect(AddressingMode::BxDi)
+        );
+    }
+
+    #[test]
+    fn modrm_to_byte_register_displacement_byte() {
+        test_modrm_to_byte!(
+            0b01011001,
+            Register::BlBx,
+            RegisterOrMemory::DisplacementByte(AddressingMode::BxDi, 0)
+        );
+    }
+
+    #[test]
+    fn modrm_to_byte_register_displacement_word() {
+        test_modrm_to_byte!(
+            0b10011001,
+            Register::BlBx,
+            RegisterOrMemory::DisplacementWord(AddressingMode::BxDi, 0)
+        );
+    }
+
+    #[test]
+    fn modrm_to_byte_register_register() {
+        test_modrm_to_byte!(
+            0b11011110,
+            Register::BlBx,
+            RegisterOrMemory::Register(Register::DhSi)
+        );
+    }
+
+    #[test]
+    fn modrm_to_byte_register_direct() {
+        test_modrm_to_byte!(0b00010110, Register::DlDx, RegisterOrMemory::Direct(0));
+    }
 }

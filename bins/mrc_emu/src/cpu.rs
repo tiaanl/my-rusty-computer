@@ -12,6 +12,7 @@ pub fn segment_and_offset(segment: u16, offset: u16) -> SegmentAndOffset {
     ((segment << 4) + offset).into()
 }
 
+#[allow(dead_code)]
 pub fn into_segment_and_offset(addr: usize) -> (u16, u16) {
     let offset = (addr & 0x00FF) as u16;
     let segment = (addr >> 16) as u16;

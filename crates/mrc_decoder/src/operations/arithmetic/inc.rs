@@ -15,7 +15,7 @@ pub fn register_memory<It: DataIterator>(op_code: u8, it: &mut It) -> Result<Ins
 }
 
 // 0 1 0 0 0 reg
-pub fn register<It: DataIterator>(op_code: u8, it: &mut It) -> Result<Instruction> {
+pub fn register<It: DataIterator>(op_code: u8, _: &mut It) -> Result<Instruction> {
     let register = Register::try_from_low_bits(op_code & 0b111)?;
 
     Ok(Instruction::new(

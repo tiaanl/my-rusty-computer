@@ -1,9 +1,8 @@
-extern crate mrc_x86;
-
 mod decode;
 mod errors;
 mod modrm;
 mod operations;
+mod test;
 
 pub use decode::{decode_instruction, DataIterator};
 pub use errors::{Error, Result};

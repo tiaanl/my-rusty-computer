@@ -1,6 +1,6 @@
 pub mod printer;
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Operation {
     // Data transfer
     Mov,
@@ -121,7 +121,7 @@ pub enum Register {
     BhDi,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Segment {
     Es,
     Cs,
@@ -141,13 +141,13 @@ pub enum AddressingMode {
     Bx,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub enum OperandSize {
     Byte,
     Word,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum OperandType {
     Direct(u16),
     Indirect(AddressingMode, u16),
@@ -156,10 +156,10 @@ pub enum OperandType {
     Immediate(u16),
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Operand(pub OperandType, pub OperandSize);
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum OperandSet {
     None,
     Destination(Operand),
@@ -168,13 +168,13 @@ pub enum OperandSet {
     SegmentAndOffset(u16, u16),
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Repeat {
     Equal,
     NotEqual,
 }
 
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub struct Instruction {
     pub operation: Operation,
     pub segment_override: Option<Segment>,
