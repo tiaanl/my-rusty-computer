@@ -6,8 +6,8 @@ pub enum MemoryError {
 }
 
 pub trait MemoryInterface {
-    fn read_u8(&self, so: SegmentAndOffset) -> Result<u8, MemoryError>;
-    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError>;
+    fn read_u8(&self, so: SegmentAndOffset) -> u8;
+    fn write_u8(&mut self, so: SegmentAndOffset, value: u8);
 }
 
 pub struct PhysicalMemory {
@@ -23,13 +23,12 @@ impl PhysicalMemory {
 }
 
 impl MemoryInterface for PhysicalMemory {
-    fn read_u8(&self, so: SegmentAndOffset) -> Result<u8, MemoryError> {
-        Ok(self.data[so as usize])
+    fn read_u8(&self, so: SegmentAndOffset) -> u8 {
+        self.data[so as usize]
     }
 
-    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError> {
+    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) {
         self.data[so as usize] = value;
-        Ok(())
     }
 }
 
@@ -57,24 +56,35 @@ impl MemoryManager {
             interface,
         })
     }
+
+    pub fn read_u16(&self, so: SegmentAndOffset) -> u16 {
+        let hi = self.read_u8(so) as u16;
+        let lo = self.read_u8(so + 1) as u16;
+        (hi << 8) | lo
+    }
+
+    pub fn write_u16(&mut self, so: SegmentAndOffset, value: u16) {
+        self.write_u8(so, (value >> 8) as u8);
+        self.write_u8(so + 1, value as u8);
+    }
 }
 
 impl MemoryInterface for MemoryManager {
-    fn read_u8(&self, so: SegmentAndOffset) -> Result<u8, MemoryError> {
+    fn read_u8(&self, so: SegmentAndOffset) -> u8 {
         for container in &self.interfaces {
             if so >= container.start && so < container.start + container.size {
                 return container.interface.read_u8(so);
             }
         }
-        Err(MemoryError::NoInterface(so))
+        panic!("No interface found for address {}", so);
     }
 
-    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) -> Result<(), MemoryError> {
+    fn write_u8(&mut self, so: SegmentAndOffset, value: u8) {
         for container in &mut self.interfaces {
             if so >= container.start && so < container.start + container.size {
                 return container.interface.write_u8(so, value);
             }
         }
-        Err(MemoryError::NoInterface(so))
+        panic!("No interface found for address {}", so);
     }
 }

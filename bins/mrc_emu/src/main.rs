@@ -6,7 +6,7 @@ use crate::memory::{MemoryManager, PhysicalMemory};
 use clap::{App, Arg};
 use cpu::Cpu;
 use std::cell::RefCell;
-use std::io::{Read, Seek};
+use std::io::{Read, Seek, SeekFrom};
 use std::rc::Rc;
 
 #[repr(C, packed)]
@@ -42,26 +42,36 @@ fn load_binary(
 ) -> std::io::Result<()> {
     let mut header: ExeHeader = unsafe { std::mem::zeroed() };
 
-    let header_size = std::mem::size_of::<ExeHeader>();
-    let mut is_com = false;
-    unsafe {
-        let config_slice =
-            std::slice::from_raw_parts_mut(&mut header as *mut _ as *mut u8, header_size);
-        if let Err(err) = file.read_exact(config_slice) {
-            if err.kind() != std::io::ErrorKind::UnexpectedEof {
-                return Err(err);
-            }
-            // If we could not read the entire header, then assume its a .com file.
-            is_com = true;
+    // Make the config_slice point to the header struct.
+    let config_slice = unsafe {
+        std::slice::from_raw_parts_mut(
+            &mut header as *mut _ as *mut u8,
+            std::mem::size_of::<ExeHeader>(),
+        )
+    };
+
+    let mut is_mz = false;
+    if let Err(err) = file.read_exact(config_slice) {
+        // It is OK If we could not read enough bytes from the file to fill physical memory.
+        if err.kind() != std::io::ErrorKind::UnexpectedEof {
+            return Err(err);
         }
+    } else if header.id == 0x4D5A {
+        // 0x4D5A == MZ
+        is_mz = true
     }
 
-    if !is_com {
-        file.seek(std::io::SeekFrom::Start(header.header_size().into()))?;
-        if let Err(err) = file.read_exact(&mut physical_memory.data[0..]) {
-            if err.kind() != std::io::ErrorKind::UnexpectedEof {
-                return Err(err);
-            }
+    // Set the pointer in the file to where we want to continue reading the code.
+    if is_mz {
+        file.seek(SeekFrom::Start(header.header_size().into()))?;
+    } else {
+        file.seek(SeekFrom::Start(0))?;
+    }
+
+    // Read the code from the file into the physical memory.
+    if let Err(err) = file.read_exact(&mut physical_memory.data[0..]) {
+        if err.kind() != std::io::ErrorKind::UnexpectedEof {
+            return Err(err);
         }
     }
 
