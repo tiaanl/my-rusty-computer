@@ -1,5 +1,5 @@
 use crate::memory::{MemoryInterface, MemoryManager};
-use mrc_decoder::DataIterator;
+use mrc_decoder::decode_instruction;
 use mrc_x86::{
     Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
 };
@@ -39,19 +39,17 @@ struct CpuIterator {
     position: SegmentAndOffset,
 }
 
-impl<'a> DataIterator for CpuIterator {
-    fn peek(&self) -> u8 {
-        self.memory_manager.borrow().read_u8(self.position).unwrap()
-    }
+impl<'a> Iterator for CpuIterator {
+    type Item = u8;
 
-    fn consume(&mut self) -> u8 {
-        let b = self.peek();
-        self.advance();
-        b
-    }
-
-    fn advance(&mut self) {
-        self.position += 1
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.memory_manager.borrow().read_u8(self.position) {
+            Ok(byte) => {
+                self.position += 1;
+                Some(byte)
+            }
+            Err(_) => None,
+        }
     }
 }
 
@@ -163,7 +161,7 @@ impl Cpu {
 
         loop {
             let start_position = it.position;
-            match mrc_decoder::decode_instruction(&mut it) {
+            match decode_instruction(&mut it) {
                 Ok(instruction) => {
                     println!(
                         "{:#06X}:{:#06X}    {}",

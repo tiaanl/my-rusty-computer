@@ -1,10 +1,9 @@
 mod decode;
 mod errors;
 mod modrm;
-mod operations;
-mod test;
+pub mod operations;
 
-pub use decode::{decode_instruction, DataIterator};
+pub use decode::{decode_instruction, DecodeFn, DecodeFnMap};
 pub use errors::{Error, Result};
 pub use modrm::Modrm;
 use mrc_x86::{OperandSize, Register, Segment};
@@ -72,14 +71,14 @@ impl ByteReader for &[u8] {
     }
 }
 
-fn it_read_u8<It: DataIterator>(it: &mut It) -> u8 {
-    it.consume()
+fn it_read_byte<It: Iterator<Item = u8>>(it: &mut It) -> Option<u8> {
+    it.next()
 }
 
-fn it_read_u16<It: DataIterator>(it: &mut It) -> u16 {
-    let first = it.consume();
-    let second = it.consume();
-    ((second as u16) << 4) + first as u16
+fn it_read_word<It: Iterator<Item = u8>>(it: &mut It) -> Option<u16> {
+    let first = it.next()?;
+    let second = it.next()?;
+    Some(((second as u16) << 4) + first as u16)
 }
 
 impl LowBitsDecoder<Self> for OperandSize {

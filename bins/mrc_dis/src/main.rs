@@ -1,5 +1,5 @@
 use clap::{App, Arg};
-use mrc_decoder::{decode_instruction, DataIterator};
+use mrc_decoder::decode_instruction;
 use std::io::Read;
 
 struct Data {
@@ -16,22 +16,18 @@ impl Data {
     }
 }
 
-impl DataIterator for Data {
-    #[inline]
-    fn peek(&self) -> u8 {
-        *self.data.get(self.current_position).unwrap()
-    }
+impl Iterator for Data {
+    type Item = u8;
 
     #[inline]
-    fn consume(&mut self) -> u8 {
-        let b = self.peek();
-        self.advance();
-        b
-    }
-
-    #[inline]
-    fn advance(&mut self) {
-        self.current_position += 1;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.data.get(self.current_position) {
+            Some(byte) => {
+                self.current_position += 1;
+                Some(*byte)
+            }
+            None => None,
+        }
     }
 }
 

@@ -1,18 +1,21 @@
 use crate::errors::Result;
-use crate::{it_read_u16, it_read_u8, DataIterator, LowBitsDecoder, Modrm};
+use crate::{it_read_byte, it_read_word, Error, LowBitsDecoder, Modrm};
 use mrc_x86::{
     Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
 };
 
 // 1 0 0 0 1 0 d w | mod reg r/m
-pub fn register_memory_to_from_register<It: DataIterator>(
+pub fn register_memory_to_from_register<It: Iterator<Item = u8>>(
     op_code: u8,
     it: &mut It,
 ) -> Result<Instruction> {
     let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
     let direction = op_code >> 1 & 0b1;
 
-    let modrm_byte = it.consume();
+    let modrm_byte = match it.next() {
+        Some(byte) => byte,
+        None => return Err(Error::CouldNotReadExtraBytes),
+    };
     let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
     let destination = Operand(OperandType::Register(modrm.register), operand_size);
@@ -27,19 +30,17 @@ pub fn register_memory_to_from_register<It: DataIterator>(
 }
 
 // 1 1 0 0 0 1 1 w | mod 0 0 0 r/m | data | data if w = 1
-pub fn immediate_to_register_memory<It: DataIterator>(
+pub fn immediate_to_register_memory<It: Iterator<Item = u8>>(
     op_code: u8,
     it: &mut It,
 ) -> Result<Instruction> {
     let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-
-    let modrm_byte = it.consume();
-    let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+    let modrm = Modrm::try_from_iter(it)?;
 
     let destination = Operand(modrm.register_or_memory.into(), operand_size);
     let immediate = match operand_size {
-        OperandSize::Byte => it_read_u8(it).into(),
-        OperandSize::Word => it_read_u16(it),
+        OperandSize::Byte => it_read_byte(it).unwrap().into(),
+        OperandSize::Word => it_read_word(it).unwrap(),
     };
 
     let source = Operand(OperandType::Immediate(immediate), operand_size);
@@ -51,7 +52,10 @@ pub fn immediate_to_register_memory<It: DataIterator>(
 }
 
 // 1 0 1 1 w reg | data | data if w = 1
-pub fn immediate_to_register<It: DataIterator>(op_code: u8, it: &mut It) -> Result<Instruction> {
+pub fn immediate_to_register<It: Iterator<Item = u8>>(
+    op_code: u8,
+    it: &mut It,
+) -> Result<Instruction> {
     let operand_size = OperandSize::try_from_low_bits(op_code >> 3 & 0b1)?;
 
     let register = Operand(
@@ -59,8 +63,14 @@ pub fn immediate_to_register<It: DataIterator>(op_code: u8, it: &mut It) -> Resu
         operand_size,
     );
     let immediate = match operand_size {
-        OperandSize::Byte => Operand(OperandType::Immediate(it_read_u8(it).into()), operand_size),
-        OperandSize::Word => Operand(OperandType::Immediate(it_read_u16(it)), operand_size),
+        OperandSize::Byte => Operand(
+            OperandType::Immediate(it_read_byte(it).unwrap().into()),
+            operand_size,
+        ),
+        OperandSize::Word => Operand(
+            OperandType::Immediate(it_read_word(it).unwrap()),
+            operand_size,
+        ),
     };
 
     Ok(Instruction::new(
@@ -70,10 +80,13 @@ pub fn immediate_to_register<It: DataIterator>(op_code: u8, it: &mut It) -> Resu
 }
 
 // 1 0 1 0 0 0 0 w | addr-low | addr-high
-pub fn memory_to_accumulator<It: DataIterator>(op_code: u8, it: &mut It) -> Result<Instruction> {
+pub fn memory_to_accumulator<It: Iterator<Item = u8>>(
+    op_code: u8,
+    it: &mut It,
+) -> Result<Instruction> {
     let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
 
-    let address = it_read_u16(it);
+    let address = it_read_word(it).unwrap();
 
     Ok(Instruction::new(
         Operation::Mov,
@@ -85,10 +98,13 @@ pub fn memory_to_accumulator<It: DataIterator>(op_code: u8, it: &mut It) -> Resu
 }
 
 // 1 0 1 0 0 0 1 w | addr-low | addr-high
-pub fn accumulator_to_memory<It: DataIterator>(op_code: u8, it: &mut It) -> Result<Instruction> {
+pub fn accumulator_to_memory<It: Iterator<Item = u8>>(
+    op_code: u8,
+    it: &mut It,
+) -> Result<Instruction> {
     let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
 
-    let address = it_read_u16(it);
+    let address = it_read_word(it).unwrap();
 
     Ok(Instruction::new(
         Operation::Mov,
@@ -100,11 +116,14 @@ pub fn accumulator_to_memory<It: DataIterator>(op_code: u8, it: &mut It) -> Resu
 }
 
 // 1 0 0 0 1 1 1 0 | mod 0 sreg r/m
-pub fn register_memory_to_segment_register<It: DataIterator>(
+pub fn register_memory_to_segment_register<It: Iterator<Item = u8>>(
     _: u8,
     it: &mut It,
 ) -> Result<Instruction> {
-    let modrm_byte = it.consume();
+    let modrm_byte = match it.next() {
+        Some(byte) => byte,
+        None => return Err(Error::CouldNotReadExtraBytes),
+    };
     let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
     let register_or_memory = Operand(modrm.register_or_memory.into(), OperandSize::Word);
@@ -121,11 +140,14 @@ pub fn register_memory_to_segment_register<It: DataIterator>(
 }
 
 // 1 0 0 0 1 1 0 0 | mod 0 sreg r/m
-pub fn segment_register_to_register_memory<It: DataIterator>(
+pub fn segment_register_to_register_memory<It: Iterator<Item = u8>>(
     _: u8,
     it: &mut It,
 ) -> Result<Instruction> {
-    let modrm_byte = it.consume();
+    let modrm_byte = match it.next() {
+        Some(byte) => byte,
+        None => return Err(Error::CouldNotReadExtraBytes),
+    };
     let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
     let register_or_memory = Operand(modrm.register_or_memory.into(), OperandSize::Word);

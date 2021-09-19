@@ -1,19 +1,41 @@
 use crate::errors::Result;
-use crate::{it_read_u16, it_read_u8, operations, Error, LowBitsDecoder};
+use crate::{it_read_byte, it_read_word, operations, Error, LowBitsDecoder, Modrm};
 use mrc_x86::{
     Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Repeat,
     Segment,
 };
 
-pub trait DataIterator {
-    fn peek(&self) -> u8;
-    fn consume(&mut self) -> u8;
-    fn advance(&mut self);
+pub type DecodeFn<It> = fn(u8, &mut It) -> Result<Instruction>;
+pub type DecodeFnMap<It> = [Option<DecodeFn<It>>; 256];
+
+#[macro_export]
+macro_rules! decode_fn_map_operations {
+    () => {{
+        [mrc_decoder::operations::immediate_to_register_memory]
+    }};
+}
+
+#[macro_export]
+macro_rules! decode_fn_map {
+    ($iterator_type:tt,$name:ident) => {
+        const $name: mrc_decoder::DecodeFnMap<$iterator_type> =
+            mrc_decoder::decode_fn_map_operations!();
+    };
+}
+
+fn pop_front(bytes: &[u8]) -> Option<(u8, &[u8])> {
+    match bytes.len() {
+        0 => None,
+        _ => Some((bytes[0], &bytes[1..])),
+    }
 }
 
 /// Takes a byte slice and tries to convert it into an [Instruction].
-pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> {
-    let op_code = it.consume();
+pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instruction> {
+    let op_code = match it.next() {
+        Some(byte) => byte,
+        None => return Err(Error::CouldNotReadExtraBytes),
+    };
 
     match op_code {
         // Multi
@@ -108,7 +130,10 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
         // 1 1 1 0 0 1 0 w
         0xE4 | 0xE5 => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-            let port = it.consume();
+            let port = match it.next() {
+                Some(port) => port,
+                None => return Err(Error::CouldNotReadExtraBytes),
+            };
 
             Ok(Instruction::new(
                 Operation::In,
@@ -153,8 +178,8 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
                     Operand(OperandType::Register(Register::AlAx), operand_size),
                     Operand(
                         OperandType::Immediate(match operand_size {
-                            OperandSize::Byte => it_read_u8(it).into(),
-                            OperandSize::Word => it_read_u16(it),
+                            OperandSize::Byte => it_read_byte(it).unwrap().into(),
+                            OperandSize::Word => it_read_word(it).unwrap(),
                         }),
                         operand_size,
                     ),
@@ -170,7 +195,7 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
         // 1 1 1 0 1 0 0 0 | displacement low | displacement high
         0xE8 => Ok(Instruction::new(
             Operation::Call,
-            OperandSet::Offset(it_read_u16(it)),
+            OperandSet::Offset(it_read_word(it).unwrap()),
         )),
 
         // JMP = Unconditional jump
@@ -178,8 +203,8 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
         // Direct intersegment
         // 1 1 1 0 1 0 1 0
         0xEA => {
-            let offset = it_read_u16(it);
-            let segment = it_read_u16(it);
+            let offset = it_read_word(it).unwrap();
+            let segment = it_read_word(it).unwrap();
 
             Ok(Instruction::new(
                 Operation::Jmp,
@@ -197,14 +222,14 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
         // 0 1 1 1 0 1 0 0 | disp
         0x74 => Ok(Instruction::new(
             Operation::Je,
-            OperandSet::Offset(it_read_u8(it).into()),
+            OperandSet::Offset(it_read_byte(it).unwrap().into()),
         )),
 
         // JNE/JNZ = Jump not equal/not zero
         // 0 1 1 1 0 1 0 1 | disp
         0x75 => Ok(Instruction::new(
             Operation::Jne,
-            OperandSet::Offset(it_read_u8(it).into()),
+            OperandSet::Offset(it_read_byte(it).unwrap().into()),
         )),
 
         // INT = Interrupt
@@ -214,7 +239,7 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
         0xCD => Ok(Instruction::new(
             Operation::Int,
             OperandSet::Destination(Operand(
-                OperandType::Immediate(it_read_u8(it).into()),
+                OperandType::Immediate(it_read_byte(it).unwrap().into()),
                 OperandSize::Byte,
             )),
         )),
@@ -240,18 +265,125 @@ pub fn decode_instruction<It: DataIterator>(it: &mut It) -> Result<Instruction> 
         0xA4 | 0xA5 => operations::string_manipulation::movs::move_byte_word(op_code, it),
 
         // Overrides
-        0xF2 => {
-            let mut instruction = decode_instruction(it)?;
-            instruction.repeat = Some(Repeat::NotEqual);
-            Ok(instruction)
-        }
+        // 0xF2 => {
+        //     let mut instruction = decode_instruction(it, map)?;
+        //     instruction.repeat = Some(Repeat::NotEqual);
+        //     Ok(instruction)
+        // }
 
-        0xF3 => {
-            let mut instruction = decode_instruction(it)?;
-            instruction.repeat = Some(Repeat::Equal);
-            Ok(instruction)
-        }
-
+        // 0xF3 => {
+        //     let mut instruction = decode_instruction(it, map)?;
+        //     instruction.repeat = Some(Repeat::Equal);
+        //     Ok(instruction)
+        // }
         _ => Err(Error::InvalidOpCode(op_code)),
+    }
+}
+
+mod test {
+    use crate::modrm::RegisterOrMemory;
+    use crate::Modrm;
+    use mrc_x86::{
+        Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register,
+    };
+
+    struct TestIterator {
+        data: Vec<u8>,
+        position: usize,
+    }
+
+    impl TestIterator {
+        fn from_bytes(bytes: &[u8]) -> Self {
+            Self {
+                data: Vec::from(bytes),
+                position: 0,
+            }
+        }
+    }
+
+    impl Iterator for TestIterator {
+        type Item = u8;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.position >= self.data.len() {
+                None
+            } else {
+                let byte = self.data[self.position];
+                self.position += 1;
+                Some(byte)
+            }
+        }
+    }
+
+    macro_rules! test_decoder {
+        ($bytes:expr, $expected:expr) => {
+            let mut it = TestIterator::from_bytes($bytes);
+            let actual = crate::decode::decode_instruction(&mut it);
+            assert_eq!(Ok($expected), actual);
+        };
+    }
+
+    #[test]
+    fn test_00() {
+        let modrm = Modrm::new(Register::AlAx, RegisterOrMemory::Register(Register::BlBx));
+
+        test_decoder!(
+            &[0x00, modrm.as_byte()],
+            Instruction::new(
+                Operation::Add,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::BlBx), OperandSize::Byte),
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_01() {
+        let modrm = Modrm::new(Register::AlAx, RegisterOrMemory::Register(Register::BlBx));
+
+        test_decoder!(
+            &[0x01, modrm.as_byte()],
+            Instruction::new(
+                Operation::Add,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_02() {
+        let modrm = Modrm::new(Register::AlAx, RegisterOrMemory::Register(Register::BlBx));
+
+        test_decoder!(
+            &[0x02, modrm.as_byte()],
+            Instruction::new(
+                Operation::Add,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
+                    Operand(OperandType::Register(Register::BlBx), OperandSize::Byte),
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_03() {
+        let modrm = Modrm::new(Register::AlAx, RegisterOrMemory::Register(Register::BlBx));
+
+        test_decoder!(
+            &[0x03, modrm.as_byte()],
+            Instruction::new(
+                Operation::Add,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
+                    Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
+                )
+            )
+        );
     }
 }

@@ -1,6 +1,5 @@
-use crate::decode::DataIterator;
 use crate::errors::Result;
-use crate::{it_read_u16, it_read_u8, Error, LowBitsDecoder};
+use crate::{it_read_byte, it_read_word, Error, LowBitsDecoder};
 use mrc_x86::{AddressingMode, OperandType, Register};
 
 impl LowBitsDecoder<Self> for AddressingMode {
@@ -31,24 +30,24 @@ pub enum RegisterOrMemory {
 }
 
 impl RegisterOrMemory {
-    pub fn try_from_modrm<It: DataIterator>(mod_rm_byte: u8, it: &mut It) -> Result<Self> {
+    pub fn try_from_modrm<It: Iterator<Item = u8>>(mod_rm_byte: u8, it: &mut It) -> Result<Self> {
         let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte & 0b111;
 
         match mode {
             0b00 => match rm {
-                0b110 => Ok(RegisterOrMemory::Direct(it_read_u16(it))),
+                0b110 => Ok(RegisterOrMemory::Direct(it_read_word(it).unwrap())),
                 _ => Ok(RegisterOrMemory::Indirect(
                     AddressingMode::try_from_low_bits(rm)?,
                 )),
             },
             0b01 => Ok(RegisterOrMemory::DisplacementByte(
                 AddressingMode::try_from_low_bits(rm)?,
-                it_read_u8(it),
+                it_read_byte(it).unwrap(),
             )),
             0b10 => Ok(RegisterOrMemory::DisplacementWord(
                 AddressingMode::try_from_low_bits(rm)?,
-                it_read_u16(it),
+                it_read_word(it).unwrap(),
             )),
             0b11 => Ok(RegisterOrMemory::Register(Register::try_from_low_bits(rm)?)),
             _ => Err(Error::InvalidModRmEncoding(mod_rm_byte)),
@@ -69,32 +68,6 @@ impl From<RegisterOrMemory> for OperandType {
             }
             RegisterOrMemory::Register(encoding) => OperandType::Register(encoding),
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct Modrm {
-    pub register: Register,
-    pub register_or_memory: RegisterOrMemory,
-}
-
-impl Modrm {
-    pub fn new(register: Register, register_or_memory: RegisterOrMemory) -> Self {
-        Self {
-            register,
-            register_or_memory,
-        }
-    }
-
-    pub fn try_from_byte<It: DataIterator>(mod_rm_byte: u8, it: &mut It) -> Result<Self> {
-        let register = Register::try_from_low_bits(mod_rm_byte >> 3 & 0b111)?;
-
-        let register_or_memory = RegisterOrMemory::try_from_modrm(mod_rm_byte, it)?;
-
-        Ok(Modrm {
-            register,
-            register_or_memory,
-        })
     }
 }
 
@@ -124,9 +97,42 @@ fn encoding_for_addressing_mode(addressing_mode: &AddressingMode) -> u8 {
     }
 }
 
-impl From<Modrm> for u8 {
-    fn from(modrm: Modrm) -> Self {
-        let mut byte: u8 = match modrm.register_or_memory {
+#[derive(Debug)]
+pub struct Modrm {
+    pub register: Register,
+    pub register_or_memory: RegisterOrMemory,
+}
+
+impl Modrm {
+    pub fn new(register: Register, register_or_memory: RegisterOrMemory) -> Self {
+        Self {
+            register,
+            register_or_memory,
+        }
+    }
+
+    pub fn try_from_byte<It: Iterator<Item = u8>>(mod_rm_byte: u8, it: &mut It) -> Result<Self> {
+        let register = Register::try_from_low_bits(mod_rm_byte >> 3 & 0b111)?;
+
+        let register_or_memory = RegisterOrMemory::try_from_modrm(mod_rm_byte, it)?;
+
+        Ok(Modrm {
+            register,
+            register_or_memory,
+        })
+    }
+
+    pub fn try_from_iter<It: Iterator<Item = u8>>(it: &mut It) -> Result<Self> {
+        let modrm_byte = match it.next() {
+            Some(byte) => byte,
+            None => return Err(Error::CouldNotReadExtraBytes),
+        };
+
+        Self::try_from_byte(modrm_byte, it)
+    }
+
+    pub fn as_byte(&self) -> u8 {
+        let mut byte: u8 = match self.register_or_memory {
             RegisterOrMemory::Direct(_) => 0b00,
             RegisterOrMemory::Indirect(_) => 0b00,
             RegisterOrMemory::DisplacementByte(_, _) => 0b01,
@@ -134,9 +140,9 @@ impl From<Modrm> for u8 {
             RegisterOrMemory::Register(_) => 0b11,
         } << 6;
 
-        byte |= encoding_for_register(&modrm.register) << 3;
+        byte |= encoding_for_register(&self.register) << 3;
 
-        byte |= match &modrm.register_or_memory {
+        byte |= match &self.register_or_memory {
             RegisterOrMemory::Direct(_) => 0b110,
             RegisterOrMemory::Indirect(addressing_mode) => {
                 encoding_for_addressing_mode(addressing_mode)
@@ -379,7 +385,7 @@ mod test {
 
     macro_rules! test_modrm_to_byte {
         ($expected:expr,$register:expr,$register_or_memory:expr) => {{
-            let byte: u8 = Modrm::new($register, $register_or_memory).into();
+            let byte: u8 = Modrm::new($register, $register_or_memory).as_byte();
             assert_eq!($expected, byte);
         }};
     }
