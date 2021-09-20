@@ -69,7 +69,7 @@ fn load_binary(
     }
 
     // Read the code from the file into the physical memory.
-    if let Err(err) = file.read_exact(&mut physical_memory.data[0..]) {
+    if let Err(err) = file.read_exact(&mut physical_memory.data[0x100..]) {
         if err.kind() != std::io::ErrorKind::UnexpectedEof {
             return Err(err);
         }

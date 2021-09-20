@@ -2,7 +2,7 @@ use crate::cpu::SegmentAndOffset;
 
 #[derive(Debug)]
 pub enum MemoryError {
-    NoInterface(u32),
+    //NoInterface(u32),
 }
 
 pub trait MemoryInterface {

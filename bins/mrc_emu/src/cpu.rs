@@ -1,4 +1,4 @@
-use crate::memory::{MemoryError, MemoryInterface, MemoryManager};
+use crate::memory::{MemoryInterface, MemoryManager};
 use mrc_decoder::decode_instruction;
 use mrc_x86::{
     AddressingMode, Instruction, Operand, OperandSet, OperandSize, OperandType, Operation,
@@ -98,7 +98,7 @@ impl Cpu {
         let mut cpu = Self {
             registers: [0; 8],
             segments: [0; 4],
-            ip: 0,
+            ip: 0x0100,
             flags: Flags::new(),
             memory_manager,
         };
@@ -146,17 +146,34 @@ impl Cpu {
         print!(" I{}", self.flags.is_set(FLAG_SHIFT_INTERRUPT) as u8);
         print!(" D{}", self.flags.is_set(FLAG_SHIFT_DIRECTION) as u8);
         println!(" O{}", self.flags.is_set(FLAG_SHIFT_OVERFLOW) as u8);
+
+        print!("stack: ");
+        let ss = self.segments[SEG_SS];
+        let sp = self.registers[REG_SP];
+        let mut current = 0xFFFE;
+        loop {
+            if current <= sp {
+                break;
+            }
+            let value = self
+                .memory_manager
+                .borrow()
+                .read_u16(segment_and_offset(ss, current));
+            print!("{:#06X} ", value);
+            current -= 2;
+        }
+        println!();
     }
 
     pub fn start(&mut self) {
         self.print_registers();
 
-        let mut it = CpuIterator {
-            memory_manager: Rc::clone(&self.memory_manager),
-            position: segment_and_offset(self.segments[SEG_CS], self.ip),
-        };
-
         loop {
+            let mut it = CpuIterator {
+                memory_manager: Rc::clone(&self.memory_manager),
+                position: segment_and_offset(self.segments[SEG_CS], self.ip),
+            };
+
             let start_position = it.position;
             match decode_instruction(&mut it) {
                 Ok(instruction) => {
@@ -352,6 +369,39 @@ impl Cpu {
                 self.ip = self.pop_word();
             }
 
+            Operation::Rcl => todo!(),
+
+            Operation::Rcr => todo!(),
+
+            Operation::Rol => todo!(),
+
+            Operation::Ror => todo!(),
+
+            Operation::Sar => todo!(),
+
+            Operation::Shl => match &instruction.operands {
+                OperandSet::DestinationAndSource(destination, source) => {
+                    let shift_value = self.get_byte_operand_value(source);
+                    match destination.1 {
+                        OperandSize::Byte => {
+                            let value = self.get_byte_operand_value(destination);
+                            let result = (value as i16) << (shift_value as i16);
+                            self.set_byte_operand_value(destination, result as u8);
+                            self.set_byte_result_flags(result);
+                        }
+                        OperandSize::Word => {
+                            let value = self.get_word_operand_value(destination);
+                            let result = (value as i32) << (shift_value as i32);
+                            self.set_word_operand_value(destination, result as u16);
+                            self.set_word_result_flags(result);
+                        }
+                    }
+                }
+                _ => panic!("Illegal operands!"),
+            },
+
+            Operation::Shr => todo!(),
+
             Operation::Std => {
                 self.flags.set(FLAG_SHIFT_DIRECTION);
             }
@@ -369,11 +419,10 @@ impl Cpu {
     fn push_word(&mut self, value: u16) {
         let ss = self.get_segment_value(SEG_SS);
         let sp = self.get_word_register_value(&Register::AhSp);
-        let new_sp = sp - 2;
         self.memory_manager
             .borrow_mut()
-            .write_u16(segment_and_offset(ss, new_sp), value);
-        self.set_word_register_value(&Register::AhSp, new_sp);
+            .write_u16(segment_and_offset(ss, sp), value);
+        self.set_word_register_value(&Register::AhSp, sp - 2);
     }
 
     fn pop_word(&mut self) -> u16 {
@@ -382,9 +431,8 @@ impl Cpu {
         let value = self
             .memory_manager
             .borrow()
-            .read_u16(segment_and_offset(ss, sp));
-        let new_sp = sp + 2;
-        self.set_word_register_value(&Register::AhSp, new_sp);
+            .read_u16(segment_and_offset(ss, sp + 2));
+        self.set_word_register_value(&Register::AhSp, sp + 2);
         value
     }
 
