@@ -175,6 +175,19 @@ impl Cpu {
             };
 
             let start_position = it.position;
+
+            // Print some bytes from memory.
+            print!("Bytes to decode: ");
+            for i in 0..5 {
+                print!(
+                    "{:#04X} ",
+                    self.memory_manager
+                        .borrow()
+                        .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
+                );
+            }
+            println!();
+
             match decode_instruction(&mut it) {
                 Ok(instruction) => {
                     println!(
@@ -320,6 +333,22 @@ impl Cpu {
                     }
 
                     // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
+                }
+                _ => panic!("Illegal operands!"),
+            },
+
+            Operation::Push => match &instruction.operands {
+                OperandSet::Destination(destination) => {
+                    let value = self.get_word_operand_value(destination);
+                    self.push_word(value);
+                }
+                _ => panic!("Illegal operands!"),
+            },
+
+            Operation::Pop => match &instruction.operands {
+                OperandSet::Destination(destination) => {
+                    let value = self.pop_word();
+                    self.set_word_operand_value(destination, value);
                 }
                 _ => panic!("Illegal operands!"),
             },
@@ -570,7 +599,12 @@ impl Cpu {
                 // Get a single byte from one of the registers.
                 self.get_word_register_value(register)
             }
-            OperandType::Segment(_) => todo!(),
+            OperandType::Segment(segment) => match segment {
+                Segment::Es => self.get_segment_value(SEG_ES),
+                Segment::Cs => self.get_segment_value(SEG_CS),
+                Segment::Ss => self.get_segment_value(SEG_SS),
+                Segment::Ds => self.get_segment_value(SEG_DS),
+            },
             OperandType::Immediate(value) => *value,
         }
     }

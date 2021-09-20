@@ -78,7 +78,7 @@ fn it_read_byte<It: Iterator<Item = u8>>(it: &mut It) -> Option<u8> {
 fn it_read_word<It: Iterator<Item = u8>>(it: &mut It) -> Option<u16> {
     let first = it.next()?;
     let second = it.next()?;
-    Some(((second as u16) << 4) + first as u16)
+    Some(((second as u16) << 8) + first as u16)
 }
 
 impl LowBitsDecoder<Self> for OperandSize {

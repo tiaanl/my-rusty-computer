@@ -35,6 +35,12 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         // Multi
         0x80 | 0x81 | 0x82 | 0x83 => operations::immediate_to_register_memory(op_code, it),
 
+        0x08 | 0x09 | 0x0A | 0x0B => {
+            operations::register_memory_and_register_to_either(Operation::Or, op_code, it)
+        }
+
+        0x0C | 0x0D => operations::immediate_to_accumulator(Operation::Or, op_code, it),
+
         0xC0 | 0xC1 | 0xD0 | 0xD1 | 0xD2 | 0xD3 => {
             // 0xC0 - 0b11000000
             // 0xC1 - 0b11000001
@@ -202,11 +208,6 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         // Logic
 
-        // OR
-        0x08 | 0x09 | 0x0A | 0x0B => {
-            operations::logic::or::register_memory_and_register_to_either(op_code, it)
-        }
-
         // TEST = And function to flags, no result
 
         // Immediate data to accumulator
@@ -235,10 +236,13 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         // Direct within segment
         // 1 1 1 0 1 0 0 0 | displacement low | displacement high
-        0xE8 => Ok(Instruction::new(
-            Operation::Call,
-            OperandSet::Offset(it_read_word(it).unwrap()),
-        )),
+        0xE8 => {
+            let offset = it_read_word(it).unwrap();
+            Ok(Instruction::new(
+                Operation::Call,
+                OperandSet::Offset(offset),
+            ))
+        }
 
         // JMP = Unconditional jump
 
