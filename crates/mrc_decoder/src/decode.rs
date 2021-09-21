@@ -39,6 +39,12 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             operations::register_memory_and_register_to_either(Operation::Or, op_code, it)
         }
 
+        0x30 | 0x31 | 0x32 | 0x33 => {
+            operations::register_memory_and_register_to_either(Operation::Xor, op_code, it)
+        }
+
+        0x34 | 0x35 => operations::immediate_to_accumulator(Operation::Xor, op_code, it),
+
         0x0C | 0x0D => operations::immediate_to_accumulator(Operation::Or, op_code, it),
 
         0xC0 | 0xC1 | 0xD0 | 0xD1 | 0xD2 | 0xD3 => {
@@ -321,6 +327,17 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let mut instruction = decode_instruction(it)?;
             instruction.repeat = Some(Repeat::Equal);
             Ok(instruction)
+        }
+
+        0xEB => {
+            let offset = match it_read_byte(it) {
+                Some(byte) => byte,
+                None => return Err(Error::CouldNotReadExtraBytes),
+            };
+            Ok(Instruction::new(
+                Operation::Jmp,
+                OperandSet::Offset(offset as u16),
+            ))
         }
 
         _ => Err(Error::InvalidOpCode(op_code)),

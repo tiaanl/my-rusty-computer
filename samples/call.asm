@@ -6,13 +6,13 @@ start:
         call    add_two
 
 add_one:
-        inc byte [count]
+        inc     byte [count]
         ret
 
 add_two:
-        mov al, [count]
-        add al, 2
-        mov [count], al
+        mov     al, [count]
+        add     al, 2
+        mov     [count], al
         ret
 
 count:

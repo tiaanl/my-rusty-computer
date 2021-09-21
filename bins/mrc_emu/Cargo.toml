@@ -3,6 +3,9 @@ name = "mrc-emu"
 version = "0.0.1"
 edition = "2018"
 
+[features]
+dos = []
+
 [dependencies]
 mrc_x86 = { path = "../../crates/mrc_x86" }
 mrc_decoder = { path = "../../crates/mrc_decoder" }
