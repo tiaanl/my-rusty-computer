@@ -7,6 +7,14 @@ use mrc_x86::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+fn high_byte(word: u16) -> u8 {
+    (word >> 8) as u8
+}
+
+fn low_byte(word: u16) -> u8 {
+    word as u8
+}
+
 pub type SegmentAndOffset = u32;
 
 pub fn segment_and_offset(segment: u16, offset: u16) -> SegmentAndOffset {
@@ -202,7 +210,7 @@ impl Cpu {
 
             // Print some bytes from memory.
             print!("Bytes to decode: ");
-            for i in 0..2 {
+            for i in 0..5 {
                 print!(
                     "{:#04X} ",
                     self.memory_manager
@@ -219,7 +227,9 @@ impl Cpu {
                         self.segments[SEG_CS], self.ip, instruction
                     );
                     self.ip += (it.position - start_position) as u16;
-                    self.execute(&instruction);
+                    if let Err(()) = self.execute(&instruction) {
+                        break;
+                    }
                     self.print_registers();
                 }
 
@@ -231,7 +241,7 @@ impl Cpu {
         }
     }
 
-    fn execute(&mut self, instruction: &Instruction) {
+    fn execute(&mut self, instruction: &Instruction) -> Result<(), ()> {
         match instruction.operation {
             Operation::Add => match &instruction.operands {
                 OperandSet::DestinationAndSource(destination, source) => match destination.1 {
@@ -310,6 +320,14 @@ impl Cpu {
                     OperandType::Immediate(value),
                     OperandSize::Byte,
                 )) => {
+                    if *value == 0x21 {
+                        // DOS
+                        if high_byte(self.registers[REG_AX]) == 0x4C {
+                            println!("INT 21h: DOS exit");
+                            return Err(());
+                        }
+                    }
+
                     println!("INT {}", value);
                 }
                 _ => panic!("Illegal operands! {:?}", &instruction.operands),
@@ -542,6 +560,8 @@ impl Cpu {
                 todo!("Unknown instruction! {}", instruction.operation);
             }
         }
+
+        Ok(())
     }
 
     fn push_word(&mut self, value: u16) {

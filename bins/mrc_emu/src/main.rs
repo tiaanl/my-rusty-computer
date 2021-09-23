@@ -11,7 +11,7 @@ use std::rc::Rc;
 #[cfg(feature = "dos")]
 mod dos {
     use super::memory::PhysicalMemory;
-    use std::io::{Read, SeekFrom};
+    use std::io::{Read, Seek, SeekFrom};
 
     #[repr(C, packed)]
     struct ExeHeader {
@@ -67,8 +67,8 @@ mod dos {
             if err.kind() != std::io::ErrorKind::UnexpectedEof {
                 return Err(err);
             }
-        } else if header.id == 0x4D5A {
-            // 0x4D5A == MZ
+        } else if header.id == 0x5A4D {
+            // MZ
             is_mz = true
         }
 

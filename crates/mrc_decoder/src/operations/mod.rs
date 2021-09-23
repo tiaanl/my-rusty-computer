@@ -1,6 +1,8 @@
 use crate::errors::Result;
 use crate::{it_read_byte, it_read_word, Error, LowBitsDecoder, Modrm};
-use mrc_x86::{Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register};
+use mrc_x86::{
+    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
+};
 
 pub mod arithmetic;
 pub mod data_transfer;
@@ -101,5 +103,21 @@ pub(crate) fn immediate_to_accumulator<It: Iterator<Item = u8>>(
             Operand(OperandType::Register(Register::AlAx), operand_size),
             Operand(OperandType::Immediate(immediate), operand_size),
         ),
+    ))
+}
+
+pub(crate) fn push_pop_segment<It: Iterator<Item = u8>>(
+    op_code: u8,
+    _: &mut It,
+) -> Result<Instruction> {
+    Ok(Instruction::new(
+        match op_code & 1 {
+            0 => Operation::Push,
+            _ => Operation::Pop,
+        },
+        OperandSet::Destination(Operand(
+            OperandType::Segment(Segment::try_from_low_bits(op_code >> 3 & 0b111)?),
+            OperandSize::Word,
+        )),
     ))
 }
