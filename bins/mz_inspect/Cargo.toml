@@ -1,0 +1,9 @@
+[package]
+name = "mz_inspect"
+version = "0.1.0"
+authors = ["Tiaan Louw <tiaanl@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+mrc_dos = { path = "../../crates/mrc_dos" }
+clap = "2"

@@ -1,4 +1,4 @@
-use crate::memory::{MemoryInterface, MemoryManager};
+use crate::memory::MemoryManager;
 use mrc_decoder::decode_instruction;
 use mrc_x86::{
     AddressingMode, Instruction, Operand, OperandSet, OperandSize, OperandType, Operation,
@@ -13,6 +13,10 @@ fn high_byte(word: u16) -> u8 {
 
 fn low_byte(word: u16) -> u8 {
     word as u8
+}
+
+fn high_and_low(word: u16) -> (u8, u8) {
+    (high_byte(word), low_byte(word))
 }
 
 pub type SegmentAndOffset = u32;
@@ -322,13 +326,16 @@ impl Cpu {
                 )) => {
                     if *value == 0x21 {
                         // DOS
-                        if high_byte(self.registers[REG_AX]) == 0x4C {
-                            println!("INT 21h: DOS exit");
-                            return Err(());
+                        match high_and_low(self.registers[REG_AX]) {
+                            (0x4C, return_code) => {
+                                println!("INT 21h: DOS exit with return code ({})", return_code);
+                                return Err(());
+                            }
+                            _ => {
+                                println!("INT {}", value);
+                            }
                         }
                     }
-
-                    println!("INT {}", value);
                 }
                 _ => panic!("Illegal operands! {:?}", &instruction.operands),
             },
@@ -351,6 +358,15 @@ impl Cpu {
                     self.ip = *offset;
                 }
                 _ => panic!("Illegal operands! {:?}", &instruction.operands),
+            },
+
+            Operation::Jnbe => match &instruction.operands {
+                OperandSet::Offset(offset) => {
+                    if !self.flags.is_set(FLAG_SHIFT_CARRY) && !self.flags.is_set(FLAG_SHIFT_ZERO) {
+                        self.ip += offset
+                    }
+                }
+                _ => panic!(),
             },
 
             Operation::Jne => match &instruction.operands {
@@ -945,15 +961,32 @@ impl Cpu {
     fn set_byte_result_flags(&mut self, result: i16) {
         if result == 0 {
             self.flags.set(FLAG_SHIFT_ZERO);
+        } else {
+            self.flags.clear(FLAG_SHIFT_ZERO);
         }
-        // TODO: Set signed flag.
+
+        if result & 0x80 != 0 {
+            self.flags.set(FLAG_SHIFT_SIGN);
+        } else {
+            self.flags.clear(FLAG_SHIFT_SIGN);
+        }
+
         // TODO: Set parity flag.
     }
 
     fn set_word_result_flags(&mut self, result: i32) {
         if result == 0 {
             self.flags.set(FLAG_SHIFT_ZERO);
+        } else {
+            self.flags.clear(FLAG_SHIFT_ZERO);
         }
+
+        if result & 0x8000 != 0 {
+            self.flags.set(FLAG_SHIFT_SIGN);
+        } else {
+            self.flags.clear(FLAG_SHIFT_SIGN);
+        }
+
         // TODO: Set signed flag.
         // TODO: Set parity flag.
     }

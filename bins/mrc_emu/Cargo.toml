@@ -9,5 +9,6 @@ dos = []
 [dependencies]
 mrc_x86 = { path = "../../crates/mrc_x86" }
 mrc_decoder = { path = "../../crates/mrc_decoder" }
-clap = "2.33.3"
+mrc_dos = { path = "../../crates/mrc_dos" }
+clap = "2"
 byteorder = "1.4.3"

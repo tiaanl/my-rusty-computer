@@ -5,4 +5,4 @@ edition = "2018"
 
 [dependencies]
 mrc_decoder = { path = "../../crates/mrc_decoder" }
-clap = "2.33.3"
+clap = "2"

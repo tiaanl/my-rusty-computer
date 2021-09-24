@@ -79,6 +79,7 @@ dependencies = [
  "byteorder",
  "clap",
  "mrc_decoder",
+ "mrc_dos",
  "mrc_x86",
 ]
 
@@ -90,8 +91,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrc_dos"
+version = "0.1.0"
+
+[[package]]
 name = "mrc_x86"
 version = "0.0.1"
+
+[[package]]
+name = "mz_inspect"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "mrc_dos",
+]
 
 [[package]]
 name = "simple-cpu"
