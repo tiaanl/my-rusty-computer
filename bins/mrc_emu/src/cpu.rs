@@ -206,7 +206,7 @@ impl Cpu {
     pub fn start(&mut self) {
         self.print_registers();
 
-        for _ in 0..20 {
+        loop {
             let mut it = CpuIterator {
                 memory_manager: Rc::clone(&self.memory_manager),
                 position: segment_and_offset(self.segments[SEG_CS], self.ip),
@@ -261,6 +261,34 @@ impl Cpu {
                     }
                     OperandSize::Word => {}
                 },
+                _ => panic!("Illegal operands!"),
+            },
+
+            Operation::And => match &instruction.operands {
+                OperandSet::DestinationAndSource(destination, source) => {
+                    match destination.1 {
+                        OperandSize::Byte => {
+                            let source_value = self.get_byte_operand_value(source);
+                            let destination_value = self.get_byte_operand_value(destination);
+
+                            self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+
+                            let result = destination_value as i16 & source_value as i16;
+                            self.set_byte_result_flags(result);
+                        }
+                        OperandSize::Word => {
+                            let source_value = self.get_word_operand_value(source);
+                            let destination_value = self.get_word_operand_value(destination);
+
+                            self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+
+                            let result = destination_value as i32 & source_value as i32;
+                            self.set_word_result_flags(result);
+                        }
+                    }
+
+                    // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
+                }
                 _ => panic!("Illegal operands!"),
             },
 
@@ -342,6 +370,15 @@ impl Cpu {
                 _ => panic!("Illegal operands! {:?}", &instruction.operands),
             },
 
+            Operation::Jbe => match &instruction.operands {
+                OperandSet::Offset(offset) => {
+                    if self.flags.is_set(FLAG_SHIFT_CARRY) && self.flags.is_set(FLAG_SHIFT_ZERO) {
+                        self.ip += offset
+                    }
+                }
+                _ => panic!(),
+            },
+
             Operation::Je => match &instruction.operands {
                 OperandSet::Offset(offset) => {
                     if self.flags.is_set(FLAG_SHIFT_ZERO) {
@@ -393,6 +430,8 @@ impl Cpu {
                 }
                 _ => panic!("Illegal operands!"),
             },
+
+            Operation::Nop => {}
 
             Operation::Or => match &instruction.operands {
                 OperandSet::DestinationAndSource(destination, source) => {
