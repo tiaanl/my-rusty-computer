@@ -239,6 +239,30 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
                 OperandSet::None
             ))
         }
+        
+        0x91 | 0x92 | 0x93 | 0x94 | 0x95 | 0x96 | 0x97 => {
+            let operand_size = OperandSize::Word;
+            let destination = Operand(OperandType::Register(Register::AlAx), operand_size);
+            let source = Operand(OperandType::Register(Register::try_from_low_bits(op_code & 0b111)?), operand_size);
+            Ok(Instruction::new(
+                Operation::Xchg,
+                OperandSet::DestinationAndSource(destination, source),
+            ))
+        }
+        
+        0x98 => {
+            Ok(Instruction::new(
+                Operation::Cbw,
+                OperandSet::None,
+            ))
+        }
+        
+        0x99 => {
+            Ok(Instruction::new(
+                Operation::Cwd,
+                OperandSet::None,
+            ))
+        }
 
         _ => Err(Error::InvalidOpCode(op_code)),
     };

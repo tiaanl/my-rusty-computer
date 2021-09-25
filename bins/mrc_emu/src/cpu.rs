@@ -302,6 +302,15 @@ impl Cpu {
                 _ => todo!(),
             },
 
+            Operation::Cbw => {
+                let al = self.get_byte_register_value(&Register::AlAx);
+                if al & 0b10000000 != 0 {
+                    self.set_byte_register_value(&Register::AhSp, 0b11111111);
+                } else {
+                    self.set_byte_register_value(&Register::AhSp, 0b00000000);
+                }
+            }
+
             Operation::Cmp => match &instruction.operands {
                 OperandSet::DestinationAndSource(destination, source) => {
                     macro_rules! op {
