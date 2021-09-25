@@ -24,7 +24,7 @@ macro_rules! decode_fn_map {
     };
 }
 
-fn grouped_operation(op_code: u8) -> Operation {
+fn group1_operation(op_code: u8) -> Operation {
     match (op_code >> 3) & 0b111 {
         0b000 => Operation::Add,
         0b001 => Operation::Or,
@@ -35,6 +35,22 @@ fn grouped_operation(op_code: u8) -> Operation {
         0b110 => Operation::Xor,
         0b111 => Operation::Cmp,
 
+        _ => unreachable!(),
+    }
+}
+
+fn group2_operation(low_bits: u8) -> Operation {
+    assert!(low_bits <= 0b111);
+
+    match (low_bits) & 0b111 {
+        0b000 => Operation::Rol,
+        0b001 => Operation::Ror,
+        0b010 => Operation::Rcl,
+        0b011 => Operation::Rcr,
+        0b100 => Operation::Shl,
+        0b101 => Operation::Shr,
+        // 0b110 => Operation::Nop,  // No encoding for this one.
+        0b111 => Operation::Sar,
         _ => unreachable!(),
     }
 }
@@ -63,6 +79,31 @@ fn jump_operation_from_low_bits(bits: u8) -> Operation {
     }
 }
 
+fn immediate_operand_from_it<It: Iterator<Item = u8>>(
+    it: &mut It,
+    operand_size: OperandSize,
+) -> Result<Operand> {
+    match operand_size {
+        OperandSize::Byte => {
+            let immediate = match it_read_byte(it) {
+                Some(value) => value,
+                None => return Err(Error::CouldNotReadExtraBytes),
+            };
+            Ok(Operand(
+                OperandType::Immediate(immediate as u16),
+                operand_size,
+            ))
+        }
+        OperandSize::Word => {
+            let immediate = match it_read_word(it) {
+                Some(value) => value,
+                None => return Err(Error::CouldNotReadExtraBytes),
+            };
+            Ok(Operand(OperandType::Immediate(immediate), operand_size))
+        }
+    }
+}
+
 /// Takes a byte slice and tries to convert it into an [Instruction].
 pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instruction> {
     let op_code = match it.next() {
@@ -79,7 +120,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         0x24 | 0x25 |
         0x2C | 0x2D |
         0x34 | 0x35 |
-        0x3C | 0x3D => operations::immediate_to_accumulator(grouped_operation(op_code), op_code, it),
+        0x3C | 0x3D => operations::immediate_to_accumulator(group1_operation(op_code), op_code, it),
 
         0x00 | 0x01 | 0x02 | 0x03 | 
         0x08 | 0x09 | 0x0A | 0x0B | 
@@ -88,7 +129,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         0x20 | 0x21 | 0x22 | 0x23 | 
         0x28 | 0x29 | 0x2A | 0x2B | 
         0x30 | 0x31 | 0x32 | 0x33 | 
-        0x38 | 0x39 | 0x3A | 0x3B => operations::register_memory_and_register_to_either(grouped_operation(op_code), op_code, it),
+        0x38 | 0x39 | 0x3A | 0x3B => operations::register_memory_and_register_to_either(group1_operation(op_code), op_code, it),
 
         0x06 | 0x07 | 0x0E | 0x0F | 0x016 | 0x17 | 0x1E | 0x1F => operations::push_pop_segment(op_code, it),
 
@@ -261,6 +302,111 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             Ok(Instruction::new(
                 Operation::Cwd,
                 OperandSet::None,
+            ))
+        }
+        
+        0x9B => Ok(Instruction::new(Operation::Wait, OperandSet::None)),
+        
+        0x9C => Ok(Instruction::new(Operation::Pushf, OperandSet::None)),
+        
+        0x9D => Ok(Instruction::new(Operation::Popf, OperandSet::None)),
+        
+        0x9E => Ok(Instruction::new(Operation::Sahf, OperandSet::None)),
+
+        0x9F => Ok(Instruction::new(Operation::Lahf, OperandSet::None)),
+        
+        0xA0 | 0xA1 | 0xA2 | 0xA3 => {
+            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
+
+            let address = it_read_word(it).unwrap();
+
+            Ok(Instruction::new(
+                Operation::Mov,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::AlAx), operand_size),
+                    Operand(OperandType::Direct(address), operand_size),
+                ),
+            ))
+        }
+        
+        0xA4 => Ok(Instruction::new(Operation::Movsb, OperandSet::None)),
+
+        0xA5 => Ok(Instruction::new(Operation::Movsw, OperandSet::None)),
+        
+        0xA6 => Ok(Instruction::new(Operation::Cmpsb, OperandSet::None)),
+
+        0xA7 => Ok(Instruction::new(Operation::Cmpsw, OperandSet::None)),
+        
+        0xA8 | 0xA9 => {
+            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
+
+            let destination = Operand(OperandType::Register(Register::AlAx), operand_size);
+            let source = immediate_operand_from_it(it, operand_size)?;
+
+            Ok(Instruction::new(Operation::Test, OperandSet::DestinationAndSource(
+                destination,
+                source,
+            )))
+        }
+        
+        0xAA | 0xAB | 0xAC | 0xAD | 0xAE | 0xAF => {
+            todo!()
+        }
+        
+        0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB6 | 0xB7 | 0xB8 | 0xB9 | 0xBA | 0xBB | 0xBC | 0xBD | 0xBE | 0xBF => {
+            let operand_size = OperandSize::try_from_low_bits(op_code >> 3 & 0b1)?;
+
+            let destination = Operand(
+                OperandType::Register(Register::try_from_low_bits(op_code & 0b111)?),
+                operand_size,
+            );
+            let source = match operand_size {
+                OperandSize::Byte => {
+                    let immediate = match it_read_byte(it) {
+                        Some(value) => value,
+                        None => return Err(Error::CouldNotReadExtraBytes)
+                    };
+                    Operand(OperandType::Immediate(immediate as u16), operand_size)
+                }
+                OperandSize::Word => {
+                    let immediate = match it_read_word(it) {
+                        Some(value) => value,
+                        None => return Err(Error::CouldNotReadExtraBytes)
+                    };
+                    Operand(OperandType::Immediate(immediate), operand_size)
+                }
+            };
+
+            Ok(Instruction::new(
+                Operation::Mov,
+                OperandSet::DestinationAndSource(destination, source),
+            ))
+        }
+
+        0xC0 | 0xC1 => {
+            // Not a typical `operand_size`.
+            let operand_size = OperandSize::try_from_low_bits((op_code >> 3) & 0b1)?;
+            let modrm_byte = match it_read_byte(it) {
+                Some(byte) => byte,
+                None => return Err(Error::CouldNotReadExtraBytes),
+            };
+            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+
+            let destination = Operand(modrm.register_or_memory.into(), operand_size);
+            let source = immediate_operand_from_it(it, operand_size)?;
+
+            Ok(Instruction::new(
+                group2_operation((modrm_byte >> 3) & 0b111),
+                OperandSet::DestinationAndSource(destination, source),
+            ))
+        }
+        
+        0xC2 | 0xC3 => {
+            Ok(Instruction::new(
+                Operation::Ret,
+                OperandSet::Destination(
+                    immediate_operand_from_it(it, OperandSize::Word)?,
+                ),
             ))
         }
 
