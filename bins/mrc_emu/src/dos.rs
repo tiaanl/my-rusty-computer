@@ -1,4 +1,4 @@
-use super::memory::RandomAccessMemory;
+use crate::memory::PhysicalMemory;
 use mrc_dos::mz::MzHeader;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -110,7 +110,7 @@ struct ParamBlock {
 }
 
 pub fn load_binary(
-    physical_memory: &mut RandomAccessMemory,
+    physical_memory: &mut PhysicalMemory,
     file: &mut std::fs::File,
 ) -> std::io::Result<()> {
     // Write the program segment prefix to memory.

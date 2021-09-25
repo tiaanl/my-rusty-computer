@@ -152,27 +152,27 @@ impl Cpu {
 
     pub fn print_registers(&mut self) {
         print!(
-            "AX: {:#06X} BX: {:#06X} CX: {:#06X} DX: {:#06X} ",
+            "AX: {:04X} BX: {:04X} CX: {:04X} DX: {:04X} ",
             self.registers[REG_AX],
             self.registers[REG_BX],
             self.registers[REG_CX],
             self.registers[REG_DX]
         );
         println!(
-            "SP: {:#06X} BP: {:#06X} SI: {:#06X} DI: {:#06X}",
+            "SP: {:04X} BP: {:04X} SI: {:04X} DI: {:04X}",
             self.registers[REG_SP],
             self.registers[REG_BP],
             self.registers[REG_SI],
             self.registers[REG_DI]
         );
         print!(
-            "ES: {:#06X} CS: {:#06X} SS: {:#06X} DS: {:#06X} ",
+            "ES: {:04X} CS: {:04X} SS: {:04X} DS: {:04X} ",
             self.segments[SEG_ES],
             self.segments[SEG_CS],
             self.segments[SEG_SS],
             self.segments[SEG_DS]
         );
-        print!("IP: {:#06X} flags:", self.ip);
+        print!("IP: {:04X} flags:", self.ip);
         print!(" C{}", self.flags.is_set(FLAG_SHIFT_CARRY) as u8);
         print!(" P{}", self.flags.is_set(FLAG_SHIFT_PARITY) as u8);
         print!(" A{}", self.flags.is_set(FLAG_SHIFT_AUX_CARRY) as u8);
@@ -218,7 +218,7 @@ impl Cpu {
             print!("Bytes to decode: ");
             for i in 0..5 {
                 print!(
-                    "{:#04X} ",
+                    "{:02X} ",
                     self.memory_manager
                         .borrow()
                         .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
@@ -229,7 +229,7 @@ impl Cpu {
             match decode_instruction(&mut it) {
                 Ok(instruction) => {
                     println!(
-                        "{:#06X}:{:#06X}    {}",
+                        "{:04X}:{:04X}    {}",
                         self.segments[SEG_CS], self.ip, instruction
                     );
                     self.ip += (it.position - start_position) as u16;
@@ -252,14 +252,49 @@ impl Cpu {
             Operation::Add => match &instruction.operands {
                 OperandSet::DestinationAndSource(destination, source) => match destination.1 {
                     OperandSize::Byte => {
-                        let destination_value = self.get_byte_operand_value(destination);
+                        let mut destination_value = self.get_byte_operand_value(destination);
                         let source_value = self.get_byte_operand_value(source);
-
-                        let total: i16 = destination_value as i16 + source_value as i16;
-
-                        self.set_byte_operand_value(destination, total as u8);
+                        destination_value = destination_value.wrapping_add(source_value);
+                        self.set_byte_operand_value(destination, destination_value);
                     }
-                    OperandSize::Word => {}
+                    OperandSize::Word => {
+                        let mut destination_value = self.get_word_operand_value(destination);
+                        let source_value = self.get_word_operand_value(source);
+                        destination_value = destination_value.wrapping_add(source_value);
+                        self.set_word_operand_value(destination, destination_value);
+                    }
+                },
+                _ => panic!("Illegal operands!"),
+            },
+
+            Operation::Adc => match &instruction.operands {
+                OperandSet::DestinationAndSource(destination, source) => match destination.1 {
+                    OperandSize::Byte => {
+                        let mut destination_value = self.get_byte_operand_value(destination);
+                        let source_value = self.get_byte_operand_value(source);
+                        destination_value = destination_value.wrapping_add(source_value);
+                        destination_value = destination_value.wrapping_add(
+                            if self.flags.is_set(FLAG_SHIFT_CARRY) {
+                                1
+                            } else {
+                                0
+                            },
+                        );
+                        self.set_byte_operand_value(destination, destination_value);
+                    }
+                    OperandSize::Word => {
+                        let mut destination_value = self.get_word_operand_value(destination);
+                        let source_value = self.get_word_operand_value(source);
+                        destination_value = destination_value.wrapping_add(source_value);
+                        destination_value = destination_value.wrapping_add(
+                            if self.flags.is_set(FLAG_SHIFT_CARRY) {
+                                1
+                            } else {
+                                0
+                            },
+                        );
+                        self.set_word_operand_value(destination, destination_value);
+                    }
                 },
                 _ => panic!("Illegal operands!"),
             },
@@ -292,12 +327,12 @@ impl Cpu {
                 _ => panic!("Illegal operands!"),
             },
 
-            Operation::Call => match instruction.operands {
-                OperandSet::Offset(offset) => {
+            Operation::Call => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
                     // Store the current IP (which is after this CALL) on the stack. So that RET
                     // can pop it.
                     self.push_word(self.ip);
-                    self.ip += offset;
+                    self.displace_ip(displacement);
                 }
                 _ => todo!(),
             },
@@ -344,15 +379,33 @@ impl Cpu {
                 self.flags.clear(FLAG_SHIFT_INTERRUPT);
             }
 
+            Operation::Dec => match &instruction.operands {
+                OperandSet::Destination(destination) => match destination.1 {
+                    OperandSize::Byte => {
+                        let mut value = self.get_byte_operand_value(destination);
+                        value = value.wrapping_sub(1);
+                        self.set_byte_operand_value(destination, value);
+                    }
+                    OperandSize::Word => {
+                        let mut value = self.get_word_operand_value(destination);
+                        value = value.wrapping_sub(1);
+                        self.set_word_operand_value(destination, value);
+                    }
+                },
+                _ => panic!(),
+            },
+
             Operation::Inc => match &instruction.operands {
                 OperandSet::Destination(destination) => match destination.1 {
                     OperandSize::Byte => {
-                        let value = self.get_byte_operand_value(destination);
-                        self.set_byte_operand_value(destination, value + 1);
+                        let mut value = self.get_byte_operand_value(destination);
+                        value = value.wrapping_add(1);
+                        self.set_byte_operand_value(destination, value);
                     }
                     OperandSize::Word => {
-                        let value = self.get_word_operand_value(destination);
-                        self.set_word_operand_value(destination, value + 1);
+                        let mut value = self.get_word_operand_value(destination);
+                        value = value.wrapping_add(1);
+                        self.set_word_operand_value(destination, value);
                     }
                 },
                 _ => panic!(),
@@ -380,26 +433,26 @@ impl Cpu {
             },
 
             Operation::Jbe => match &instruction.operands {
-                OperandSet::Offset(offset) => {
+                OperandSet::Displacement(displacement) => {
                     if self.flags.is_set(FLAG_SHIFT_CARRY) && self.flags.is_set(FLAG_SHIFT_ZERO) {
-                        self.ip += offset
+                        self.displace_ip(displacement);
                     }
                 }
                 _ => panic!(),
             },
 
             Operation::Je => match &instruction.operands {
-                OperandSet::Offset(offset) => {
+                OperandSet::Displacement(displacement) => {
                     if self.flags.is_set(FLAG_SHIFT_ZERO) {
-                        self.ip += offset
+                        self.displace_ip(displacement);
                     }
                 }
                 _ => panic!(),
             },
 
             Operation::Jmp => match &instruction.operands {
-                OperandSet::Offset(offset) => {
-                    self.ip += offset;
+                OperandSet::Displacement(displacement) => {
+                    self.displace_ip(displacement);
                 }
                 OperandSet::SegmentAndOffset(segment, offset) => {
                     self.segments[SEG_CS] = *segment;
@@ -409,18 +462,18 @@ impl Cpu {
             },
 
             Operation::Jnbe => match &instruction.operands {
-                OperandSet::Offset(offset) => {
+                OperandSet::Displacement(displacement) => {
                     if !self.flags.is_set(FLAG_SHIFT_CARRY) && !self.flags.is_set(FLAG_SHIFT_ZERO) {
-                        self.ip += offset
+                        self.displace_ip(displacement);
                     }
                 }
                 _ => panic!(),
             },
 
             Operation::Jne => match &instruction.operands {
-                OperandSet::Offset(offset) => {
+                OperandSet::Displacement(displacement) => {
                     if !self.flags.is_set(FLAG_SHIFT_ZERO) {
-                        self.ip += offset
+                        self.displace_ip(displacement);
                     }
                 }
                 _ => panic!(),
@@ -438,6 +491,24 @@ impl Cpu {
                     self.set_word_register_value(register, addr as u16);
                 }
                 _ => panic!("Illegal operands!"),
+            },
+
+            Operation::Mul => match &instruction.operands {
+                OperandSet::Destination(destination) => match destination.1 {
+                    OperandSize::Byte => {
+                        let al = self.get_byte_register_value(&Register::AlAx);
+                        let mut value = self.get_byte_operand_value(destination);
+                        value = value.wrapping_mul(al);
+                        self.set_byte_operand_value(destination, value);
+                    }
+                    OperandSize::Word => {
+                        let ax = self.get_word_register_value(&Register::AlAx);
+                        let mut value = self.get_word_operand_value(destination);
+                        value = value.wrapping_mul(ax);
+                        self.set_word_operand_value(destination, value);
+                    }
+                },
+                _ => panic!(),
             },
 
             Operation::Nop => {}
@@ -930,5 +1001,17 @@ impl Cpu {
 
         // TODO: Set signed flag.
         // TODO: Set parity flag.
+    }
+
+    fn displace_ip(&mut self, displacement: &Displacement) {
+        match displacement {
+            Displacement::None => {}
+            Displacement::Byte(offset) => {
+                self.ip = ((self.ip as i32) + (*offset as i32)) as u16;
+            }
+            Displacement::Word(offset) => {
+                self.ip = ((self.ip as i32) + (*offset as i32)) as u16;
+            }
+        }
     }
 }

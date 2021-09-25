@@ -164,7 +164,7 @@ pub enum OperandSet {
     None,
     Destination(Operand),
     DestinationAndSource(Operand, Operand),
-    Offset(u16),
+    Displacement(Displacement),
     SegmentAndOffset(u16, u16),
 }
 
@@ -177,18 +177,20 @@ pub enum Repeat {
 #[derive(PartialEq, Debug)]
 pub struct Instruction {
     pub operation: Operation,
+    pub operands: OperandSet,
     pub segment_override: Option<Segment>,
     pub repeat: Option<Repeat>,
-    pub operands: OperandSet,
+    pub lock: bool,
 }
 
 impl Instruction {
     pub fn new(operation: Operation, operands: OperandSet) -> Self {
         Self {
             operation,
+            operands,
             segment_override: None,
             repeat: None,
-            operands,
+            lock: false,
         }
     }
 }

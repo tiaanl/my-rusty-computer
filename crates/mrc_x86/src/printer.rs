@@ -181,6 +181,20 @@ impl fmt::Display for AddressingMode {
     }
 }
 
+impl fmt::Display for Displacement {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Displacement::None => Ok(()),
+            Displacement::Byte(offset) => {
+                write!(f, "{:+}", offset)
+            }
+            Displacement::Word(offset) => {
+                write!(f, "{:+}", offset)
+            }
+        }
+    }
+}
+
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.0 {
@@ -188,17 +202,7 @@ impl fmt::Display for Operand {
                 write!(f, "[{:#06x}]", displacement)?;
             }
             OperandType::Indirect(encoding, displacement) => {
-                write!(f, "[{}", encoding)?;
-                match displacement {
-                    Displacement::None => {}
-                    Displacement::Byte(offset) => {
-                        write!(f, "{:+}", offset)?;
-                    }
-                    Displacement::Word(offset) => {
-                        write!(f, "{:+}", offset)?;
-                    }
-                }
-                write!(f, "]")?;
+                write!(f, "[{}{}]", encoding, displacement)?;
             }
             OperandType::Register(encoding) => {
                 write!(f, "{}", RegisterDisplay::new(encoding, &self.1))?
@@ -224,7 +228,7 @@ impl fmt::Display for OperandSet {
             OperandSet::SegmentAndOffset(segment, offset) => {
                 write!(f, "{:#06X}:{:#06X}", segment, offset)?
             }
-            OperandSet::Offset(offset) => write!(f, "{:#06X}", offset)?,
+            OperandSet::Displacement(displacement) => write!(f, "{}", displacement)?,
         }
         Ok(())
     }
