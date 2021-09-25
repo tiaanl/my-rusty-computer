@@ -72,6 +72,7 @@ impl fmt::Display for Operation {
             Operation::Movsw => write!(f, "movsw"),
             Operation::Mul => write!(f, "mul"),
             Operation::Neg => write!(f, "neg"),
+            Operation::Nop => write!(f, "nop"),
             Operation::Not => write!(f, "not"),
             Operation::Or => write!(f, "or"),
             Operation::Out => write!(f, "out"),

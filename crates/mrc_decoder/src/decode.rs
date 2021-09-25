@@ -221,6 +221,25 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
 
+        0x8F => {
+            let operand_size = OperandSize::Word;
+            let modrm = Modrm::try_from_iter(it)?;
+
+            Ok(Instruction::new(
+                Operation::Pop,
+                OperandSet::Destination(
+                    Operand(OperandType::Register(modrm.register), operand_size),
+                )
+            ))
+        }
+        
+        0x90 => {
+            Ok(Instruction::new(
+                Operation::Nop,
+                OperandSet::None
+            ))
+        }
+
         _ => Err(Error::InvalidOpCode(op_code)),
     };
 

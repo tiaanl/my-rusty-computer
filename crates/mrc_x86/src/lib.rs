@@ -68,6 +68,7 @@ pub enum Operation {
     Movsw,
     Mul,
     Neg,
+    Nop,
     Not,
     Or,
     Out,
