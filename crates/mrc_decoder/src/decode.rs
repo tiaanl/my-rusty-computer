@@ -144,7 +144,82 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         
         0x80 | 0x81 | 0x82 | 0x83 => operations::immediate_to_register_memory(op_code, it),
 
-        0x84 | 0x85 => todo!(),
+        0x84 | 0x85 => {
+            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
+            let modrm = Modrm::try_from_iter(it)?;
+            
+            Ok(Instruction::new(
+                Operation::Test,
+                OperandSet::DestinationAndSource(
+                    Operand(modrm.register_or_memory.into(), operand_size),
+                    Operand(OperandType::Register(modrm.register), operand_size),
+                )
+            ))
+        },
+        
+        0x86 | 0x87 => {
+            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
+            let modrm = Modrm::try_from_iter(it)?;
+            
+            Ok(Instruction::new(
+                Operation::Xchg,
+                OperandSet::DestinationAndSource(
+                    Operand(modrm.register_or_memory.into(), operand_size),
+                    Operand(OperandType::Register(modrm.register), operand_size),
+                )
+            ))
+        }
+        
+        0x88 | 0x89 | 0x8A | 0x8B => {
+            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
+            let direction = op_code >> 1 & 0b1;
+            let modrm = Modrm::try_from_iter(it)?;
+
+            let destination = Operand(modrm.register_or_memory.into(), operand_size);
+            let source = Operand(OperandType::Register(modrm.register), operand_size);
+
+            Ok(Instruction::new(
+                Operation::Mov,
+                match direction {
+                    0 => OperandSet::DestinationAndSource(destination, source),
+                    _ => OperandSet::DestinationAndSource(source, destination),
+                }
+            ))
+        }
+        
+        0x8C | 0x8E => {
+            let operand_size = OperandSize::Word;
+            let direction = op_code >> 1 & 0b1;
+            let modrm_byte = match it_read_byte(it) {
+                Some(byte) => byte,
+                None => return Err(Error::CouldNotReadExtraBytes),
+            };
+            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+
+            let destination = Operand(modrm.register_or_memory.into(), operand_size);
+            let source = Operand(OperandType::Segment(Segment::try_from_low_bits((modrm_byte >> 3) & 0b111)?), operand_size);
+
+            Ok(Instruction::new(
+                Operation::Mov,
+                match direction {
+                    0 => OperandSet::DestinationAndSource(destination, source),
+                    _ => OperandSet::DestinationAndSource(source, destination),
+                }
+            ))
+        }
+        
+        0x8D => {
+            let operand_size = OperandSize::Word;
+            let modrm = Modrm::try_from_iter(it)?;
+
+            Ok(Instruction::new(
+                Operation::Lea,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(modrm.register), operand_size),
+                    Operand(modrm.register_or_memory.into(), operand_size),
+                )
+            ))
+        }
 
         _ => Err(Error::InvalidOpCode(op_code)),
     };
