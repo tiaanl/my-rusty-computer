@@ -409,6 +409,79 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
                 ),
             ))
         }
+        
+        0xC4 | 0xC5 => {
+            let operand_size = OperandSize::Word;
+            let modrm = Modrm::try_from_iter(it)?;
+            
+            let destination = Operand(OperandType::Register(modrm.register), operand_size);
+            let source = Operand(modrm.register_or_memory.into(), operand_size);
+            
+            Ok(Instruction::new(
+                match op_code & 0b1 {
+                    0 => Operation::Lds,
+                    _ => Operation::Les,
+                },
+                OperandSet::DestinationAndSource(destination, source),
+            ))
+        }
+
+        0xC6 | 0xC7 => {
+            let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
+            let modrm_byte = match it_read_byte(it) {
+                Some(byte) => byte,
+                None => return Err(Error::CouldNotReadExtraBytes),
+            };
+            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+            
+            let destination = Operand(modrm.register_or_memory.into(), operand_size);
+            let source = immediate_operand_from_it(it, operand_size)?;
+
+            Ok(Instruction::new(
+                Operation::Mov,
+                OperandSet::DestinationAndSource(destination, source),
+            ))
+        }
+
+        0xCA | 0xCB => {
+            let with_immediate = op_code & 1 == 1;
+            Ok(Instruction::new(
+                Operation::Retf,
+                if with_immediate {
+                    let immediate = immediate_operand_from_it(it, OperandSize::Word)?;
+                    OperandSet::Destination(immediate)
+                } else {
+                    OperandSet::None
+                }
+            ))
+        }
+        
+        0xCC => {
+            Ok(Instruction::new(
+                Operation::Int,
+                OperandSet::Destination(Operand(OperandType::Immediate(3), OperandSize::Byte))
+            ))
+        }
+
+        0xCD => {
+            let code = match it_read_byte(it) {
+                Some(byte) => byte,
+                None => return Err(Error::CouldNotReadExtraBytes)
+            };
+            Ok(Instruction::new(
+                Operation::Int,
+                OperandSet::Destination(
+                    Operand(OperandType::Immediate(code as u16), OperandSize::Byte)
+                )
+            ))
+        }
+        
+        0xCF => {
+            Ok(Instruction::new(
+                Operation::IRet,
+                OperandSet::None,
+            ))
+        }
 
         _ => Err(Error::InvalidOpCode(op_code)),
     };

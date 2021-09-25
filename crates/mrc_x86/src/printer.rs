@@ -83,6 +83,7 @@ impl fmt::Display for Operation {
             Operation::Rcl => write!(f, "rcl"),
             Operation::Rcr => write!(f, "rcr"),
             Operation::Ret => write!(f, "ret"),
+            Operation::Retf => write!(f, "retf"),
             Operation::Rol => write!(f, "rol"),
             Operation::Ror => write!(f, "ror"),
             Operation::Sahf => write!(f, "sahf"),

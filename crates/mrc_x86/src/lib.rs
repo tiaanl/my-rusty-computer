@@ -79,6 +79,7 @@ pub enum Operation {
     Rcl,
     Rcr,
     Ret,
+    Retf,
     Rol,
     Ror,
     Sahf,
