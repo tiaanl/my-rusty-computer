@@ -139,9 +139,16 @@ pub enum OperandSize {
 }
 
 #[derive(PartialEq, Debug)]
+pub enum Displacement {
+    None,
+    Byte(i8),
+    Word(i16),
+}
+
+#[derive(PartialEq, Debug)]
 pub enum OperandType {
     Direct(u16),
-    Indirect(AddressingMode, u16),
+    Indirect(AddressingMode, Displacement),
     Register(Register),
     Segment(Segment),
     Immediate(u16),

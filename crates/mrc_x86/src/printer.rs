@@ -1,6 +1,6 @@
 use crate::{
-    AddressingMode, Instruction, Operand, OperandSet, OperandSize, OperandType, Operation,
-    Register, Segment,
+    AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
+    Operation, Register, Segment,
 };
 use std::fmt;
 use std::fmt::Formatter;
@@ -187,11 +187,16 @@ impl fmt::Display for Operand {
             }
             OperandType::Indirect(encoding, displacement) => {
                 write!(f, "[{}", encoding)?;
-                if *displacement > 0 {
-                    write!(f, "{}]", displacement)?;
-                } else {
-                    write!(f, "]")?;
+                match displacement {
+                    Displacement::None => {}
+                    Displacement::Byte(offset) => {
+                        write!(f, "{:+}", offset)?;
+                    }
+                    Displacement::Word(offset) => {
+                        write!(f, "{:+}", offset)?;
+                    }
                 }
+                write!(f, "]")?;
             }
             OperandType::Register(encoding) => {
                 write!(f, "{}", RegisterDisplay::new(encoding, &self.1))?

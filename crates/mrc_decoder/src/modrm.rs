@@ -1,6 +1,6 @@
 use crate::errors::Result;
 use crate::{it_read_byte, it_read_word, Error, LowBitsDecoder};
-use mrc_x86::{AddressingMode, OperandType, Register};
+use mrc_x86::{AddressingMode, Displacement, OperandType, Register};
 
 impl LowBitsDecoder<Self> for AddressingMode {
     fn try_from_low_bits(byte: u8) -> Result<Self> {
@@ -59,12 +59,14 @@ impl From<RegisterOrMemory> for OperandType {
     fn from(register_or_memory: RegisterOrMemory) -> Self {
         match register_or_memory {
             RegisterOrMemory::Direct(offset) => OperandType::Direct(offset),
-            RegisterOrMemory::Indirect(encoding) => OperandType::Indirect(encoding, 0),
+            RegisterOrMemory::Indirect(encoding) => {
+                OperandType::Indirect(encoding, Displacement::None)
+            }
             RegisterOrMemory::DisplacementByte(encoding, displacement) => {
-                OperandType::Indirect(encoding, displacement as u16)
+                OperandType::Indirect(encoding, Displacement::Byte(displacement as i8))
             }
             RegisterOrMemory::DisplacementWord(encoding, displacement) => {
-                OperandType::Indirect(encoding, displacement)
+                OperandType::Indirect(encoding, Displacement::Word(displacement as i16))
             }
             RegisterOrMemory::Register(encoding) => OperandType::Register(encoding),
         }
