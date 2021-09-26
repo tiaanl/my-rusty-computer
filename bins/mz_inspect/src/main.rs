@@ -1,35 +1,56 @@
 use clap::{App, Arg};
-use mrc_dos::mz::MzHeader;
-use std::io::Read;
+use mrc_dos::mz::{ExeHeader, MzHeader, Relocation};
+use std::io::{Read, Seek, SeekFrom};
+
+macro_rules! print_header_value {
+    ($name:expr,$value:expr) => {
+        let name = $name;
+        let value = $value;
+        println!("{:<24}{:04X} ({})", name, value, value);
+    };
+}
 
 fn print_mz_header(header: &MzHeader) {
-    macro_rules! print_value {
+    macro_rules! print_values {
         ($field:ident) => {{
-            println!(
-                "{:<24}{:#06X} ({})",
-                stringify!($field),
-                header.$field,
-                header.$field
-            );
+                print_header_value!(stringify!($field), header.$field);
+        }};
+        ($first:ident,$($rest:ident),*) => {{
+            $(
+                print_values!($rest);
+            )+
         }};
     }
 
-    unsafe {
-        print_value!(id);
-        print_value!(extra_bytes);
-        print_value!(pages);
-        print_value!(relocation_items);
-        print_value!(header_size);
-        print_value!(minimum_allocation);
-        print_value!(maximum_allocation);
-        print_value!(initial_ss);
-        print_value!(initial_sp);
-        print_value!(checksum);
-        print_value!(initial_ip);
-        print_value!(initial_cs);
-        print_value!(relocation_table);
-        print_value!(overlay);
-    }
+    /*
+     ($mand_1:expr, $mand_2:expr) => {
+        single_opt!($mand_1, $mand_2, "Default")
+    };
+    ($mand_1:expr, $mand_2:expr, $($opt:expr),*) => {
+        {
+            println!("1. {} 2. {}", $mand_1, $mand_2);
+            $(
+                println!("opt. {}", $opt);
+            )*
+        }
+    };     */
+
+    print_values!(
+        id,
+        extra_bytes,
+        pages,
+        relocation_items,
+        header_size,
+        minimum_allocation,
+        maximum_allocation,
+        initial_ss,
+        initial_sp,
+        checksum,
+        initial_ip,
+        initial_cs,
+        relocation_table,
+        overlay
+    );
 }
 
 fn main() {
@@ -55,25 +76,70 @@ fn main() {
         Ok(file) => file,
     };
 
-    let mut header: MzHeader = unsafe { std::mem::zeroed() };
-    let header_slice = unsafe {
+    println!("{:<24}{}", "File", path);
+
+    let exe_header = match ExeHeader::new(&mut file) {
+        Err(err) => {
+            eprintln!("Could not read EXE header. ({})", err);
+            return;
+        }
+        Ok(exe_header) => exe_header,
+    };
+
+    print_header_value!("Header size", exe_header.mz_header.header_size_in_bytes());
+    print_header_value!("MZ header size", std::mem::size_of::<MzHeader>());
+    print_header_value!("Code offset", exe_header.mz_header.code_offset());
+    print_header_value!(
+        "Relocation table size",
+        exe_header.mz_header.relocation_items as usize * std::mem::size_of::<Relocation>()
+    );
+    print_header_value!(
+        "Calculated file size",
+        exe_header.mz_header.file_size_in_bytes()
+    );
+    println!();
+
+    print_mz_header(&exe_header.mz_header);
+
+    // Read the relocation table.
+    let mut relocation_table: Vec<Relocation> =
+        Vec::with_capacity(exe_header.mz_header.relocation_items as usize);
+    relocation_table.resize(
+        exe_header.mz_header.relocation_items as usize,
+        Relocation::default(),
+    );
+    if let Err(err) = file.seek(SeekFrom::Start(
+        exe_header.mz_header.relocation_table.into(),
+    )) {
+        unsafe {
+            eprintln!(
+                "Invalid relocation table position! ({:04X}) ({})",
+                exe_header.mz_header.relocation_table, err
+            );
+        }
+        return;
+    }
+
+    let slice: &mut [u8] = unsafe {
         std::slice::from_raw_parts_mut(
-            &mut header as *mut _ as *mut u8,
-            std::mem::size_of::<MzHeader>(),
+            relocation_table.as_mut_slice() as *mut _ as *mut u8,
+            std::mem::size_of::<Relocation>() * exe_header.mz_header.relocation_items as usize,
         )
     };
 
-    if let Err(err) = file.read_exact(header_slice) {
-        eprintln!("Could not read binary file. ({})", err);
+    if let Err(err) = file.read_exact(slice) {
+        eprintln!("Could not read relocation table! ({})", err);
+        return;
     }
 
-    println!("{:<24}{}", "File", path);
-    println!("{:<24}{}", "Header size", header.header_size_in_bytes());
-    println!(
-        "{:<24}{}",
-        "Calculated file size",
-        header.file_size_in_bytes()
-    );
-    println!();
-    print_mz_header(&header);
+    if !relocation_table.is_empty() {
+        println!();
+        let offset = exe_header.mz_header.relocation_table;
+        println!("Relocation table: (offset {:04X})", offset);
+        for relocation in relocation_table {
+            let segment = relocation.segment;
+            let offset = relocation.offset;
+            println!("-  {:04X}:{:04X}", segment, offset);
+        }
+    }
 }

@@ -1,5 +1,16 @@
+use std::io::{Read, Seek, SeekFrom};
+
+/// Values for an entry in the relocation table.
+#[derive(Copy, Clone, Default)]
+#[repr(C, packed)]
+pub struct Relocation {
+    pub segment: u16,
+    pub offset: u16,
+}
+
 /// Describes the first bytes in a DOS .EXE file.
 /// Pages are 512 bytes in size.
+#[derive(Copy, Clone, Default)]
 #[repr(C, packed)]
 pub struct MzHeader {
     pub id: u16,                 // EXE Signature (should = "MZ")
@@ -16,7 +27,6 @@ pub struct MzHeader {
     pub initial_cs: u16,
     pub relocation_table: u16,
     pub overlay: u16,
-    // pub overlay_information: u16,
 }
 
 impl MzHeader {
@@ -31,6 +41,59 @@ impl MzHeader {
     }
 
     pub fn file_size_in_bytes(&self) -> u32 {
-        self.pages as u32 * 512 + self.extra_bytes as u32
+        (self.pages - 1) as u32 * 512u32 + self.extra_bytes as u32
+    }
+
+    pub fn code_offset(&self) -> u16 {
+        self.header_size_in_bytes()
+    }
+}
+
+pub struct ExeHeader {
+    pub mz_header: MzHeader,
+    pub relocation_table: Vec<Relocation>,
+}
+
+impl Default for ExeHeader {
+    fn default() -> Self {
+        Self {
+            mz_header: Default::default(),
+            relocation_table: Vec::new(),
+        }
+    }
+}
+
+impl ExeHeader {
+    pub fn new<R: Read + Seek>(reader: &mut R) -> Result<ExeHeader, std::io::Error> {
+        let mut exe_header = ExeHeader::default();
+
+        let header_slice = unsafe {
+            std::slice::from_raw_parts_mut(
+                &mut exe_header.mz_header as *mut _ as *mut u8,
+                std::mem::size_of::<MzHeader>(),
+            )
+        };
+
+        reader.read_exact(header_slice)?;
+
+        let relocation_table_items = exe_header.mz_header.relocation_items as usize;
+
+        exe_header
+            .relocation_table
+            .resize(relocation_table_items, Relocation::default());
+        reader.seek(SeekFrom::Start(
+            exe_header.mz_header.relocation_table.into(),
+        ))?;
+
+        let slice: &mut [u8] = unsafe {
+            std::slice::from_raw_parts_mut(
+                exe_header.relocation_table.as_mut_slice() as *mut _ as *mut u8,
+                std::mem::size_of::<Relocation>() * relocation_table_items,
+            )
+        };
+
+        reader.read_exact(slice)?;
+
+        Ok(exe_header)
     }
 }
