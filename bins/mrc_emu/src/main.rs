@@ -1,5 +1,6 @@
 mod cpu;
 mod memory;
+mod monitor;
 
 #[cfg(feature = "dos")]
 mod dos;
@@ -24,8 +25,8 @@ mod no_dos {
         physical_memory: &mut PhysicalMemory,
         file: &mut std::fs::File,
     ) -> std::io::Result<()> {
-        // Load 512 bytes from the beginning of the binary image to the last 515 bytes at the top of
-        // physical memory.
+        // Load 512 bytes from the beginning of the binary image to 0000:7C00 in physical memory,
+        // because that is where the cs:ip is pointing.  (0000:7C00)
         let start_position = segment_and_offset(0x0000, 0x7C00) as usize;
         let mut destination = &mut physical_memory.data[start_position..start_position + 512];
         if let Err(err) = file.read_exact(&mut destination) {
@@ -49,6 +50,8 @@ fn main() {
                 .takes_value(true),
         )
         .get_matches();
+
+    let monitor_handle = std::thread::spawn(monitor::run_loop);
 
     let mut physical_memory = PhysicalMemory::with_capacity(0xFFFFF);
 
@@ -80,4 +83,6 @@ fn main() {
     let memory_manager = Rc::new(RefCell::new(memory_manager));
 
     Cpu::new(memory_manager).start();
+
+    monitor_handle.join().unwrap();
 }

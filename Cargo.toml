@@ -3,7 +3,6 @@ members = [
     "bins/mrc_dis",
     "bins/mrc_emu",
     "bins/mz_inspect",
-    "bins/simple_cpu",
     "crates/mrc_decoder",
     "crates/mrc_dos",
     "crates/mrc_x86",

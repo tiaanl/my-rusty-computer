@@ -55,7 +55,7 @@ impl MemoryManager {
 
     pub fn map(&mut self, start: SegmentAndOffset, size: u32, interface: MemoryInterfaceRef) {
         self.interfaces.push(InterfaceContainer {
-            start: start.clone(),
+            start,
             size,
             interface,
         })

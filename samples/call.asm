@@ -2,6 +2,8 @@
         ORG     0x100
 
 start:
+        mov     ax, cs
+        mov     ds, ax
         call    add_one
         call    add_two
 
@@ -14,6 +16,10 @@ add_two:
         add     al, 2
         mov     [count], al
         ret
+
+exit:
+        mov     ax, 4C00h
+        int     21h
 
 count:
         db      0x01

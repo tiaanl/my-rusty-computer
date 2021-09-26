@@ -1,4 +1,5 @@
 use crate::memory::MemoryManager;
+use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
 use mrc_x86::{
     AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
@@ -62,29 +63,32 @@ impl<'a> Iterator for CpuIterator {
     }
 }
 
-//                              111111
-//                              5432109876543210
-const FLAG_SHIFT_CARRY: u16 = 1 << 0;
-const FLAG_SHIFT_PARITY: u16 = 1 << 2;
-const FLAG_SHIFT_AUX_CARRY: u16 = 1 << 4;
-const FLAG_SHIFT_ZERO: u16 = 1 << 6;
-const FLAG_SHIFT_SIGN: u16 = 1 << 7;
-const FLAG_SHIFT_TRAP: u16 = 1 << 8;
-const FLAG_SHIFT_INTERRUPT: u16 = 1 << 9;
-const FLAG_SHIFT_DIRECTION: u16 = 1 << 10;
-const FLAG_SHIFT_OVERFLOW: u16 = 1 << 11;
+bitflags! {
+    struct Flags : u16 {
+        const CARRY = 1 << 0;
+        const PARITY = 1 << 2;
+        const AUX_CARRY = 1 << 4;
+        const ZERO = 1 << 6;
+        const SIGN = 1 << 7;
+        const TRAP = 1 << 8;
+        const INTERRUPT = 1 << 9;
+        const DIRECTION = 1 << 10;
+        const OVERFLOW = 1 << 11;
+    }
+}
 
+/*
 struct Flags {
     value: u16,
 }
 
 impl Flags {
     fn new() -> Self {
-        Self { value: 0 }
+        Self { bits: 0 }
     }
 
-    fn set(&mut self, shift: u16) {
-        self.value |= shift;
+    fn set(&mut self, flag: Flags) {
+        self |= flag;
     }
 
     fn clear(&mut self, shift: u16) {
@@ -95,6 +99,7 @@ impl Flags {
         (self.value & shift) != 0
     }
 }
+*/
 
 pub struct Cpu {
     registers: [u16; 8],
@@ -105,13 +110,28 @@ pub struct Cpu {
     memory_manager: Rc<RefCell<MemoryManager>>,
 }
 
+impl Default for Cpu {
+    fn default() -> Self {
+        Self {
+            memory_manager: Rc::new(RefCell::new(MemoryManager::new())),
+            ..Default::default()
+        }
+    }
+}
+
 impl Cpu {
+    pub fn build() -> CpuBuilder {
+        CpuBuilder {
+            cpu: Default::default(),
+        }
+    }
+
     pub fn new(memory_manager: Rc<RefCell<MemoryManager>>) -> Self {
         let mut cpu = Self {
             registers: [0; 8],
             segments: [0; 4],
             ip: 0x0000,
-            flags: Flags::new(),
+            flags: Flags::empty(),
             memory_manager,
         };
 
@@ -129,7 +149,7 @@ impl Cpu {
             cpu.segments[SEG_SS] = 0x0000;
             cpu.segments[SEG_DS] = 0x0000;
             cpu.ip = 0x0100;
-            cpu.flags.set(FLAG_SHIFT_INTERRUPT);
+            cpu.flags |= Flags::INTERRUPT;
         } else {
             cpu.registers[REG_AX] = 0x0000;
             cpu.registers[REG_CX] = 0x00FF;
@@ -144,7 +164,7 @@ impl Cpu {
             cpu.segments[SEG_SS] = 0x0000;
             cpu.segments[SEG_DS] = 0x0000;
             cpu.ip = 0x7C00;
-            cpu.flags.set(FLAG_SHIFT_INTERRUPT);
+            cpu.flags |= Flags::INTERRUPT;
         }
 
         cpu
@@ -173,22 +193,29 @@ impl Cpu {
             self.segments[SEG_DS]
         );
         print!("IP: {:04X} flags:", self.ip);
-        print!(" C{}", self.flags.is_set(FLAG_SHIFT_CARRY) as u8);
-        print!(" P{}", self.flags.is_set(FLAG_SHIFT_PARITY) as u8);
-        print!(" A{}", self.flags.is_set(FLAG_SHIFT_AUX_CARRY) as u8);
-        print!(" Z{}", self.flags.is_set(FLAG_SHIFT_ZERO) as u8);
-        print!(" S{}", self.flags.is_set(FLAG_SHIFT_SIGN) as u8);
-        print!(" T{}", self.flags.is_set(FLAG_SHIFT_TRAP) as u8);
-        print!(" I{}", self.flags.is_set(FLAG_SHIFT_INTERRUPT) as u8);
-        print!(" D{}", self.flags.is_set(FLAG_SHIFT_DIRECTION) as u8);
-        println!(" O{}", self.flags.is_set(FLAG_SHIFT_OVERFLOW) as u8);
 
-        /*
+        macro_rules! print_flag {
+            ($name:ident,$flag:expr) => {{
+                print!(" {}{}", stringify!($name), self.flags.contains($flag) as u8);
+            }};
+        }
+
+        print_flag!(C, Flags::CARRY);
+        print_flag!(P, Flags::PARITY);
+        print_flag!(A, Flags::AUX_CARRY);
+        print_flag!(Z, Flags::ZERO);
+        print_flag!(S, Flags::SIGN);
+        print_flag!(T, Flags::TRAP);
+        print_flag!(I, Flags::INTERRUPT);
+        print_flag!(D, Flags::DIRECTION);
+        print_flag!(O, Flags::OVERFLOW);
+        println!();
+
         print!("stack: ");
         let ss = self.segments[SEG_SS];
         let sp = self.registers[REG_SP];
         let mut current = 0xFFFE;
-        loop {
+        for _ in 0..5 {
             if current <= sp {
                 break;
             }
@@ -196,17 +223,16 @@ impl Cpu {
                 .memory_manager
                 .borrow()
                 .read_u16(segment_and_offset(ss, current));
-            print!("{:#06X} ", value);
+            print!("{:04X} ", value);
             current -= 2;
         }
         println!();
-        */
     }
 
     pub fn start(&mut self) {
         self.print_registers();
 
-        loop {
+        for _ in 0..20 {
             let mut it = CpuIterator {
                 memory_manager: Rc::clone(&self.memory_manager),
                 position: segment_and_offset(self.segments[SEG_CS], self.ip),
@@ -215,6 +241,7 @@ impl Cpu {
             let start_position = it.position;
 
             // Print some bytes from memory.
+            /*
             print!("Bytes to decode: ");
             for i in 0..5 {
                 print!(
@@ -225,6 +252,7 @@ impl Cpu {
                 );
             }
             println!();
+            */
 
             match decode_instruction(&mut it) {
                 Ok(instruction) => {
@@ -273,26 +301,24 @@ impl Cpu {
                         let mut destination_value = self.get_byte_operand_value(destination);
                         let source_value = self.get_byte_operand_value(source);
                         destination_value = destination_value.wrapping_add(source_value);
-                        destination_value = destination_value.wrapping_add(
-                            if self.flags.is_set(FLAG_SHIFT_CARRY) {
+                        destination_value =
+                            destination_value.wrapping_add(if self.flags.contains(Flags::CARRY) {
                                 1
                             } else {
                                 0
-                            },
-                        );
+                            });
                         self.set_byte_operand_value(destination, destination_value);
                     }
                     OperandSize::Word => {
                         let mut destination_value = self.get_word_operand_value(destination);
                         let source_value = self.get_word_operand_value(source);
                         destination_value = destination_value.wrapping_add(source_value);
-                        destination_value = destination_value.wrapping_add(
-                            if self.flags.is_set(FLAG_SHIFT_CARRY) {
+                        destination_value =
+                            destination_value.wrapping_add(if self.flags.contains(Flags::CARRY) {
                                 1
                             } else {
                                 0
-                            },
-                        );
+                            });
                         self.set_word_operand_value(destination, destination_value);
                     }
                 },
@@ -306,7 +332,7 @@ impl Cpu {
                             let source_value = self.get_byte_operand_value(source);
                             let destination_value = self.get_byte_operand_value(destination);
 
-                            self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+                            self.flags.remove(Flags::CARRY | Flags::CARRY);
 
                             let result = destination_value as i16 & source_value as i16;
                             self.set_byte_result_flags(result);
@@ -315,7 +341,7 @@ impl Cpu {
                             let source_value = self.get_word_operand_value(source);
                             let destination_value = self.get_word_operand_value(destination);
 
-                            self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
 
                             let result = destination_value as i32 & source_value as i32;
                             self.set_word_result_flags(result);
@@ -372,11 +398,11 @@ impl Cpu {
             },
 
             Operation::Cld => {
-                self.flags.clear(FLAG_SHIFT_DIRECTION);
+                self.flags.remove(Flags::DIRECTION);
             }
 
             Operation::Cli => {
-                self.flags.clear(FLAG_SHIFT_INTERRUPT);
+                self.flags.remove(Flags::INTERRUPT);
             }
 
             Operation::Dec => match &instruction.operands {
@@ -434,7 +460,7 @@ impl Cpu {
 
             Operation::Jbe => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
-                    if self.flags.is_set(FLAG_SHIFT_CARRY) && self.flags.is_set(FLAG_SHIFT_ZERO) {
+                    if self.flags.contains(Flags::CARRY | Flags::ZERO) {
                         self.displace_ip(displacement);
                     }
                 }
@@ -443,7 +469,7 @@ impl Cpu {
 
             Operation::Je => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
-                    if self.flags.is_set(FLAG_SHIFT_ZERO) {
+                    if self.flags.contains(Flags::ZERO) {
                         self.displace_ip(displacement);
                     }
                 }
@@ -463,7 +489,7 @@ impl Cpu {
 
             Operation::Jnbe => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
-                    if !self.flags.is_set(FLAG_SHIFT_CARRY) && !self.flags.is_set(FLAG_SHIFT_ZERO) {
+                    if !self.flags.contains(Flags::CARRY) && !self.flags.contains(Flags::ZERO) {
                         self.displace_ip(displacement);
                     }
                 }
@@ -472,7 +498,7 @@ impl Cpu {
 
             Operation::Jne => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
-                    if !self.flags.is_set(FLAG_SHIFT_ZERO) {
+                    if !self.flags.contains(Flags::ZERO) {
                         self.displace_ip(displacement);
                     }
                 }
@@ -520,7 +546,7 @@ impl Cpu {
                             let source_value = self.get_byte_operand_value(source);
                             let destination_value = self.get_byte_operand_value(destination);
 
-                            self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
 
                             let result = destination_value as i16 | source_value as i16;
                             self.set_byte_result_flags(result);
@@ -529,7 +555,7 @@ impl Cpu {
                             let source_value = self.get_word_operand_value(source);
                             let destination_value = self.get_word_operand_value(destination);
 
-                            self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
 
                             let result = destination_value as i32 | source_value as i32;
                             self.set_word_result_flags(result);
@@ -548,7 +574,7 @@ impl Cpu {
                             let source_value = self.get_byte_operand_value(source);
                             let destination_value = self.get_byte_operand_value(destination);
 
-                            self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
 
                             let result = destination_value as i16 ^ source_value as i16;
                             self.set_byte_result_flags(result);
@@ -557,7 +583,7 @@ impl Cpu {
                             let source_value = self.get_word_operand_value(source);
                             let destination_value = self.get_word_operand_value(destination);
 
-                            self.flags.clear(FLAG_SHIFT_OVERFLOW | FLAG_SHIFT_CARRY);
+                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
 
                             let result = destination_value as i32 ^ source_value as i32;
                             self.set_word_result_flags(result);
@@ -700,11 +726,11 @@ impl Cpu {
             Operation::Shr => todo!(),
 
             Operation::Std => {
-                self.flags.set(FLAG_SHIFT_DIRECTION);
+                self.flags.insert(Flags::DIRECTION);
             }
 
             Operation::Sti => {
-                self.flags.set(FLAG_SHIFT_INTERRUPT);
+                self.flags.insert(Flags::INTERRUPT);
             }
 
             _ => {
@@ -716,23 +742,17 @@ impl Cpu {
     }
 
     fn push_word(&mut self, value: u16) {
-        let ss = self.get_segment_value(SEG_SS);
-        let sp = self.get_word_register_value(&Register::AhSp);
+        let stack_pointer = self.get_stack_pointer();
         self.memory_manager
             .borrow_mut()
-            .write_u16(segment_and_offset(ss, sp), value);
-        self.set_word_register_value(&Register::AhSp, sp - 2);
+            .write_u16(stack_pointer, value);
+        self.adjust_stack_pointer(-2);
     }
 
     fn pop_word(&mut self) -> u16 {
-        let ss = self.get_segment_value(SEG_SS);
-        let sp = self.get_word_register_value(&Register::AhSp);
-        let value = self
-            .memory_manager
-            .borrow()
-            .read_u16(segment_and_offset(ss, sp + 2));
-        self.set_word_register_value(&Register::AhSp, sp + 2);
-        value
+        self.adjust_stack_pointer(2);
+        let stack_pointer = self.get_stack_pointer();
+        self.memory_manager.borrow().read_u16(stack_pointer)
     }
 
     fn get_indirect_addr(
@@ -972,15 +992,15 @@ impl Cpu {
 
     fn set_byte_result_flags(&mut self, result: i16) {
         if result == 0 {
-            self.flags.set(FLAG_SHIFT_ZERO);
+            self.flags.insert(Flags::ZERO);
         } else {
-            self.flags.clear(FLAG_SHIFT_ZERO);
+            self.flags.remove(Flags::ZERO);
         }
 
         if result & 0x80 != 0 {
-            self.flags.set(FLAG_SHIFT_SIGN);
+            self.flags.insert(Flags::SIGN);
         } else {
-            self.flags.clear(FLAG_SHIFT_SIGN);
+            self.flags.remove(Flags::SIGN);
         }
 
         // TODO: Set parity flag.
@@ -988,15 +1008,15 @@ impl Cpu {
 
     fn set_word_result_flags(&mut self, result: i32) {
         if result == 0 {
-            self.flags.set(FLAG_SHIFT_ZERO);
+            self.flags.insert(Flags::ZERO);
         } else {
-            self.flags.clear(FLAG_SHIFT_ZERO);
+            self.flags.remove(Flags::ZERO);
         }
 
         if result & 0x8000 != 0 {
-            self.flags.set(FLAG_SHIFT_SIGN);
+            self.flags.insert(Flags::SIGN);
         } else {
-            self.flags.clear(FLAG_SHIFT_SIGN);
+            self.flags.remove(Flags::SIGN);
         }
 
         // TODO: Set signed flag.
@@ -1013,5 +1033,84 @@ impl Cpu {
                 self.ip = ((self.ip as i32) + (*offset as i32)) as u16;
             }
         }
+    }
+
+    fn get_stack_pointer(&self) -> SegmentAndOffset {
+        let ss = self.get_segment_value(SEG_SS);
+        let sp = self.get_word_register_value(&Register::AhSp);
+        segment_and_offset(ss, sp)
+    }
+
+    fn adjust_stack_pointer(&mut self, offset: i16) {
+        let sp = self.get_word_register_value(&Register::AhSp);
+        let sp = (sp as i16).wrapping_add(offset) as u16;
+        self.set_word_register_value(&Register::AhSp, sp);
+    }
+}
+
+pub struct RegisterPack {
+    ax: u16,
+    bx: u16,
+    cx: u16,
+    dx: u16,
+    sp: u16,
+    bp: u16,
+    si: u16,
+    di: u16,
+}
+
+impl Default for RegisterPack {
+    fn default() -> Self {
+        Self {
+            ax: 0u16,
+            bx: 0u16,
+            cx: 0u16,
+            dx: 0u16,
+            sp: 0u16,
+            bp: 0u16,
+            si: 0u16,
+            di: 0u16,
+        }
+    }
+}
+
+pub struct CpuBuilder {
+    cpu: Cpu,
+}
+
+impl Default for CpuBuilder {
+    fn default() -> Self {
+        Self {
+            cpu: Cpu::new(Rc::new(RefCell::new(MemoryManager::new()))),
+        }
+    }
+}
+
+impl CpuBuilder {
+    pub fn with_registers(&mut self, register_pack: RegisterPack) -> &mut Self {
+        self.cpu.registers[REG_AX] = register_pack.ax;
+        self.cpu.registers[REG_BX] = register_pack.bx;
+        self.cpu.registers[REG_CX] = register_pack.cx;
+        self.cpu.registers[REG_DX] = register_pack.dx;
+
+        self.cpu.registers[REG_SP] = register_pack.sp;
+        self.cpu.registers[REG_BP] = register_pack.bp;
+        self.cpu.registers[REG_SI] = register_pack.si;
+        self.cpu.registers[REG_DI] = register_pack.di;
+
+        self
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_stack() {
+        Cpu::build().with_registers(RegisterPack {
+            ax: 0x0000,
+            ..Default::default()
+        });
     }
 }
