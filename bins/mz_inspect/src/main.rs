@@ -22,19 +22,6 @@ fn print_mz_header(header: &MzHeader) {
         }};
     }
 
-    /*
-     ($mand_1:expr, $mand_2:expr) => {
-        single_opt!($mand_1, $mand_2, "Default")
-    };
-    ($mand_1:expr, $mand_2:expr, $($opt:expr),*) => {
-        {
-            println!("1. {} 2. {}", $mand_1, $mand_2);
-            $(
-                println!("opt. {}", $opt);
-            )*
-        }
-    };     */
-
     print_values!(
         id,
         extra_bytes,
@@ -70,7 +57,7 @@ fn main() {
 
     let mut file = match std::fs::File::open(path) {
         Err(err) => {
-            eprintln!("Could not open file ({})", err);
+            eprintln!("Could not open file. ({})", err);
             return;
         }
         Ok(file) => file,
@@ -113,7 +100,7 @@ fn main() {
     )) {
         unsafe {
             eprintln!(
-                "Invalid relocation table position! ({:04X}) ({})",
+                "Invalid relocation table position. ({:04X}) ({})",
                 exe_header.mz_header.relocation_table, err
             );
         }
@@ -136,10 +123,16 @@ fn main() {
         println!();
         let offset = exe_header.mz_header.relocation_table;
         println!("Relocation table: (offset {:04X})", offset);
+        let mut row_length = 0;
         for relocation in relocation_table {
             let segment = relocation.segment;
             let offset = relocation.offset;
-            println!("-  {:04X}:{:04X}", segment, offset);
+            print!("{:04X}:{:04X} ", segment, offset);
+            row_length += 1;
+            if row_length >= 8 {
+                row_length = 0;
+                println!();
+            }
         }
     }
 }

@@ -8,6 +8,21 @@ use mrc_x86::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/*
+Memory areas:
+
+0x00000...0x003FF   1KiB            Real Mode IVT (Interrupt Vector Table)
+0x00400...0x004FF   256b            BDA (BIOS data area)
+0x00500...0x07BFF   ~30KiB          Conventional memory
+0x07C00...0x07DFF   512b            Your OS BootSector
+0x07E00...0x7FFFF   480.5KiB        Conventional memory
+0x80000...0x9FFFF   128KiB          Extended BIOS Data Area (EBDA)
+0xA0000...0xBFFFF   128KiB          Video display memory
+0xC0000...0xC7FFF   ~32KiB          Video BIOS
+0xC8000...0xEFFFF   ~160KiB         BIOS Expansions
+0xF0000...0xFFFFF   64KiB           Motherboard BIOS
+*/
+
 fn high_byte(word: u16) -> u8 {
     (word >> 8) as u8
 }
@@ -113,19 +128,16 @@ pub struct Cpu {
 impl Default for Cpu {
     fn default() -> Self {
         Self {
+            registers: [0; 8],
+            segments: [0; 4],
+            ip: 0,
+            flags: Flags::empty(),
             memory_manager: Rc::new(RefCell::new(MemoryManager::new())),
-            ..Default::default()
         }
     }
 }
 
 impl Cpu {
-    pub fn build() -> CpuBuilder {
-        CpuBuilder {
-            cpu: Default::default(),
-        }
-    }
-
     pub fn new(memory_manager: Rc<RefCell<MemoryManager>>) -> Self {
         let mut cpu = Self {
             registers: [0; 8],
@@ -1048,69 +1060,18 @@ impl Cpu {
     }
 }
 
-pub struct RegisterPack {
-    ax: u16,
-    bx: u16,
-    cx: u16,
-    dx: u16,
-    sp: u16,
-    bp: u16,
-    si: u16,
-    di: u16,
-}
-
-impl Default for RegisterPack {
-    fn default() -> Self {
-        Self {
-            ax: 0u16,
-            bx: 0u16,
-            cx: 0u16,
-            dx: 0u16,
-            sp: 0u16,
-            bp: 0u16,
-            si: 0u16,
-            di: 0u16,
-        }
-    }
-}
-
-pub struct CpuBuilder {
-    cpu: Cpu,
-}
-
-impl Default for CpuBuilder {
-    fn default() -> Self {
-        Self {
-            cpu: Cpu::new(Rc::new(RefCell::new(MemoryManager::new()))),
-        }
-    }
-}
-
-impl CpuBuilder {
-    pub fn with_registers(&mut self, register_pack: RegisterPack) -> &mut Self {
-        self.cpu.registers[REG_AX] = register_pack.ax;
-        self.cpu.registers[REG_BX] = register_pack.bx;
-        self.cpu.registers[REG_CX] = register_pack.cx;
-        self.cpu.registers[REG_DX] = register_pack.dx;
-
-        self.cpu.registers[REG_SP] = register_pack.sp;
-        self.cpu.registers[REG_BP] = register_pack.bp;
-        self.cpu.registers[REG_SI] = register_pack.si;
-        self.cpu.registers[REG_DI] = register_pack.di;
-
-        self
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::memory::PhysicalMemory;
 
     #[test]
     fn test_stack() {
-        Cpu::build().with_registers(RegisterPack {
-            ax: 0x0000,
-            ..Default::default()
-        });
+        let mut cpu = Cpu::default();
+        let physical_memory = PhysicalMemory::with_capacity(0x100);
+        cpu.memory_manager
+            .borrow_mut()
+            .map(0, 0xFF, Rc::new(RefCell::new(physical_memory)));
+        cpu.start();
     }
 }
