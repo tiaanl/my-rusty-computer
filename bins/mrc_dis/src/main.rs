@@ -36,9 +36,10 @@ fn main() {
         .version("0.1")
         .arg(
             Arg::with_name("binary")
-                .value_name("BINARY")
+                .value_name("binary")
                 .help("The binary file to disassemble.")
-                .takes_value(true),
+                .takes_value(true)
+                .required(true),
         )
         .get_matches();
 

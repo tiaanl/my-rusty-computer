@@ -1,4 +1,4 @@
-use crate::memory::MemoryManager;
+use crate::memory::{MemoryInterface, MemoryReader};
 use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
 use mrc_x86::{
@@ -63,23 +63,23 @@ const SEG_SS: usize = 0x2;
 const SEG_DS: usize = 0x3;
 
 #[derive(Clone)]
-struct CpuIterator {
-    memory_manager: Rc<RefCell<MemoryManager>>,
+struct CpuIterator<M: MemoryInterface> {
+    memory: Rc<RefCell<M>>,
     position: SegmentAndOffset,
 }
 
-impl<'a> Iterator for CpuIterator {
+impl<'a, M: MemoryInterface> Iterator for CpuIterator<M> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let byte = self.memory_manager.borrow().read_u8(self.position);
+        let byte = self.memory.borrow().read(self.position);
         self.position += 1;
         Some(byte)
     }
 }
 
 bitflags! {
-    struct Flags : u16 {
+    pub struct Flags : u16 {
         const CARRY = 1 << 0;
         const PARITY = 1 << 2;
         const AUX_CARRY = 1 << 4;
@@ -92,92 +92,48 @@ bitflags! {
     }
 }
 
-/*
-struct Flags {
-    value: u16,
-}
-
-impl Flags {
-    fn new() -> Self {
-        Self { bits: 0 }
-    }
-
-    fn set(&mut self, flag: Flags) {
-        self |= flag;
-    }
-
-    fn clear(&mut self, shift: u16) {
-        self.value &= !shift;
-    }
-
-    fn is_set(&self, shift: u16) -> bool {
-        (self.value & shift) != 0
-    }
-}
-*/
-
-pub struct Cpu {
-    registers: [u16; 8],
-    segments: [u16; 4],
+pub struct Cpu<M: MemoryInterface> {
+    pub registers: [u16; 8],
+    pub segments: [u16; 4],
     pub ip: u16,
-    flags: Flags,
+    pub flags: Flags,
 
-    memory_manager: Rc<RefCell<MemoryManager>>,
+    memory: MemoryReader<M>,
 }
 
-impl Default for Cpu {
-    fn default() -> Self {
-        Self {
-            registers: [0; 8],
-            segments: [0; 4],
-            ip: 0,
-            flags: Flags::empty(),
-            memory_manager: Rc::new(RefCell::new(MemoryManager::new())),
-        }
-    }
-}
-
-impl Cpu {
-    pub fn new(memory_manager: Rc<RefCell<MemoryManager>>) -> Self {
+impl<M: MemoryInterface> Cpu<M> {
+    pub fn new(memory_interface: M) -> Self {
         let mut cpu = Self {
             registers: [0; 8],
             segments: [0; 4],
             ip: 0x0000,
             flags: Flags::empty(),
-            memory_manager,
+            memory: MemoryReader::new(Rc::new(RefCell::new(memory_interface))),
         };
 
-        if cfg!(feature = "dos") {
-            cpu.registers[REG_AX] = 0x0000;
-            cpu.registers[REG_CX] = 0x00FF;
-            cpu.registers[REG_DX] = 0x01DD;
-            cpu.registers[REG_BX] = 0x0000;
-            cpu.registers[REG_BP] = 0x091C;
-            cpu.registers[REG_SP] = 0xFFFE; // Start at the top of the SS, because we grow down.
-            cpu.registers[REG_SI] = 0x0000;
-            cpu.registers[REG_DI] = 0x0000;
-            cpu.segments[SEG_ES] = 0x0000;
-            cpu.segments[SEG_CS] = 0x0000;
-            cpu.segments[SEG_SS] = 0x0000;
-            cpu.segments[SEG_DS] = 0x0000;
-            cpu.ip = 0x0100;
-            cpu.flags |= Flags::INTERRUPT;
-        } else {
-            cpu.registers[REG_AX] = 0x0000;
-            cpu.registers[REG_CX] = 0x00FF;
-            cpu.registers[REG_DX] = 0x01DD;
-            cpu.registers[REG_BX] = 0x0000;
-            cpu.registers[REG_BP] = 0x091C;
-            cpu.registers[REG_SP] = 0xFFFE; // Start at the top of the SS, because we grow down.
-            cpu.registers[REG_SI] = 0x0000;
-            cpu.registers[REG_DI] = 0x0000;
-            cpu.segments[SEG_ES] = 0x0000;
-            cpu.segments[SEG_CS] = 0x0000;
-            cpu.segments[SEG_SS] = 0x0000;
-            cpu.segments[SEG_DS] = 0x0000;
-            cpu.ip = 0x7C00;
-            cpu.flags |= Flags::INTERRUPT;
-        }
+        // if cfg!(feature = "dos") {
+        //     cpu.registers[REG_AX] = 0x0000;
+        //     cpu.registers[REG_CX] = 0x00FF;
+        //     cpu.registers[REG_DX] = 0x01DD;
+        //     cpu.registers[REG_BX] = 0x0000;
+        //     cpu.registers[REG_BP] = 0x091C;
+        //     cpu.registers[REG_SP] = 0xFFFE; // Start at the top of the SS, because we grow down.
+        //     cpu.registers[REG_SI] = 0x0000;
+        //     cpu.registers[REG_DI] = 0x0000;
+        //     cpu.segments[SEG_ES] = 0x0000;
+        //     cpu.segments[SEG_CS] = 0x0000;
+        //     cpu.segments[SEG_SS] = 0x0000;
+        //     cpu.segments[SEG_DS] = 0x0000;
+        //     cpu.ip = 0x0100;
+        //     cpu.flags |= Flags::INTERRUPT;
+        // } else {
+        cpu.segments[SEG_ES] = 0x0000;
+        cpu.segments[SEG_CS] = 0xF000;
+        cpu.segments[SEG_SS] = 0x0000;
+        cpu.segments[SEG_DS] = 0x0000;
+        cpu.ip = 0xFFF0;
+        cpu.flags |= Flags::INTERRUPT;
+        // }
 
         cpu
     }
@@ -231,10 +187,7 @@ impl Cpu {
             if current <= sp {
                 break;
             }
-            let value = self
-                .memory_manager
-                .borrow()
-                .read_u16(segment_and_offset(ss, current));
+            let value = self.memory.read_u16(segment_and_offset(ss, current));
             print!("{:04X} ", value);
             current -= 2;
         }
@@ -244,27 +197,24 @@ impl Cpu {
     pub fn start(&mut self) {
         self.print_registers();
 
-        for _ in 0..20 {
+        for _ in 0..50 {
             let mut it = CpuIterator {
-                memory_manager: Rc::clone(&self.memory_manager),
+                memory: self.memory.interface(),
                 position: segment_and_offset(self.segments[SEG_CS], self.ip),
             };
 
             let start_position = it.position;
 
             // Print some bytes from memory.
-            /*
             print!("Bytes to decode: ");
             for i in 0..5 {
                 print!(
                     "{:02X} ",
-                    self.memory_manager
-                        .borrow()
+                    self.memory
                         .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
                 );
             }
             println!();
-            */
 
             match decode_instruction(&mut it) {
                 Ok(instruction) => {
@@ -433,6 +383,11 @@ impl Cpu {
                 _ => panic!(),
             },
 
+            Operation::Hlt => {
+                println!("HALT");
+                return Err(());
+            }
+
             Operation::Inc => match &instruction.operands {
                 OperandSet::Destination(destination) => match destination.1 {
                     OperandSize::Byte => {
@@ -499,6 +454,15 @@ impl Cpu {
                 _ => panic!("Illegal operands! {:?}", &instruction.operands),
             },
 
+            Operation::Jnb => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if self.flags.contains(Flags::CARRY) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
             Operation::Jnbe => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
                     if !self.flags.contains(Flags::CARRY) && !self.flags.contains(Flags::ZERO) {
@@ -516,6 +480,11 @@ impl Cpu {
                 }
                 _ => panic!(),
             },
+
+            Operation::Lahf => {
+                let bytes = self.flags.bits.to_le_bytes();
+                self.set_byte_register_value(&Register::AhSp, bytes[0]);
+            }
 
             Operation::Lea => match &instruction.operands {
                 OperandSet::DestinationAndSource(
@@ -646,14 +615,9 @@ impl Cpu {
                     let si = self.get_word_register_value(&Register::DhSi);
                     let di = self.get_word_register_value(&Register::BhDi);
 
-                    let byte = self
-                        .memory_manager
-                        .borrow()
-                        .read_u8(segment_and_offset(ds, si));
+                    let byte = self.memory.read_u8(segment_and_offset(ds, si));
 
-                    self.memory_manager
-                        .borrow_mut()
-                        .write_u8(segment_and_offset(es, di), byte);
+                    self.memory.write_u8(segment_and_offset(es, di), byte);
 
                     self.set_word_register_value(&Register::DhSi, si + 1);
                     self.set_word_register_value(&Register::BhDi, di + 1);
@@ -677,14 +641,9 @@ impl Cpu {
                     let si = self.get_word_register_value(&Register::DhSi);
                     let di = self.get_word_register_value(&Register::BhDi);
 
-                    let word = self
-                        .memory_manager
-                        .borrow()
-                        .read_u16(segment_and_offset(ds, si));
+                    let word = self.memory.read_u16(segment_and_offset(ds, si));
 
-                    self.memory_manager
-                        .borrow_mut()
-                        .write_u16(segment_and_offset(es, di), word);
+                    self.memory.write_u16(segment_and_offset(es, di), word);
 
                     self.set_word_register_value(&Register::DhSi, si + 2);
                     self.set_word_register_value(&Register::BhDi, di + 2);
@@ -711,6 +670,11 @@ impl Cpu {
             Operation::Rol => todo!(),
 
             Operation::Ror => todo!(),
+
+            Operation::Sahf => {
+                let bytes = self.get_word_register_value(&Register::AlAx).to_le_bytes();
+                self.flags.bits = u16::from_le_bytes(bytes);
+            }
 
             Operation::Sar => todo!(),
 
@@ -755,16 +719,14 @@ impl Cpu {
 
     fn push_word(&mut self, value: u16) {
         let stack_pointer = self.get_stack_pointer();
-        self.memory_manager
-            .borrow_mut()
-            .write_u16(stack_pointer, value);
+        self.memory.write_u16(stack_pointer, value);
         self.adjust_stack_pointer(-2);
     }
 
     fn pop_word(&mut self) -> u16 {
         self.adjust_stack_pointer(2);
         let stack_pointer = self.get_stack_pointer();
-        self.memory_manager.borrow().read_u16(stack_pointer)
+        self.memory.read_u16(stack_pointer)
     }
 
     fn get_indirect_addr(
@@ -832,12 +794,11 @@ impl Cpu {
                 // Get a single byte from DS:offset
                 let ds = self.get_segment_value(SEG_DS);
                 let addr = segment_and_offset(ds, *offset);
-                self.memory_manager.borrow().read_u8(addr)
+                self.memory.read_u8(addr)
             }
 
             OperandType::Indirect(addressing_mode, displacement) => self
-                .memory_manager
-                .borrow()
+                .memory
                 .read_u8(self.get_indirect_addr(addressing_mode, displacement)),
 
             OperandType::Register(ref register) => self.get_byte_register_value(register),
@@ -857,12 +818,11 @@ impl Cpu {
                 let ds = self.get_segment_value(SEG_DS);
                 let addr = segment_and_offset(ds, *offset);
 
-                self.memory_manager.borrow().read_u16(addr)
+                self.memory.read_u16(addr)
             }
 
             OperandType::Indirect(addressing_mode, displacement) => self
-                .memory_manager
-                .borrow()
+                .memory
                 .read_u16(self.get_indirect_addr(addressing_mode, displacement)),
 
             OperandType::Register(ref register) => self.get_word_register_value(register),
@@ -884,13 +844,10 @@ impl Cpu {
         match &operand.0 {
             OperandType::Direct(offset) => {
                 let ds = self.get_segment_value(SEG_DS);
-                self.memory_manager
-                    .borrow_mut()
-                    .write_u8(segment_and_offset(ds, *offset), value);
+                self.memory.write_u8(segment_and_offset(ds, *offset), value);
             }
             OperandType::Indirect(addressing_mode, displacement) => {
-                self.memory_manager
-                    .borrow_mut()
+                self.memory
                     .write_u8(self.get_indirect_addr(addressing_mode, displacement), value);
             }
             OperandType::Register(register) => self.set_byte_register_value(&register, value),
@@ -903,13 +860,11 @@ impl Cpu {
         match &operand.0 {
             OperandType::Direct(offset) => {
                 let ds = self.get_segment_value(SEG_DS);
-                self.memory_manager
-                    .borrow_mut()
+                self.memory
                     .write_u16(segment_and_offset(ds, *offset), value);
             }
             OperandType::Indirect(addressing_mode, displacement) => {
-                self.memory_manager
-                    .borrow_mut()
+                self.memory
                     .write_u16(self.get_indirect_addr(addressing_mode, displacement), value);
             }
             OperandType::Register(register) => self.set_word_register_value(&register, value),
@@ -1067,11 +1022,61 @@ mod test {
 
     #[test]
     fn test_stack() {
-        let mut cpu = Cpu::default();
-        let physical_memory = PhysicalMemory::with_capacity(0x100);
-        cpu.memory_manager
-            .borrow_mut()
-            .map(0, 0xFF, Rc::new(RefCell::new(physical_memory)));
-        cpu.start();
+        let memory = PhysicalMemory::with_capacity(0x100);
+        let mut cpu = Cpu::new(memory);
+
+        cpu.segments[SEG_SS] = 0x0000;
+        cpu.registers[REG_AX] = 0x1010;
+        cpu.registers[REG_SP] = 0x0010;
+
+        // push ax
+        let result = cpu.execute(&Instruction::new(
+            Operation::Push,
+            OperandSet::Destination(Operand(
+                OperandType::Register(Register::AlAx),
+                OperandSize::Word,
+            )),
+        ));
+
+        assert_eq!(Ok(()), result);
+        assert_eq!(0x000E, cpu.registers[REG_SP]);
+        assert_eq!(
+            0x1010,
+            cpu.memory.read_u16(segment_and_offset(0x0000, 0x0010))
+        );
+
+        // pop bx
+        let result = cpu.execute(&Instruction::new(
+            Operation::Pop,
+            OperandSet::Destination(Operand(
+                OperandType::Register(Register::BlBx),
+                OperandSize::Word,
+            )),
+        ));
+
+        assert_eq!(Ok(()), result);
+        assert_eq!(0x0010, cpu.registers[REG_SP]);
+        assert_eq!(0x1010, cpu.registers[REG_BX]);
+    }
+
+    #[test]
+    fn test_lahf_sahf() {
+        let memory = PhysicalMemory::with_capacity(0x100);
+        let mut cpu = Cpu::new(memory);
+
+        // EFLAGS(SF:ZF:0:AF:0:PF:1:CF) <- AH
+
+        cpu.registers[REG_AX] = 0x0000;
+        cpu.flags = Flags::SIGN | Flags::ZERO | Flags::AUX_CARRY | Flags::PARITY | Flags::CARRY;
+        assert_eq!(0xD5, cpu.flags.bits);
+
+        let sahf = Instruction::new(Operation::Lahf, OperandSet::None);
+        cpu.execute(&sahf).unwrap();
+        assert_eq!(0x00D5, cpu.flags.bits);
+
+        cpu.registers[REG_AX] = 0x0000;
+        let sahf = Instruction::new(Operation::Sahf, OperandSet::None);
+        cpu.execute(&sahf).unwrap();
+        assert_eq!(0x0000, cpu.flags.bits);
     }
 }
