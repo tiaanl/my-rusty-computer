@@ -28,13 +28,13 @@ pub enum Operation {
     Div,
     Esc,
     Hlt,
-    IRet,
     Idiv,
     Imul,
     In,
     Inc,
     Int,
     Into,
+    Iret,
     Jb,
     Jbe,
     Jcxz,
@@ -79,10 +79,10 @@ pub enum Operation {
     Rcl,
     Rcr,
     Ret,
-    Retf,
     Rol,
     Ror,
     Sahf,
+    Salc, // Undocumented
     Sar,
     Sbb,
     Scasb,
@@ -193,6 +193,7 @@ impl Instruction {
             lock: false,
         }
     }
+
     pub fn with_segment_override(
         segment: Segment,
         operation: Operation,
@@ -203,6 +204,16 @@ impl Instruction {
             operands,
             segment_override: Some(segment),
             repeat: None,
+            lock: false,
+        }
+    }
+
+    pub fn with_repeat(repeat: Repeat, operation: Operation, operands: OperandSet) -> Self {
+        Self {
+            operation,
+            operands,
+            segment_override: None,
+            repeat: Some(repeat),
             lock: false,
         }
     }
