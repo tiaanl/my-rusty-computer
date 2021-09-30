@@ -192,4 +192,17 @@ impl Instruction {
             lock: false,
         }
     }
+    pub fn with_segment_override(
+        segment: Segment,
+        operation: Operation,
+        operands: OperandSet,
+    ) -> Self {
+        Self {
+            operation,
+            operands,
+            segment_override: Some(segment),
+            repeat: None,
+            lock: false,
+        }
+    }
 }
