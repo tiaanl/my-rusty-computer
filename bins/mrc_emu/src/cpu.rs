@@ -80,15 +80,15 @@ impl<'a, M: MemoryInterface> Iterator for CpuIterator<M> {
 
 bitflags! {
     pub struct Flags : u16 {
-        const CARRY = 1 << 0;
-        const PARITY = 1 << 2;
-        const AUX_CARRY = 1 << 4;
-        const ZERO = 1 << 6;
-        const SIGN = 1 << 7;
-        const TRAP = 1 << 8;
-        const INTERRUPT = 1 << 9;
-        const DIRECTION = 1 << 10;
-        const OVERFLOW = 1 << 11;
+        const CARRY = 1 << 0;       // 0x
+        const PARITY = 1 << 2;      // 1
+        const AUX_CARRY = 1 << 4;   // 2x
+        const ZERO = 1 << 6;        // 3
+        const SIGN = 1 << 7;        // 4x
+        const TRAP = 1 << 8;        // 5
+        const INTERRUPT = 1 << 9;   // 6x
+        const DIRECTION = 1 << 10;  // 7x
+        const OVERFLOW = 1 << 11;   // 8
     }
 }
 
@@ -672,8 +672,8 @@ impl<M: MemoryInterface> Cpu<M> {
             Operation::Ror => todo!(),
 
             Operation::Sahf => {
-                let bytes = self.get_word_register_value(&Register::AlAx).to_le_bytes();
-                self.flags.bits = u16::from_le_bytes(bytes);
+                let ah = self.get_byte_register_value(&Register::AhSp);
+                self.flags.bits = u16::from_le_bytes([ah, 0]);
             }
 
             Operation::Sar => todo!(),
@@ -877,14 +877,14 @@ impl<M: MemoryInterface> Cpu<M> {
         use Register::*;
 
         let byte: u8 = match register {
-            AlAx => self.registers[REG_AX] & 0x00FF,
-            ClCx => self.registers[REG_CX] & 0x00FF,
-            DlDx => self.registers[REG_DX] & 0x00FF,
-            BlBx => self.registers[REG_BX] & 0x00FF,
-            AhSp => self.registers[REG_AX] & 0xFF00,
-            ChBp => self.registers[REG_CX] & 0xFF00,
-            DhSi => self.registers[REG_BX] & 0xFF00,
-            BhDi => self.registers[REG_BX] & 0xFF00,
+            AlAx => self.registers[REG_AX].to_le_bytes()[0],
+            ClCx => self.registers[REG_CX].to_le_bytes()[0],
+            DlDx => self.registers[REG_DX].to_le_bytes()[0],
+            BlBx => self.registers[REG_BX].to_le_bytes()[0],
+            AhSp => self.registers[REG_AX].to_le_bytes()[1],
+            ChBp => self.registers[REG_CX].to_le_bytes()[1],
+            DhSi => self.registers[REG_DX].to_le_bytes()[1],
+            BhDi => self.registers[REG_BX].to_le_bytes()[1],
         } as u8;
         byte
     }
@@ -910,23 +910,47 @@ impl<M: MemoryInterface> Cpu<M> {
         let word_value = value as u16;
 
         match register {
-            AlAx => self.registers[REG_AX] = (self.registers[REG_AX] & 0xFF00) + word_value,
-            ClCx => self.registers[REG_CX] = (self.registers[REG_CX] & 0xFF00) + word_value,
-            DlDx => self.registers[REG_DX] = (self.registers[REG_DX] & 0xFF00) + word_value,
-            BlBx => self.registers[REG_BX] = (self.registers[REG_BX] & 0xFF00) + word_value,
+            AlAx => {
+                let mut bytes = self.registers[REG_AX].to_le_bytes();
+                bytes[0] = value;
+                self.registers[REG_AX] = u16::from_le_bytes(bytes);
+            }
+            ClCx => {
+                let mut bytes = self.registers[REG_CX].to_le_bytes();
+                bytes[0] = value;
+                self.registers[REG_CX] = u16::from_le_bytes(bytes);
+            }
+            DlDx => {
+                let mut bytes = self.registers[REG_DX].to_le_bytes();
+                bytes[0] = value;
+                self.registers[REG_DX] = u16::from_le_bytes(bytes);
+            }
+            BlBx => {
+                let mut bytes = self.registers[REG_BX].to_le_bytes();
+                bytes[0] = value;
+                self.registers[REG_BX] = u16::from_le_bytes(bytes);
+            }
             AhSp => {
-                self.registers[REG_AX] = (self.registers[REG_AX] & 0x00ff) + (word_value << 0x08)
+                let mut bytes = self.registers[REG_AX].to_le_bytes();
+                bytes[1] = value;
+                self.registers[REG_AX] = u16::from_le_bytes(bytes);
             }
             ChBp => {
-                self.registers[REG_CX] = (self.registers[REG_CX] & 0x00ff) + (word_value << 0x08)
+                let mut bytes = self.registers[REG_CX].to_le_bytes();
+                bytes[1] = value;
+                self.registers[REG_CX] = u16::from_le_bytes(bytes);
             }
             DhSi => {
-                self.registers[REG_DX] = (self.registers[REG_DX] & 0x00ff) + (word_value << 0x08)
+                let mut bytes = self.registers[REG_DX].to_le_bytes();
+                bytes[1] = value;
+                self.registers[REG_DX] = u16::from_le_bytes(bytes);
             }
             BhDi => {
-                self.registers[REG_BX] = (self.registers[REG_BX] & 0x00ff) + (word_value << 0x08)
+                let mut bytes = self.registers[REG_BX].to_le_bytes();
+                bytes[1] = value;
+                self.registers[REG_BX] = u16::from_le_bytes(bytes);
             }
-        }
+        };
     }
 
     fn set_word_register_value(&mut self, register: &Register, value: u16) {
