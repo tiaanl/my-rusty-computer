@@ -1,0 +1,9 @@
+[package]
+name = "gen-test-bin"
+version = "0.0.1"
+edition = "2018"
+
+[dependencies]
+byteorder = "1.4.3"
+rand = "0.8.4"
+rand_chacha = "0.3.1"

@@ -935,7 +935,7 @@ mod test {
     use crate::modrm::RegisterOrMemory;
     use crate::Modrm;
     use mrc_x86::{
-        Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register,
+        Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
     };
 
     struct TestIterator {
@@ -977,10 +977,8 @@ mod test {
 
     #[test]
     fn test_00() {
-        let modrm = Modrm::new(Register::AlAx, RegisterOrMemory::Register(Register::BlBx));
-
         test_decoder!(
-            &[0x00, modrm.as_byte()],
+            &[0x00, 0xC3],
             Instruction::new(
                 Operation::Add,
                 OperandSet::DestinationAndSource(
@@ -993,10 +991,8 @@ mod test {
 
     #[test]
     fn test_01() {
-        let modrm = Modrm::new(Register::AlAx, RegisterOrMemory::Register(Register::BlBx));
-
         test_decoder!(
-            &[0x01, modrm.as_byte()],
+            &[0x01, 0xC3],
             Instruction::new(
                 Operation::Add,
                 OperandSet::DestinationAndSource(
@@ -1009,10 +1005,8 @@ mod test {
 
     #[test]
     fn test_02() {
-        let modrm = Modrm::new(Register::AlAx, RegisterOrMemory::Register(Register::BlBx));
-
         test_decoder!(
-            &[0x02, modrm.as_byte()],
+            &[0x02, 0xC3],
             Instruction::new(
                 Operation::Add,
                 OperandSet::DestinationAndSource(
@@ -1025,15 +1019,97 @@ mod test {
 
     #[test]
     fn test_03() {
-        let modrm = Modrm::new(Register::AlAx, RegisterOrMemory::Register(Register::BlBx));
-
         test_decoder!(
-            &[0x03, modrm.as_byte()],
+            &[0x03, 0xC3], // add ax, bx
             Instruction::new(
                 Operation::Add,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_04() {
+        test_decoder!(
+            &[0x04, 0x08], // add al, 0x8
+            Instruction::new(
+                Operation::Add,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
+                    Operand(OperandType::Immediate(8), OperandSize::Byte),
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_05() {
+        test_decoder!(
+            &[0x05, 0xC3, 0xE4], // add ax, 0xe4c3
+            Instruction::new(
+                Operation::Add,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
+                    Operand(OperandType::Immediate(0xE4C3), OperandSize::Word),
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_06() {
+        test_decoder!(
+            &[0x06], // push es
+            Instruction::new(
+                Operation::Push,
+                OperandSet::Destination(Operand(
+                    OperandType::Segment(Segment::Es),
+                    OperandSize::Word
+                ))
+            )
+        );
+    }
+
+    #[test]
+    fn test_07() {
+        test_decoder!(
+            &[0x07], // pop es
+            Instruction::new(
+                Operation::Pop,
+                OperandSet::Destination(Operand(
+                    OperandType::Segment(Segment::Es),
+                    OperandSize::Word
+                ))
+            )
+        );
+    }
+
+    #[test]
+    fn test_08() {
+        test_decoder!(
+            &[0x08, 0xc3, 0xe4], // or bl, al
+            Instruction::new(
+                Operation::Or,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::BlBx), OperandSize::Byte),
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Byte)
+                )
+            )
+        );
+    }
+
+    #[test]
+    fn test_09() {
+        test_decoder!(
+            &[0x09, 0xc3, 0xe4], // or bl, al
+            Instruction::new(
+                Operation::Or,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Word)
                 )
             )
         );
