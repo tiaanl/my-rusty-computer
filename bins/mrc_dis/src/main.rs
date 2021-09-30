@@ -7,13 +7,13 @@ use std::io::{ErrorKind, Read};
 struct SegmentAndOffset(u16, u16);
 
 trait ToSegmentAndOffset {
-    fn to_segment_and_offset(&self, segment: u16) -> SegmentAndOffset;
+    fn relative_to(&self, segment_and_offset: &SegmentAndOffset) -> SegmentAndOffset;
 }
 
 impl ToSegmentAndOffset for u32 {
-    fn to_segment_and_offset(&self, segment: u16) -> SegmentAndOffset {
-        let offset = self & !((segment as u32) << 4);
-        SegmentAndOffset(segment, offset as u16)
+    fn relative_to(&self, segment_and_offset: &SegmentAndOffset) -> SegmentAndOffset {
+        let offset = (self & !((segment_and_offset.0 as u32) << 4)) + segment_and_offset.1 as u32;
+        SegmentAndOffset(segment_and_offset.0, offset as u16)
     }
 }
 
@@ -113,15 +113,11 @@ fn print_section(section: &Section) {
             Ok(instruction) => {
                 let bytes_used = it.position - start;
                 let bytes = &section.data[(start as usize)..(start + bytes_used) as usize];
-                print_instruction(
-                    start.to_segment_and_offset(section.addr.0),
-                    bytes,
-                    &instruction,
-                );
+                print_instruction(start.relative_to(&section.addr), bytes, &instruction);
             }
             Err(_) => {
                 print_data_byte(
-                    start.to_segment_and_offset(section.addr.0),
+                    start.relative_to(&section.addr),
                     section.data[start as usize],
                 );
             }
@@ -167,7 +163,7 @@ fn main() {
     }
 
     // Create a section of the whole file.
-    let section = Section::new(SegmentAndOffset(0x0100, 0x0000), &data.data[..]);
+    let section = Section::new(SegmentAndOffset(0x1000, 0x0100), &data.data[..]);
 
     print_section(&section);
 }
