@@ -3,7 +3,7 @@ use crate::errors::Result;
 use crate::{it_read_byte, it_read_word, operations, Error, LowBitsDecoder, Modrm};
 use mrc_x86::{
     Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register,
-    Repeat, Segment,
+    Segment,
 };
 
 pub type DecodeFn<It> = fn(u8, &mut It) -> Result<Instruction>;
@@ -85,38 +85,26 @@ fn immediate_operand_from_it<It: Iterator<Item = u8>>(
 ) -> Result<Operand> {
     match operand_size {
         OperandSize::Byte => {
-            let immediate = match it_read_byte(it) {
-                Some(value) => value,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let immediate = it_read_byte(it)?;
             Ok(Operand(
                 OperandType::Immediate(immediate as u16),
                 operand_size,
             ))
         }
         OperandSize::Word => {
-            let immediate = match it_read_word(it) {
-                Some(value) => value,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let immediate = it_read_word(it)?;
             Ok(Operand(OperandType::Immediate(immediate), operand_size))
         }
     }
 }
 
 fn displacement_byte_from_it<It: Iterator<Item = u8>>(it: &mut It) -> Result<OperandSet> {
-    let displacement = match it_read_byte(it) {
-        Some(value) => value,
-        None => return Err(Error::CouldNotReadExtraBytes),
-    } as i8;
+    let displacement = it_read_byte(it)? as i8;
     Ok(OperandSet::Displacement(Displacement::Byte(displacement)))
 }
 
 fn displacement_word_from_it<It: Iterator<Item = u8>>(it: &mut It) -> Result<OperandSet> {
-    let displacement = match it_read_word(it) {
-        Some(value) => value,
-        None => return Err(Error::CouldNotReadExtraBytes),
-    } as i16;
+    let displacement = it_read_word(it)? as i16;
     Ok(OperandSet::Displacement(Displacement::Word(displacement)))
 }
 
@@ -165,7 +153,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
                 0b001 => Operation::Das,
                 0b010 => Operation::Aaa,
                 0b011 => Operation::Aas,
-                _ => unreachable!(),
+                _ => return Err(Error::InvalidOpCode(op_code)),
             }, OperandSet::None))
         }
         
@@ -247,10 +235,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         0x8C | 0x8E => {
             let operand_size = OperandSize::Word;
             let direction = op_code >> 1 & 0b1;
-            let modrm_byte = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
@@ -365,9 +350,19 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             )))
         }
         
-        0xAA | 0xAB | 0xAC | 0xAD | 0xAE | 0xAF => {
-            todo!()
+        0xAA | 0xAB => {
+            let operand_size = OperandSize::try_from_low_bits(op_code >> 3 & 0b1)?;
+            Ok(Instruction::new(
+                Operation::Stos,
+                OperandSet::Destination(
+                    Operand(OperandType::Register(Register::AlAx), operand_size)
+                ),
+            ))
         }
+
+        // 0xAC | 0xAD | 0xAE | 0xAF => {
+        //     todo!()
+        // }
         
         0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB6 | 0xB7 | 0xB8 | 0xB9 | 0xBA | 0xBB | 0xBC | 0xBD | 0xBE | 0xBF => {
             let operand_size = OperandSize::try_from_low_bits(op_code >> 3 & 0b1)?;
@@ -378,17 +373,11 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             );
             let source = match operand_size {
                 OperandSize::Byte => {
-                    let immediate = match it_read_byte(it) {
-                        Some(value) => value,
-                        None => return Err(Error::CouldNotReadExtraBytes)
-                    };
+                    let immediate = it_read_byte(it)?;
                     Operand(OperandType::Immediate(immediate as u16), operand_size)
                 }
                 OperandSize::Word => {
-                    let immediate = match it_read_word(it) {
-                        Some(value) => value,
-                        None => return Err(Error::CouldNotReadExtraBytes)
-                    };
+                    let immediate = it_read_word(it)?;
                     Operand(OperandType::Immediate(immediate), operand_size)
                 }
             };
@@ -402,10 +391,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         0xC0 | 0xC1 => {
             // Not a typical `operand_size`.
             let operand_size = OperandSize::try_from_low_bits((op_code >> 3) & 0b1)?;
-            let modrm_byte = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
@@ -417,12 +403,19 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
         
-        0xC2 | 0xC3 => {
+        0xC2 => {
             Ok(Instruction::new(
                 Operation::Ret,
                 OperandSet::Destination(
                     immediate_operand_from_it(it, OperandSize::Word)?,
                 ),
+            ))
+        }
+
+        0xC3 => {
+            Ok(Instruction::new(
+                Operation::Ret,
+                OperandSet::None,
             ))
         }
         
@@ -444,10 +437,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0xC6 | 0xC7 => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-            let modrm_byte = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
             
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
@@ -480,10 +470,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         }
 
         0xCD => {
-            let code = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes)
-            };
+            let code = it_read_byte(it)?;
             Ok(Instruction::new(
                 Operation::Int,
                 OperandSet::Destination(
@@ -501,10 +488,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         
         0xD0 | 0xD1 | 0xD2 | 0xD3 => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-            let modrm_byte = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
@@ -565,10 +549,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         0xE4 | 0xE5 => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
             
-            let port = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let port = it_read_byte(it)?;
             
             Ok(Instruction::new(
                 Operation::In,
@@ -582,10 +563,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         0xE6 | 0xE7 => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
             
-            let port = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let port = it_read_byte(it)?;
             
             Ok(Instruction::new(
                 Operation::Out,
@@ -611,14 +589,8 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         }
         
         0xEA => {
-            let offset = match it_read_word(it) {
-                Some(word) => word,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
-            let segment = match it_read_word(it) {
-                Some(word) => word,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let offset = it_read_word(it)?;
+            let segment = it_read_word(it)?;
 
             Ok(Instruction::new(
                 Operation::Jmp,
@@ -679,10 +651,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0xF6 | 0xF7 => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-            let modrm_byte = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
             
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
@@ -705,10 +674,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         
         0xFE | 0xFF => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
-            let modrm_byte = match it_read_byte(it) {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
+            let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
@@ -732,6 +698,9 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         _ => Err(Error::InvalidOpCode(op_code)),
     };
 
+    maybe_instruction
+
+    /*
     if let Ok(instruction) = maybe_instruction {
         return Ok(instruction);
     }
@@ -1008,6 +977,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         _ => Err(Error::InvalidOpCode(op_code)),
     }
+    */
 }
 
 mod test {

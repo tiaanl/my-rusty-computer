@@ -70,6 +70,7 @@ version = "0.0.1"
 dependencies = [
  "clap",
  "mrc_decoder",
+ "mrc_x86",
 ]
 
 [[package]]

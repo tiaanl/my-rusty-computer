@@ -36,8 +36,6 @@ impl LowBitsDecoder<Register> for Register {
 
 impl LowBitsDecoder<Self> for Segment {
     fn try_from_low_bits(byte: u8) -> Result<Self> {
-        assert!(byte <= 0b11);
-
         match byte {
             0b00 => Ok(Self::Es),
             0b01 => Ok(Self::Cs),
@@ -71,14 +69,17 @@ impl ByteReader for &[u8] {
     }
 }
 
-fn it_read_byte<It: Iterator<Item = u8>>(it: &mut It) -> Option<u8> {
-    it.next()
+fn it_read_byte<It: Iterator<Item = u8>>(it: &mut It) -> Result<u8> {
+    match it.next() {
+        Some(byte) => Ok(byte),
+        None => Err(Error::CouldNotReadExtraBytes),
+    }
 }
 
-fn it_read_word<It: Iterator<Item = u8>>(it: &mut It) -> Option<u16> {
-    let first = it.next()?;
-    let second = it.next()?;
-    Some(((second as u16) << 8) + first as u16)
+fn it_read_word<It: Iterator<Item = u8>>(it: &mut It) -> Result<u16> {
+    let first = it_read_byte(it)?;
+    let second = it_read_byte(it)?;
+    Ok(u16::from_le_bytes([first, second]))
 }
 
 impl LowBitsDecoder<Self> for OperandSize {

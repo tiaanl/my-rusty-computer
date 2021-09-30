@@ -5,4 +5,5 @@ edition = "2018"
 
 [dependencies]
 mrc_decoder = { path = "../../crates/mrc_decoder" }
+mrc_x86 = { path = "../../crates/mrc_x86" }
 clap = "2"
