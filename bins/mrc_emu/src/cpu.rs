@@ -907,8 +907,6 @@ impl<M: MemoryInterface> Cpu<M> {
     fn set_byte_register_value(&mut self, register: &Register, value: u8) {
         use Register::*;
 
-        let word_value = value as u16;
-
         match register {
             AlAx => {
                 let mut bytes = self.registers[REG_AX].to_le_bytes();
