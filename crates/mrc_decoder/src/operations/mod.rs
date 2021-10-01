@@ -5,7 +5,6 @@ use mrc_x86::{
 };
 
 pub mod arithmetic;
-pub mod data_transfer;
 pub mod logic;
 pub mod processor_control;
 pub mod string_manipulation;

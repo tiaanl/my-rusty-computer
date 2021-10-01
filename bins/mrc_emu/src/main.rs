@@ -1,126 +1,67 @@
 mod cpu;
 mod memory;
 
-#[cfg(feature = "sdl")]
-mod monitor;
-
-#[cfg(feature = "dos")]
-mod dos;
-
 use crate::cpu::segment_and_offset;
 use crate::memory::{MemoryMapper, PhysicalMemory, ReadOnlyMemory};
 use clap::{App, Arg};
 use cpu::Cpu;
 use std::cell::RefCell;
+use std::cmp::min;
+use std::convert::TryFrom;
+use std::io::Read;
 use std::rc::Rc;
 
-#[cfg(feature = "dos")]
-use dos::load_binary;
-
-#[cfg(not(feature = "dos"))]
-mod no_dos {
-    use super::cpu::segment_and_offset;
-    use crate::memory::PhysicalMemory;
-    use std::io::Read;
-
-    pub fn load_binary(
-        physical_memory: &mut PhysicalMemory,
-        file: &mut std::fs::File,
-    ) -> std::io::Result<()> {
-        // Load 512 bytes from the beginning of the binary image to 0000:7C00 in physical memory,
-        // because that is where the cs:ip is pointing.  (0000:7C00)
-        let start_position = segment_and_offset(0x0000, 0x7C00) as usize;
-        let destination = &mut physical_memory.data[start_position..start_position + 512];
-        if let Err(err) = file.read_exact(destination) {
-            panic!("{}", err);
-        }
-
-        Ok(())
-    }
-}
-
-#[cfg(not(feature = "dos"))]
-use no_dos::load_binary;
-use std::io::Read;
-
-fn load_bios<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<u8>, std::io::Error> {
+fn load_bios<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
-    let file_size = metadata.len();
-
-    let mut file = std::fs::File::open(&path)?;
-
+    let file_size = min(metadata.len(), 0xFFFF);
     let mut data = vec![0; file_size as usize];
 
-    file.read_exact(data.as_mut_slice())?;
+    std::fs::File::open(&path)?.read_exact(data.as_mut_slice())?;
 
     Ok(data)
 }
 
 fn main() {
+    pretty_env_logger::init();
+
     let matches = App::new("mrc-emu")
         .version("0.0.1")
         .arg(
-            Arg::with_name("binary")
-                .value_name("binary")
-                .help("The binary file to emulate.")
-                .takes_value(true)
+            Arg::with_name("bios")
+                .help("Specify a file to use as the BIOS")
                 .required(true),
         )
-        .arg(
-            Arg::with_name("bios")
-                .value_name("bios")
-                .help("A binary containing a BIOS.")
-                .takes_value(true),
-        )
         .get_matches();
-
-    #[cfg(feature = "sdl")]
-    {
-        let monitor_handle = std::thread::spawn(monitor::run_loop);
-    }
 
     let mut memory_manager = MemoryMapper::new();
 
     // Physical memory is 640KiB.
-    let mut physical_memory = PhysicalMemory::with_capacity(0xA0000);
-
-    let path = match matches.value_of("binary") {
-        None => {
-            eprintln!("No binary file specified.");
-            return;
-        }
-        Some(path) => path,
-    };
-
-    let mut file = match std::fs::File::open(path) {
-        Err(err) => {
-            eprintln!("Could not open binary file. {}", err);
-            return;
-        }
-        Ok(file) => file,
-    };
-
-    load_binary(&mut physical_memory, &mut file).unwrap();
-
+    let physical_memory = PhysicalMemory::with_capacity(0xA0000);
     memory_manager.map(
-        segment_and_offset(0x0000, 0x0000),
+        segment_and_offset(0, 0),
         0xA0000,
         Rc::new(RefCell::new(physical_memory)),
     );
 
     if let Some(path) = matches.value_of("bios") {
-        println!("Loading BIOS from: {}", path);
+        log::info!("Loading BIOS from: {}", path);
         let data = match load_bios(path) {
             Ok(r) => r,
             Err(err) => {
-                eprintln!("Could not read BIOS file. ({}) ({})", &path, err);
+                log::error!("Could not read BIOS file. ({}) ({})", &path, err);
                 return;
             }
         };
-        let data_size = data.len() as u16;
-        let bios_start_addr = segment_and_offset(0xF000, 0xFFFF - data_size) + 1;
 
-        println!("BIOS start address: {:05X}", bios_start_addr);
+        let data_size = u16::try_from(data.len()).unwrap();
+        let bios_start_addr = segment_and_offset(0xF000, 0xFFFF - data_size);
+
+        log::info!(
+            "Loading BIOS to: {:#05X}..{:#05X} ({} bytes)",
+            bios_start_addr,
+            bios_start_addr + data_size as u32,
+            data_size
+        );
 
         let rom = ReadOnlyMemory::from_vec(data);
         memory_manager.map(

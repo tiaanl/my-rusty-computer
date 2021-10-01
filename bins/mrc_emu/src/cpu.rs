@@ -179,6 +179,7 @@ impl<M: MemoryInterface> Cpu<M> {
         print_flag!(O, Flags::OVERFLOW);
         println!();
 
+        /*
         print!("stack: ");
         let ss = self.segments[SEG_SS];
         let sp = self.registers[REG_SP];
@@ -192,6 +193,7 @@ impl<M: MemoryInterface> Cpu<M> {
             current -= 2;
         }
         println!();
+        */
     }
 
     pub fn start(&mut self) {
