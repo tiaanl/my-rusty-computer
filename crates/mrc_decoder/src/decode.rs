@@ -129,7 +129,7 @@ fn displacement_word_from_it<It: Iterator<Item = u8>>(it: &mut It) -> Result<Ope
 pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instruction> {
     let op_code = it_read_byte(it)?;
 
-    let maybe_instruction = match op_code {
+    match op_code {
         0x04 | 0x05 | 0x0C | 0x0D | 0x14 | 0x15 | 0x1C | 0x1D | 0x24 | 0x25 | 0x2C | 0x2D
         | 0x34 | 0x35 | 0x3C | 0x3D => {
             operations::immediate_to_accumulator(group1_operation(op_code), op_code, it)
@@ -767,9 +767,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         }
 
         _ => Err(Error::InvalidOpCode(op_code)),
-    };
-
-    maybe_instruction
+    }
 
     /*
     if let Ok(instruction) = maybe_instruction {

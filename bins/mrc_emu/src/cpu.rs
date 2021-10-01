@@ -294,7 +294,7 @@ impl<M: MemoryInterface> Cpu<M> {
                             let source_value = self.get_byte_operand_value(source);
                             let destination_value = self.get_byte_operand_value(destination);
 
-                            self.flags.remove(Flags::CARRY | Flags::CARRY);
+                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
 
                             let result = destination_value as i16 & source_value as i16;
                             self.set_byte_result_flags(result);
@@ -850,7 +850,7 @@ impl<M: MemoryInterface> Cpu<M> {
                 self.memory
                     .write_u8(self.get_indirect_addr(addressing_mode, displacement), value);
             }
-            OperandType::Register(register) => self.set_byte_register_value(&register, value),
+            OperandType::Register(register) => self.set_byte_register_value(register, value),
             OperandType::Segment(_) => panic!("Cannot set segment value with a byte!"),
             OperandType::Immediate(_) => todo!(),
         }
@@ -867,7 +867,7 @@ impl<M: MemoryInterface> Cpu<M> {
                 self.memory
                     .write_u16(self.get_indirect_addr(addressing_mode, displacement), value);
             }
-            OperandType::Register(register) => self.set_word_register_value(&register, value),
+            OperandType::Register(register) => self.set_word_register_value(register, value),
             OperandType::Segment(segment) => self.set_segment_value(segment, value),
             _ => todo!(),
         }

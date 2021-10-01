@@ -30,8 +30,8 @@ mod no_dos {
         // Load 512 bytes from the beginning of the binary image to 0000:7C00 in physical memory,
         // because that is where the cs:ip is pointing.  (0000:7C00)
         let start_position = segment_and_offset(0x0000, 0x7C00) as usize;
-        let mut destination = &mut physical_memory.data[start_position..start_position + 512];
-        if let Err(err) = file.read_exact(&mut destination) {
+        let destination = &mut physical_memory.data[start_position..start_position + 512];
+        if let Err(err) = file.read_exact(destination) {
             panic!("{}", err);
         }
 
@@ -49,10 +49,9 @@ fn load_bios<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<u8>, std::io::Err
 
     let mut file = std::fs::File::open(&path)?;
 
-    let mut data: Vec<u8> = Vec::with_capacity(file_size as usize);
-    data.resize(file_size as usize, 0);
+    let mut data = vec![0; file_size as usize];
 
-    file.read_exact(&mut data.as_mut_slice())?;
+    file.read_exact(data.as_mut_slice())?;
 
     Ok(data)
 }

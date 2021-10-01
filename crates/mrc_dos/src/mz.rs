@@ -49,18 +49,10 @@ impl MzHeader {
     }
 }
 
+#[derive(Default)]
 pub struct ExeHeader {
     pub mz_header: MzHeader,
     pub relocation_table: Vec<Relocation>,
-}
-
-impl Default for ExeHeader {
-    fn default() -> Self {
-        Self {
-            mz_header: Default::default(),
-            relocation_table: Vec::new(),
-        }
-    }
 }
 
 impl ExeHeader {

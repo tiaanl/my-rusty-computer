@@ -22,13 +22,13 @@ fn main() -> Result<(), std::io::Error> {
             bytes = [0x93, 0x57, 0x4F, 0x9E, 0x15];
         } else {
             // Write 5 random bytes.
-            for i in 0..5 {
-                bytes[i] = rng.gen();
+            for b in &mut bytes {
+                *b = rng.gen();
             }
         }
 
-        file.write(&bytes)?;
-        file.write(&[0x90, 0x90, 0x90, 0x90])?;
+        file.write_all(&bytes)?;
+        file.write_all(&[0x90, 0x90, 0x90, 0x90])?;
 
         if op_code >= 0x26 {
             println!(
