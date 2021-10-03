@@ -124,7 +124,8 @@ pub enum Segment {
     Ds,
 }
 
-#[derive(Debug, PartialEq)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AddressingMode {
     BxSi,
     BxDi,

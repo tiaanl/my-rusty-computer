@@ -73,29 +73,33 @@ impl From<RegisterOrMemory> for OperandType {
     }
 }
 
-fn encoding_for_register(register: &Register) -> u8 {
+fn encoding_for_register(register: Register) -> u8 {
+    use Register::*;
+
     match register {
-        Register::AlAx => 0b000,
-        Register::ClCx => 0b001,
-        Register::DlDx => 0b010,
-        Register::BlBx => 0b011,
-        Register::AhSp => 0b100,
-        Register::ChBp => 0b101,
-        Register::DhSi => 0b110,
-        Register::BhDi => 0b111,
+        AlAx => 0b000,
+        ClCx => 0b001,
+        DlDx => 0b010,
+        BlBx => 0b011,
+        AhSp => 0b100,
+        ChBp => 0b101,
+        DhSi => 0b110,
+        BhDi => 0b111,
     }
 }
 
-fn encoding_for_addressing_mode(addressing_mode: &AddressingMode) -> u8 {
+fn encoding_for_addressing_mode(addressing_mode: AddressingMode) -> u8 {
+    use AddressingMode::*;
+
     match addressing_mode {
-        AddressingMode::BxSi => 0b000,
-        AddressingMode::BxDi => 0b001,
-        AddressingMode::BpSi => 0b010,
-        AddressingMode::BpDi => 0b011,
-        AddressingMode::Si => 0b100,
-        AddressingMode::Di => 0b101,
-        AddressingMode::Bp => 0b110,
-        AddressingMode::Bx => 0b111,
+        BxSi => 0b000,
+        BxDi => 0b001,
+        BpSi => 0b010,
+        BpDi => 0b011,
+        Si => 0b100,
+        Di => 0b101,
+        Bp => 0b110,
+        Bx => 0b111,
     }
 }
 
@@ -142,9 +146,9 @@ impl Modrm {
             RegisterOrMemory::Register(_) => 0b11,
         } << 6;
 
-        byte |= encoding_for_register(&self.register) << 3;
+        byte |= encoding_for_register(self.register) << 3;
 
-        byte |= match &self.register_or_memory {
+        byte |= match self.register_or_memory {
             RegisterOrMemory::Direct(_) => 0b110,
             RegisterOrMemory::Indirect(addressing_mode) => {
                 encoding_for_addressing_mode(addressing_mode)
