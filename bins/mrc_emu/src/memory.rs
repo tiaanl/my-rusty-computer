@@ -84,13 +84,17 @@ impl ReadOnlyMemory {
 impl MemoryInterface for ReadOnlyMemory {
     fn read(&self, so: SegmentAndOffset) -> u8 {
         match self.data.get(so as usize) {
-            None => panic!("Address out of range. ({})", so),
+            None => panic!(
+                "Address out of range. ({:05X} of {:05X})",
+                so,
+                self.data.len()
+            ),
             Some(&byte) => byte,
         }
     }
 
     fn write(&mut self, _: SegmentAndOffset, _: u8) {
-        panic!("Can't write to ROM's");
+        // panic!("Can't write to ROM's");
     }
 }
 
@@ -123,7 +127,7 @@ impl MemoryMapper {
 impl MemoryInterface for MemoryMapper {
     fn read(&self, so: SegmentAndOffset) -> u8 {
         for container in &self.interfaces {
-            if so >= container.start && so < container.start + container.size {
+            if so >= container.start && so <= container.start + container.size {
                 return container.interface.borrow().read(so - container.start);
             }
         }
@@ -132,10 +136,39 @@ impl MemoryInterface for MemoryMapper {
 
     fn write(&mut self, so: SegmentAndOffset, value: u8) {
         for container in &mut self.interfaces {
-            if so >= container.start && so < container.start + container.size {
-                return container.interface.borrow_mut().write(so, value);
+            if so >= container.start && so <= container.start + container.size {
+                return container
+                    .interface
+                    .borrow_mut()
+                    .write(so - container.start, value);
             }
         }
-        panic!("No interface found for address {}", so);
+        panic!("No interface found for address {:05X}", so);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::cpu::segment_and_offset;
+
+    #[test]
+    fn test_memory_mapping() {
+        let mut pm = PhysicalMemory::with_capacity(0x100); // 256 bytes
+        for i in 0..0x100 {
+            pm.data[i as usize] = i as u8;
+        }
+
+        let mut mm = MemoryMapper::new();
+
+        mm.map(
+            segment_and_offset(0x000, 0x000),
+            0x100,
+            Rc::new(RefCell::new(pm)),
+        );
+
+        assert_eq!(0x00, mm.read(segment_and_offset(0x0000, 0x0000)));
+        assert_eq!(0x7F, mm.read(segment_and_offset(0x0000, 0x007F)));
+        assert_eq!(0xFF, mm.read(segment_and_offset(0x0000, 0x00FF)));
     }
 }

@@ -1,3 +1,5 @@
+mod operations;
+
 use crate::memory::{MemoryInterface, MemoryReader};
 use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
@@ -6,6 +8,8 @@ use mrc_x86::{
     Operation, Register, Segment,
 };
 use std::cell::RefCell;
+use std::fmt::Formatter;
+use std::num::Wrapping;
 use std::rc::Rc;
 
 /*
@@ -33,6 +37,31 @@ fn low_byte(word: u16) -> u8 {
 
 fn high_and_low(word: u16) -> (u8, u8) {
     (high_byte(word), low_byte(word))
+}
+
+pub trait SignificantBit {
+    fn least_significant_bit(&self) -> bool;
+    fn most_significant_bit(&self) -> bool;
+}
+
+impl SignificantBit for u8 {
+    fn least_significant_bit(&self) -> bool {
+        self & 0x1 != 0
+    }
+
+    fn most_significant_bit(&self) -> bool {
+        self & 0x80 != 0
+    }
+}
+
+impl SignificantBit for u16 {
+    fn least_significant_bit(&self) -> bool {
+        self & 0x1 != 0
+    }
+
+    fn most_significant_bit(&self) -> bool {
+        self & 0x8000 != 0
+    }
 }
 
 pub type SegmentAndOffset = u32;
@@ -80,15 +109,47 @@ impl<'a, M: MemoryInterface> Iterator for CpuIterator<M> {
 
 bitflags! {
     pub struct Flags : u16 {
-        const CARRY = 1 << 0;       // 0x
-        const PARITY = 1 << 2;      // 1
-        const AUX_CARRY = 1 << 4;   // 2x
-        const ZERO = 1 << 6;        // 3
-        const SIGN = 1 << 7;        // 4x
-        const TRAP = 1 << 8;        // 5
-        const INTERRUPT = 1 << 9;   // 6x
-        const DIRECTION = 1 << 10;  // 7x
-        const OVERFLOW = 1 << 11;   // 8
+        const CARRY = 1 << 0;       // 0 - 1
+        const UD1 = 1 << 1;         // 1 - 2
+        const PARITY = 1 << 2;      // 2 - 4
+        const UD2 = 1 << 3;         // 3 - 8
+        const AUX_CARRY = 1 << 4;   // 4 - 16
+        const UD3 = 1 << 5;         // 5 - 32
+        const ZERO = 1 << 6;        // 6 - 64
+        const SIGN = 1 << 7;        // 7 - 128
+        const TRAP = 1 << 8;        // 8 -
+        const INTERRUPT = 1 << 9;   // 9 -
+        const DIRECTION = 1 << 10;  // A -
+        const OVERFLOW = 1 << 11;   // B -
+    }
+}
+
+impl std::fmt::Display for Flags {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        macro_rules! print_flag {
+            ($name:ident,$flag:expr) => {{
+                if self.contains($flag) {
+                    write!(f, "{}", stringify!($name))?;
+                } else {
+                    write!(f, ".")?;
+                }
+            }};
+        }
+
+        print_flag!(O, Flags::OVERFLOW); // 11
+        print_flag!(D, Flags::DIRECTION); // 10
+        print_flag!(I, Flags::INTERRUPT); // 9
+        print_flag!(T, Flags::TRAP); // 8
+        print_flag!(S, Flags::SIGN); // 7
+        print_flag!(Z, Flags::ZERO); // 6
+        print_flag!(U, Flags::UD3); // 5
+        print_flag!(A, Flags::AUX_CARRY); // 4
+        print_flag!(U, Flags::UD2); // 3
+        print_flag!(P, Flags::PARITY); // 2
+        print_flag!(U, Flags::UD1); // 1
+        print_flag!(C, Flags::CARRY); // 0
+
+        Ok(())
     }
 }
 
@@ -160,24 +221,8 @@ impl<M: MemoryInterface> Cpu<M> {
             self.segments[SEG_SS],
             self.segments[SEG_DS]
         );
-        print!("IP: {:04X} flags:", self.ip);
 
-        macro_rules! print_flag {
-            ($name:ident,$flag:expr) => {{
-                print!(" {}{}", stringify!($name), self.flags.contains($flag) as u8);
-            }};
-        }
-
-        print_flag!(C, Flags::CARRY);
-        print_flag!(P, Flags::PARITY);
-        print_flag!(A, Flags::AUX_CARRY);
-        print_flag!(Z, Flags::ZERO);
-        print_flag!(S, Flags::SIGN);
-        print_flag!(T, Flags::TRAP);
-        print_flag!(I, Flags::INTERRUPT);
-        print_flag!(D, Flags::DIRECTION);
-        print_flag!(O, Flags::OVERFLOW);
-        println!();
+        println!("IP: {:04X} flags: {}", self.ip, self.flags);
 
         /*
         print!("stack: ");
@@ -197,9 +242,10 @@ impl<M: MemoryInterface> Cpu<M> {
     }
 
     pub fn start(&mut self) {
-        self.print_registers();
+        // self.print_registers();
 
-        for _ in 0..50 {
+        // for _ in 0..100 {
+        loop {
             let mut it = CpuIterator {
                 memory: self.memory.interface(),
                 position: segment_and_offset(self.segments[SEG_CS], self.ip),
@@ -208,15 +254,15 @@ impl<M: MemoryInterface> Cpu<M> {
             let start_position = it.position;
 
             // Print some bytes from memory.
-            print!("Bytes to decode: ");
-            for i in 0..5 {
-                print!(
-                    "{:02X} ",
-                    self.memory
-                        .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
-                );
-            }
-            println!();
+            // print!("Bytes to decode: ");
+            // for i in 0..5 {
+            //     print!(
+            //         "{:02X} ",
+            //         self.memory
+            //             .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
+            //     );
+            // }
+            // println!();
 
             match decode_instruction(&mut it) {
                 Ok(instruction) => {
@@ -228,7 +274,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     if let Err(()) = self.execute(&instruction) {
                         break;
                     }
-                    self.print_registers();
+                    // self.print_registers();
                 }
 
                 Err(err) => {
@@ -361,6 +407,10 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => unreachable!(),
             },
 
+            Operation::Clc => {
+                self.flags.remove(Flags::CARRY);
+            }
+
             Operation::Cld => {
                 self.flags.remove(Flags::DIRECTION);
             }
@@ -427,6 +477,15 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => panic!("Illegal operands! {:?}", &instruction.operands),
             },
 
+            Operation::Jb => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if self.flags.contains(Flags::CARRY) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
             Operation::Jbe => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
                     if self.flags.contains(Flags::CARRY | Flags::ZERO) {
@@ -458,7 +517,7 @@ impl<M: MemoryInterface> Cpu<M> {
 
             Operation::Jnb => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
-                    if self.flags.contains(Flags::CARRY) {
+                    if !self.flags.contains(Flags::CARRY) {
                         self.displace_ip(displacement);
                     }
                 }
@@ -483,7 +542,62 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => panic!(),
             },
 
+            Operation::Jno => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if !self.flags.contains(Flags::OVERFLOW) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
+            Operation::Jnp => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if !self.flags.contains(Flags::PARITY) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
+            Operation::Jns => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if !self.flags.contains(Flags::SIGN) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
+            Operation::Jo => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if self.flags.contains(Flags::OVERFLOW) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
+            Operation::Jp => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if self.flags.contains(Flags::PARITY) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
+            Operation::Js => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if self.flags.contains(Flags::SIGN) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
             Operation::Lahf => {
+                // Use the low byte of the flags register.
                 let bytes = self.flags.bits.to_le_bytes();
                 self.set_byte_register_value(&Register::AhSp, bytes[0]);
             }
@@ -498,6 +612,19 @@ impl<M: MemoryInterface> Cpu<M> {
                 ) => {
                     let addr = self.get_indirect_addr(addressing_mode, displacement);
                     self.set_word_register_value(register, addr as u16);
+                }
+                _ => panic!("Illegal operands!"),
+            },
+
+            Operation::Loop => match instruction.operands {
+                OperandSet::Displacement(ref displacement) => {
+                    let cx = self.get_word_register_value(&Register::ClCx);
+                    let cx = (Wrapping(cx) - Wrapping(1)).0;
+                    self.set_word_register_value(&Register::ClCx, cx);
+
+                    if cx > 0 {
+                        self.displace_ip(displacement);
+                    }
                 }
                 _ => panic!("Illegal operands!"),
             },
@@ -550,26 +677,91 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => panic!("Illegal operands!"),
             },
 
+            Operation::Out => match instruction.operands {
+                OperandSet::DestinationAndSource(ref destination, ref source) => {
+                    let source_value = self.get_byte_operand_value(source);
+
+                    match destination.1 {
+                        OperandSize::Byte => {
+                            let port = self.get_byte_operand_value(destination);
+                            println!("OUT: {:02X} to port {:02X}", source_value, port);
+                        }
+                        OperandSize::Word => {
+                            let port = self.get_word_operand_value(destination);
+                            println!("OUT: {:02X} to port {:04X}", source_value, port);
+                        }
+                    }
+                }
+                _ => panic!("Illegal operands!"),
+            },
+
+            Operation::Shr => match instruction.operands {
+                OperandSet::DestinationAndSource(ref destination, ref source) => {
+                    match destination.1 {
+                        OperandSize::Byte => {
+                            let value = self.get_byte_operand_value(destination);
+                            let by = self.get_byte_operand_value(source);
+                            let result = operations::shift_right_byte(value, by, &mut self.flags);
+                            self.set_byte_operand_value(destination, result);
+                        }
+                        OperandSize::Word => {
+                            let value = self.get_word_operand_value(destination);
+                            let by = self.get_word_operand_value(source);
+                            let result = operations::shift_right_word(value, by, &mut self.flags);
+                            self.set_word_operand_value(destination, result);
+                        }
+                    }
+                }
+                _ => panic!("Illegal operands!"),
+            },
+
+            Operation::Shl => match instruction.operands {
+                OperandSet::DestinationAndSource(ref destination, ref source) => {
+                    match destination.1 {
+                        OperandSize::Byte => {
+                            let value = self.get_byte_operand_value(destination);
+                            let by = self.get_byte_operand_value(source);
+                            let value = operations::shift_left_byte(value, by, &mut self.flags);
+                            self.set_byte_operand_value(destination, value);
+                        }
+
+                        OperandSize::Word => {
+                            let value = self.get_word_operand_value(destination);
+                            let by = self.get_word_operand_value(source);
+                            let value = operations::shift_left_word(value, by, &mut self.flags);
+                            self.set_word_operand_value(destination, value);
+                        }
+                    }
+                }
+                _ => panic!("Illegal operands!"),
+            },
+
             Operation::Xor => match &instruction.operands {
                 OperandSet::DestinationAndSource(destination, source) => {
                     match destination.1 {
                         OperandSize::Byte => {
-                            let source_value = self.get_byte_operand_value(source);
-                            let destination_value = self.get_byte_operand_value(destination);
+                            let left = self.get_byte_operand_value(destination);
+                            let right = self.get_byte_operand_value(source);
 
                             self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
 
-                            let result = destination_value as i16 ^ source_value as i16;
-                            self.set_byte_result_flags(result);
+                            let result = left ^ right;
+
+                            operations::flags_from_byte_result(&mut self.flags, result);
+
+                            self.set_byte_operand_value(destination, result);
                         }
                         OperandSize::Word => {
-                            let source_value = self.get_word_operand_value(source);
-                            let destination_value = self.get_word_operand_value(destination);
+                            let left = self.get_word_operand_value(destination);
+                            let right = self.get_word_operand_value(source);
 
                             self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
 
-                            let result = destination_value as i32 ^ source_value as i32;
-                            self.set_word_result_flags(result);
+                            let result = left ^ right;
+
+                            operations::flags_from_word_result(&mut self.flags, result);
+
+                            self.set_word_operand_value(destination, result);
                         }
                     }
 
@@ -678,30 +870,9 @@ impl<M: MemoryInterface> Cpu<M> {
                 self.flags.bits = u16::from_le_bytes([ah, 0]);
             }
 
-            Operation::Sar => todo!(),
-
-            Operation::Shl => match &instruction.operands {
-                OperandSet::DestinationAndSource(destination, source) => {
-                    let shift_value = self.get_byte_operand_value(source);
-                    match destination.1 {
-                        OperandSize::Byte => {
-                            let value = self.get_byte_operand_value(destination);
-                            let result = (value as i16) << (shift_value as i16);
-                            self.set_byte_operand_value(destination, result as u8);
-                            self.set_byte_result_flags(result);
-                        }
-                        OperandSize::Word => {
-                            let value = self.get_word_operand_value(destination);
-                            let result = (value as i32) << (shift_value as i32);
-                            self.set_word_operand_value(destination, result as u16);
-                            self.set_word_result_flags(result);
-                        }
-                    }
-                }
-                _ => panic!("Illegal operands!"),
-            },
-
-            Operation::Shr => todo!(),
+            Operation::Stc => {
+                self.flags.insert(Flags::CARRY);
+            }
 
             Operation::Std => {
                 self.flags.insert(Flags::DIRECTION);
@@ -1084,11 +1255,18 @@ mod test {
     }
 
     #[test]
+    fn test_registers() {
+        let memory = PhysicalMemory::with_capacity(0x100);
+        let mut cpu = Cpu::new(memory);
+        cpu.set_word_register_value(&Register::AlAx, 0x1234);
+        assert_eq!(0x34, cpu.get_byte_register_value(&Register::AlAx));
+        assert_eq!(0x12, cpu.get_byte_register_value(&Register::AhSp));
+    }
+
+    #[test]
     fn test_lahf_sahf() {
         let memory = PhysicalMemory::with_capacity(0x100);
         let mut cpu = Cpu::new(memory);
-
-        // EFLAGS(SF:ZF:0:AF:0:PF:1:CF) <- AH
 
         cpu.registers[REG_AX] = 0x0000;
         cpu.flags = Flags::SIGN | Flags::ZERO | Flags::AUX_CARRY | Flags::PARITY | Flags::CARRY;
