@@ -254,15 +254,15 @@ impl<M: MemoryInterface> Cpu<M> {
             let start_position = it.position;
 
             // Print some bytes from memory.
-            // print!("Bytes to decode: ");
-            // for i in 0..5 {
-            //     print!(
-            //         "{:02X} ",
-            //         self.memory
-            //             .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
-            //     );
-            // }
-            // println!();
+            print!("Bytes to decode: ");
+            for i in 0..5 {
+                print!(
+                    "{:02X} ",
+                    self.memory
+                        .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
+                );
+            }
+            println!();
 
             match decode_instruction(&mut it) {
                 Ok(instruction) => {
@@ -736,6 +736,28 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => panic!("Illegal operands!"),
             },
 
+            Operation::Sub => match instruction.operands {
+                OperandSet::DestinationAndSource(
+                    Operand(ref destination_type, OperandSize::Byte),
+                    ref source,
+                ) => {
+                    let destination = self.get_byte_operand_type_value(destination_type);
+                    let source = self.get_byte_operand_value(source);
+                    let result = operations::sub_byte(destination, source, &mut self.flags);
+                    self.set_byte_operand_type_value(destination_type, result);
+                }
+                OperandSet::DestinationAndSource(
+                    Operand(ref destination_type, OperandSize::Word),
+                    ref source,
+                ) => {
+                    let destination = self.get_word_operand_type_value(destination_type);
+                    let source = self.get_word_operand_value(source);
+                    let result = operations::sub_word(destination, source, &mut self.flags);
+                    self.set_word_operand_type_value(destination_type, result);
+                }
+                _ => panic!("Illegal operands!"),
+            },
+
             Operation::Xor => match &instruction.operands {
                 OperandSet::DestinationAndSource(destination, source) => {
                     match destination.1 {
@@ -959,10 +981,8 @@ impl<M: MemoryInterface> Cpu<M> {
         addr as SegmentAndOffset
     }
 
-    fn get_byte_operand_value(&self, operand: &Operand) -> u8 {
-        assert_eq!(OperandSize::Byte, operand.1);
-
-        match &operand.0 {
+    fn get_byte_operand_type_value(&self, operand_type: &OperandType) -> u8 {
+        match operand_type {
             OperandType::Direct(offset) => {
                 // Get a single byte from DS:offset
                 let ds = self.get_segment_value(SEG_DS);
@@ -982,10 +1002,13 @@ impl<M: MemoryInterface> Cpu<M> {
         }
     }
 
-    fn get_word_operand_value(&self, operand: &Operand) -> u16 {
-        assert_eq!(OperandSize::Word, operand.1);
+    fn get_byte_operand_value(&self, operand: &Operand) -> u8 {
+        assert_eq!(OperandSize::Byte, operand.1);
+        self.get_byte_operand_type_value(&operand.0)
+    }
 
-        match &operand.0 {
+    fn get_word_operand_type_value(&self, operand_type: &OperandType) -> u16 {
+        match operand_type {
             OperandType::Direct(offset) => {
                 // Get a single byte from DS:offset
                 let ds = self.get_segment_value(SEG_DS);
@@ -1011,10 +1034,14 @@ impl<M: MemoryInterface> Cpu<M> {
         }
     }
 
-    fn set_byte_operand_value(&mut self, operand: &Operand, value: u8) {
-        assert_eq!(OperandSize::Byte, operand.1);
+    fn get_word_operand_value(&self, operand: &Operand) -> u16 {
+        assert_eq!(OperandSize::Word, operand.1);
 
-        match &operand.0 {
+        self.get_word_operand_type_value(&operand.0)
+    }
+
+    fn set_byte_operand_type_value(&mut self, operand_type: &OperandType, value: u8) {
+        match operand_type {
             OperandType::Direct(offset) => {
                 let ds = self.get_segment_value(SEG_DS);
                 self.memory.write_u8(segment_and_offset(ds, *offset), value);
@@ -1029,8 +1056,13 @@ impl<M: MemoryInterface> Cpu<M> {
         }
     }
 
-    fn set_word_operand_value(&mut self, operand: &Operand, value: u16) {
-        match &operand.0 {
+    fn set_byte_operand_value(&mut self, operand: &Operand, value: u8) {
+        assert_eq!(OperandSize::Byte, operand.1);
+        self.set_byte_operand_type_value(&operand.0, value);
+    }
+
+    fn set_word_operand_type_value(&mut self, operand_type: &OperandType, value: u16) {
+        match operand_type {
             OperandType::Direct(offset) => {
                 let ds = self.get_segment_value(SEG_DS);
                 self.memory
@@ -1044,6 +1076,11 @@ impl<M: MemoryInterface> Cpu<M> {
             OperandType::Segment(segment) => self.set_segment_value(segment, value),
             _ => todo!(),
         }
+    }
+
+    fn set_word_operand_value(&mut self, operand: &Operand, value: u16) {
+        assert_eq!(OperandSize::Word, operand.1);
+        self.set_word_operand_type_value(&operand.0, value);
     }
 
     fn get_byte_register_value(&self, register: &Register) -> u8 {

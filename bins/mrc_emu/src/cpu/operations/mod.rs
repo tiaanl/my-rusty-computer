@@ -1,9 +1,11 @@
 mod shift_left;
 mod shift_right;
+mod sub;
 
 use crate::cpu::{Flags, SignificantBit};
 pub use shift_left::{shift_left_byte, shift_left_word};
 pub use shift_right::{shift_right_byte, shift_right_word};
+pub use sub::{sub_byte, sub_word};
 
 const PARITY_TABLE: [u8; 0x100] = [
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
