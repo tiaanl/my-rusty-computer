@@ -102,7 +102,8 @@ pub enum Operation {
     Xor,
 }
 
-#[derive(PartialEq, Debug)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Register {
     AlAx,
     ClCx,
@@ -114,7 +115,8 @@ pub enum Register {
     BhDi,
 }
 
-#[derive(PartialEq, Debug)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Segment {
     Es,
     Cs,

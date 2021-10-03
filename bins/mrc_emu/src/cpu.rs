@@ -374,11 +374,11 @@ impl<M: MemoryInterface> Cpu<M> {
             },
 
             Operation::Cbw => {
-                let al = self.get_byte_register_value(&Register::AlAx);
+                let al = self.get_byte_register_value(Register::AlAx);
                 if al & 0b10000000 != 0 {
-                    self.set_byte_register_value(&Register::AhSp, 0b11111111);
+                    self.set_byte_register_value(Register::AhSp, 0b11111111);
                 } else {
-                    self.set_byte_register_value(&Register::AhSp, 0b00000000);
+                    self.set_byte_register_value(Register::AhSp, 0b00000000);
                 }
             }
 
@@ -599,14 +599,14 @@ impl<M: MemoryInterface> Cpu<M> {
             Operation::Lahf => {
                 // Use the low byte of the flags register.
                 let bytes = self.flags.bits.to_le_bytes();
-                self.set_byte_register_value(&Register::AhSp, bytes[0]);
+                self.set_byte_register_value(Register::AhSp, bytes[0]);
             }
 
-            Operation::Lea => match &instruction.operands {
+            Operation::Lea => match instruction.operands {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(register), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(addressing_mode, displacement),
+                        OperandType::Indirect(ref addressing_mode, ref displacement),
                         OperandSize::Word,
                     ),
                 ) => {
@@ -618,9 +618,9 @@ impl<M: MemoryInterface> Cpu<M> {
 
             Operation::Loop => match instruction.operands {
                 OperandSet::Displacement(ref displacement) => {
-                    let cx = self.get_word_register_value(&Register::ClCx);
+                    let cx = self.get_word_register_value(Register::ClCx);
                     let cx = (Wrapping(cx) - Wrapping(1)).0;
-                    self.set_word_register_value(&Register::ClCx, cx);
+                    self.set_word_register_value(Register::ClCx, cx);
 
                     if cx > 0 {
                         self.displace_ip(displacement);
@@ -632,13 +632,13 @@ impl<M: MemoryInterface> Cpu<M> {
             Operation::Mul => match &instruction.operands {
                 OperandSet::Destination(destination) => match destination.1 {
                     OperandSize::Byte => {
-                        let al = self.get_byte_register_value(&Register::AlAx);
+                        let al = self.get_byte_register_value(Register::AlAx);
                         let mut value = self.get_byte_operand_value(destination);
                         value = value.wrapping_mul(al);
                         self.set_byte_operand_value(destination, value);
                     }
                     OperandSize::Word => {
-                        let ax = self.get_word_register_value(&Register::AlAx);
+                        let ax = self.get_word_register_value(Register::AlAx);
                         let mut value = self.get_word_operand_value(destination);
                         value = value.wrapping_mul(ax);
                         self.set_word_operand_value(destination, value);
@@ -827,20 +827,20 @@ impl<M: MemoryInterface> Cpu<M> {
                 let es = self.get_segment_value(SEG_ES);
 
                 loop {
-                    let mut cx = self.get_word_register_value(&Register::ClCx);
-                    let si = self.get_word_register_value(&Register::DhSi);
-                    let di = self.get_word_register_value(&Register::BhDi);
+                    let mut cx = self.get_word_register_value(Register::ClCx);
+                    let si = self.get_word_register_value(Register::DhSi);
+                    let di = self.get_word_register_value(Register::BhDi);
 
                     let byte = self.memory.read_u8(segment_and_offset(ds, si));
 
                     self.memory.write_u8(segment_and_offset(es, di), byte);
 
-                    self.set_word_register_value(&Register::DhSi, si + 1);
-                    self.set_word_register_value(&Register::BhDi, di + 1);
+                    self.set_word_register_value(Register::DhSi, si + 1);
+                    self.set_word_register_value(Register::BhDi, di + 1);
 
                     cx -= 1;
 
-                    self.set_word_register_value(&Register::ClCx, cx);
+                    self.set_word_register_value(Register::ClCx, cx);
 
                     if cx == 0 {
                         break;
@@ -853,20 +853,20 @@ impl<M: MemoryInterface> Cpu<M> {
                 let es = self.get_segment_value(SEG_ES);
 
                 loop {
-                    let mut cx = self.get_word_register_value(&Register::ClCx);
-                    let si = self.get_word_register_value(&Register::DhSi);
-                    let di = self.get_word_register_value(&Register::BhDi);
+                    let mut cx = self.get_word_register_value(Register::ClCx);
+                    let si = self.get_word_register_value(Register::DhSi);
+                    let di = self.get_word_register_value(Register::BhDi);
 
                     let word = self.memory.read_u16(segment_and_offset(ds, si));
 
                     self.memory.write_u16(segment_and_offset(es, di), word);
 
-                    self.set_word_register_value(&Register::DhSi, si + 2);
-                    self.set_word_register_value(&Register::BhDi, di + 2);
+                    self.set_word_register_value(Register::DhSi, si + 2);
+                    self.set_word_register_value(Register::BhDi, di + 2);
 
                     cx -= 1;
 
-                    self.set_word_register_value(&Register::ClCx, cx);
+                    self.set_word_register_value(Register::ClCx, cx);
 
                     if cx == 0 {
                         break;
@@ -888,7 +888,7 @@ impl<M: MemoryInterface> Cpu<M> {
             Operation::Ror => todo!(),
 
             Operation::Sahf => {
-                let ah = self.get_byte_register_value(&Register::AhSp);
+                let ah = self.get_byte_register_value(Register::AhSp);
                 self.flags.bits = u16::from_le_bytes([ah, 0]);
             }
 
@@ -931,43 +931,43 @@ impl<M: MemoryInterface> Cpu<M> {
     ) -> SegmentAndOffset {
         let mut addr = match addressing_mode {
             AddressingMode::BxSi => {
-                let bx = self.get_word_register_value(&Register::BlBx);
-                let si = self.get_word_register_value(&Register::DhSi);
+                let bx = self.get_word_register_value(Register::BlBx);
+                let si = self.get_word_register_value(Register::DhSi);
                 segment_and_offset(bx, si)
             }
             AddressingMode::BxDi => {
-                let bx = self.get_word_register_value(&Register::BlBx);
-                let di = self.get_word_register_value(&Register::BhDi);
+                let bx = self.get_word_register_value(Register::BlBx);
+                let di = self.get_word_register_value(Register::BhDi);
                 segment_and_offset(bx, di)
             }
             AddressingMode::BpSi => {
-                let bp = self.get_word_register_value(&Register::ChBp);
-                let si = self.get_word_register_value(&Register::DhSi);
+                let bp = self.get_word_register_value(Register::ChBp);
+                let si = self.get_word_register_value(Register::DhSi);
                 segment_and_offset(bp, si)
             }
             AddressingMode::BpDi => {
-                let bp = self.get_word_register_value(&Register::ChBp);
-                let di = self.get_word_register_value(&Register::BhDi);
+                let bp = self.get_word_register_value(Register::ChBp);
+                let di = self.get_word_register_value(Register::BhDi);
                 segment_and_offset(bp, di)
             }
             AddressingMode::Si => {
                 let ds = self.get_segment_value(SEG_DS);
-                let si = self.get_word_register_value(&Register::DhSi);
+                let si = self.get_word_register_value(Register::DhSi);
                 segment_and_offset(ds, si)
             }
             AddressingMode::Di => {
                 let ds = self.get_segment_value(SEG_DS);
-                let di = self.get_word_register_value(&Register::BhDi);
+                let di = self.get_word_register_value(Register::BhDi);
                 segment_and_offset(ds, di)
             }
             AddressingMode::Bp => {
                 let ds = self.get_segment_value(SEG_DS);
-                let bp = self.get_word_register_value(&Register::ChBp);
+                let bp = self.get_word_register_value(Register::ChBp);
                 segment_and_offset(ds, bp)
             }
             AddressingMode::Bx => {
                 let ds = self.get_segment_value(SEG_DS);
-                let bx = self.get_word_register_value(&Register::BlBx);
+                let bx = self.get_word_register_value(Register::BlBx);
                 segment_and_offset(ds, bx)
             }
         } as i64;
@@ -994,7 +994,7 @@ impl<M: MemoryInterface> Cpu<M> {
                 .memory
                 .read_u8(self.get_indirect_addr(addressing_mode, displacement)),
 
-            OperandType::Register(ref register) => self.get_byte_register_value(register),
+            OperandType::Register(ref register) => self.get_byte_register_value(*register),
 
             OperandType::Segment(_) => panic!("Can't get segment value as a byte."),
 
@@ -1021,7 +1021,7 @@ impl<M: MemoryInterface> Cpu<M> {
                 .memory
                 .read_u16(self.get_indirect_addr(addressing_mode, displacement)),
 
-            OperandType::Register(ref register) => self.get_word_register_value(register),
+            OperandType::Register(register) => self.get_word_register_value(*register),
 
             OperandType::Segment(segment) => match segment {
                 Segment::Es => self.get_segment_value(SEG_ES),
@@ -1050,7 +1050,7 @@ impl<M: MemoryInterface> Cpu<M> {
                 self.memory
                     .write_u8(self.get_indirect_addr(addressing_mode, displacement), value);
             }
-            OperandType::Register(register) => self.set_byte_register_value(register, value),
+            OperandType::Register(register) => self.set_byte_register_value(*register, value),
             OperandType::Segment(_) => panic!("Cannot set segment value with a byte!"),
             OperandType::Immediate(_) => todo!(),
         }
@@ -1072,8 +1072,8 @@ impl<M: MemoryInterface> Cpu<M> {
                 self.memory
                     .write_u16(self.get_indirect_addr(addressing_mode, displacement), value);
             }
-            OperandType::Register(register) => self.set_word_register_value(register, value),
-            OperandType::Segment(segment) => self.set_segment_value(segment, value),
+            OperandType::Register(register) => self.set_word_register_value(*register, value),
+            OperandType::Segment(segment) => self.set_segment_value(*segment, value),
             _ => todo!(),
         }
     }
@@ -1083,7 +1083,7 @@ impl<M: MemoryInterface> Cpu<M> {
         self.set_word_operand_type_value(&operand.0, value);
     }
 
-    fn get_byte_register_value(&self, register: &Register) -> u8 {
+    fn get_byte_register_value(&self, register: Register) -> u8 {
         use Register::*;
 
         let byte: u8 = match register {
@@ -1099,7 +1099,7 @@ impl<M: MemoryInterface> Cpu<M> {
         byte
     }
 
-    fn get_word_register_value(&self, register: &Register) -> u16 {
+    fn get_word_register_value(&self, register: Register) -> u16 {
         use Register::*;
 
         match register {
@@ -1114,7 +1114,7 @@ impl<M: MemoryInterface> Cpu<M> {
         }
     }
 
-    fn set_byte_register_value(&mut self, register: &Register, value: u8) {
+    fn set_byte_register_value(&mut self, register: Register, value: u8) {
         use Register::*;
 
         match register {
@@ -1161,7 +1161,7 @@ impl<M: MemoryInterface> Cpu<M> {
         };
     }
 
-    fn set_word_register_value(&mut self, register: &Register, value: u16) {
+    fn set_word_register_value(&mut self, register: Register, value: u16) {
         use Register::*;
 
         match register {
@@ -1180,7 +1180,7 @@ impl<M: MemoryInterface> Cpu<M> {
         self.segments[segment]
     }
 
-    fn set_segment_value(&mut self, segment: &Segment, value: u16) {
+    fn set_segment_value(&mut self, segment: Segment, value: u16) {
         match segment {
             Segment::Es => self.segments[SEG_ES] = value,
             Segment::Cs => self.segments[SEG_CS] = value,
@@ -1236,14 +1236,14 @@ impl<M: MemoryInterface> Cpu<M> {
 
     fn get_stack_pointer(&self) -> SegmentAndOffset {
         let ss = self.get_segment_value(SEG_SS);
-        let sp = self.get_word_register_value(&Register::AhSp);
+        let sp = self.get_word_register_value(Register::AhSp);
         segment_and_offset(ss, sp)
     }
 
     fn adjust_stack_pointer(&mut self, offset: i16) {
-        let sp = self.get_word_register_value(&Register::AhSp);
+        let sp = self.get_word_register_value(Register::AhSp);
         let sp = (sp as i16).wrapping_add(offset) as u16;
-        self.set_word_register_value(&Register::AhSp, sp);
+        self.set_word_register_value(Register::AhSp, sp);
     }
 }
 
@@ -1295,9 +1295,9 @@ mod test {
     fn test_registers() {
         let memory = PhysicalMemory::with_capacity(0x100);
         let mut cpu = Cpu::new(memory);
-        cpu.set_word_register_value(&Register::AlAx, 0x1234);
-        assert_eq!(0x34, cpu.get_byte_register_value(&Register::AlAx));
-        assert_eq!(0x12, cpu.get_byte_register_value(&Register::AhSp));
+        cpu.set_word_register_value(Register::AlAx, 0x1234);
+        assert_eq!(0x34, cpu.get_byte_register_value(Register::AlAx));
+        assert_eq!(0x12, cpu.get_byte_register_value(Register::AhSp));
     }
 
     #[test]
