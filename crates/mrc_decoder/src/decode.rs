@@ -149,14 +149,37 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             operations::push_pop_segment(op_code, it)
         }
 
-        0x26 | 0x2E | 0x36 | 0x3E => match decode_instruction(it) {
-            Ok(mut instruction) => {
-                instruction.segment_override =
-                    Some(Segment::try_from_low_bits((op_code >> 3) & 0b11)?);
-                Ok(instruction)
+        0x26 | 0x2E | 0x36 | 0x3E => {
+            fn override_segment(operand: &mut Operand, segment: Segment) {
+                match operand.0 {
+                    OperandType::Direct(ref mut seg, ..)
+                    | OperandType::Indirect(ref mut seg, ..) => *seg = segment,
+                    _ => {}
+                }
             }
-            Err(err) => Err(err),
-        },
+
+            let segment = Segment::try_from_low_bits((op_code >> 3) & 0b11)?;
+
+            match decode_instruction(it) {
+                Ok(mut instruction) => {
+                    match instruction.operands {
+                        OperandSet::Destination(ref mut destination) => {
+                            override_segment(destination, segment);
+                        }
+
+                        OperandSet::DestinationAndSource(ref mut destination, ref mut source) => {
+                            override_segment(destination, segment);
+                            override_segment(source, segment);
+                        }
+
+                        _ => panic!("Illegal operands!"),
+                    }
+
+                    Ok(instruction)
+                }
+                Err(err) => Err(err),
+            }
+        }
 
         0x27 | 0x2F | 0x37 | 0x3F => Ok(Instruction::new(
             match (op_code >> 3) & 0b11 {
@@ -375,7 +398,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let address = it_read_word(it).unwrap();
 
             let destination = Operand(OperandType::Register(Register::AlAx), operand_size);
-            let source = Operand(OperandType::Direct(address), operand_size);
+            let source = Operand(OperandType::Direct(Segment::Ds, address), operand_size);
 
             Ok(Instruction::new(
                 Operation::Mov,
@@ -1366,7 +1389,11 @@ mod test {
                 Operation::Add,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Word(0x4f57)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::Word(0x4f57)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -1398,7 +1425,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpSi, Displacement::Word(0x5c1)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpSi,
+                            Displacement::Word(0x5c1)
+                        ),
                         OperandSize::Word
                     ),
                 )
@@ -1484,7 +1515,7 @@ mod test {
                 Operation::Or,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::None),
+                        OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Word),
@@ -1579,7 +1610,11 @@ mod test {
                 Operation::Adc,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bp, Displacement::Word(0x6965)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Bp,
+                            Displacement::Word(0x6965)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Byte),
@@ -1596,7 +1631,11 @@ mod test {
                 Operation::Adc,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BxSi, Displacement::Byte(-0x80)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BxSi,
+                            Displacement::Byte(-0x80)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Word),
@@ -1697,7 +1736,7 @@ mod test {
                 Operation::Sbb,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Di, Displacement::None),
+                        OperandType::Indirect(Segment::Ds, AddressingMode::Di, Displacement::None),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Byte),
@@ -1714,7 +1753,11 @@ mod test {
                 Operation::Sbb,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BxDi, Displacement::None),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BxDi,
+                            Displacement::None
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
@@ -1732,7 +1775,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Byte),
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Word(0x203d)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::Word(0x203d)
+                        ),
                         OperandSize::Byte
                     ),
                 )
@@ -1818,7 +1865,7 @@ mod test {
                 Operation::And,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Si, Displacement::None),
+                        OperandType::Indirect(Segment::Ds, AddressingMode::Si, Displacement::None),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Byte),
@@ -1835,7 +1882,11 @@ mod test {
                 Operation::And,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Si, Displacement::Word(0x3634)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Si,
+                            Displacement::Word(0x3634)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -1867,7 +1918,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(AddressingMode::BxDi, Displacement::None),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BxDi,
+                            Displacement::None
+                        ),
                         OperandSize::Word
                     ),
                 )
@@ -1906,12 +1961,15 @@ mod test {
     fn test_26() {
         test_decoder!(
             &[0x26, 0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr ES:[BP + DI + 0x4f57],DX
-            Instruction::with_segment_override(
-                Segment::Es,
+            Instruction::new(
                 Operation::Add,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Word(0x4f57)),
+                        OperandType::Indirect(
+                            Segment::Es,
+                            AddressingMode::BpDi,
+                            Displacement::Word(0x4f57)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -1936,7 +1994,11 @@ mod test {
                 Operation::Sub,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpSi, Displacement::Word(-0x6719)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpSi,
+                            Displacement::Word(-0x6719)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Byte),
@@ -1953,7 +2015,11 @@ mod test {
                 Operation::Sub,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Di, Displacement::Word(0x5261)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Di,
+                            Displacement::Word(0x5261)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::AhSp), OperandSize::Word),
@@ -1971,7 +2037,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Byte),
                     Operand(
-                        OperandType::Indirect(AddressingMode::BxSi, Displacement::None),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BxSi,
+                            Displacement::None
+                        ),
                         OperandSize::Byte
                     ),
                 )
@@ -1988,7 +2058,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Byte(-0x61)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::Byte(-0x61)
+                        ),
                         OperandSize::Word
                     ),
                 )
@@ -2028,12 +2102,15 @@ mod test {
     fn test_2e() {
         test_decoder!(
             &[0x2E, 0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr CS:[BP + DI + 0x4f57],DX
-            Instruction::with_segment_override(
-                Segment::Cs,
+            Instruction::new(
                 Operation::Add,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Word(0x4f57)),
+                        OperandType::Indirect(
+                            Segment::Cs,
+                            AddressingMode::BpDi,
+                            Displacement::Word(0x4f57)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -2058,7 +2135,11 @@ mod test {
                 Operation::Xor,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Di, Displacement::Byte(-0x7d)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Di,
+                            Displacement::Byte(-0x7d)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Byte),
@@ -2075,7 +2156,11 @@ mod test {
                 Operation::Xor,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::None),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::None
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -2144,12 +2229,15 @@ mod test {
     fn test_36() {
         test_decoder!(
             &[0x36, 0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr SS:[BP + DI + 0x4f57],DX
-            Instruction::with_segment_override(
-                Segment::Ss,
+            Instruction::new(
                 Operation::Add,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Word(0x4f57)),
+                        OperandType::Indirect(
+                            Segment::Ss,
+                            AddressingMode::BpDi,
+                            Displacement::Word(0x4f57)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -2174,7 +2262,7 @@ mod test {
                 Operation::Cmp,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::None),
+                        OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Byte),
@@ -2191,7 +2279,11 @@ mod test {
                 Operation::Cmp,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpSi, Displacement::Word(-0x137A)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpSi,
+                            Displacement::Word(-0x137A)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Word),
@@ -2260,12 +2352,15 @@ mod test {
     fn test_3e() {
         test_decoder!(
             &[0x3E, 0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr DS:[BP + DI + 0x4f57],DX
-            Instruction::with_segment_override(
-                Segment::Ds,
+            Instruction::new(
                 Operation::Add,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Word(0x4f57)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::Word(0x4f57)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -3058,7 +3153,11 @@ mod test {
                 Operation::Or,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BxSi, Displacement::Byte(0x07)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BxSi,
+                            Displacement::Byte(0x07)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Immediate(0x85), OperandSize::Byte),
@@ -3075,7 +3174,11 @@ mod test {
                 Operation::And,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::Word(-0x7758)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Bx,
+                            Displacement::Word(-0x7758)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Immediate(0xbb33), OperandSize::Word),
@@ -3092,7 +3195,11 @@ mod test {
                 Operation::Cmp,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Word(-0x702D)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::Word(-0x702D)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Immediate(0x33), OperandSize::Byte),
@@ -3109,7 +3216,7 @@ mod test {
                 Operation::Sbb,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::None),
+                        OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Immediate(0x2f), OperandSize::Byte),
@@ -3126,7 +3233,11 @@ mod test {
                 Operation::Test,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BxSi, Displacement::Byte(-0x3)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BxSi,
+                            Displacement::Byte(-0x3)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Byte),
@@ -3143,7 +3254,7 @@ mod test {
                 Operation::Test,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::None),
+                        OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
@@ -3160,7 +3271,11 @@ mod test {
                 Operation::Xchg,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Word(0x5c96)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::Word(0x5c96)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Byte),
@@ -3177,7 +3292,11 @@ mod test {
                 Operation::Xchg,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::Byte(0x4e)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Bx,
+                            Displacement::Byte(0x4e)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
@@ -3194,7 +3313,11 @@ mod test {
                 Operation::Mov,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Si, Displacement::Word(-0x12E4)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Si,
+                            Displacement::Word(-0x12E4)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Byte),
@@ -3211,7 +3334,11 @@ mod test {
                 Operation::Mov,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::Byte(-0x40)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Bx,
+                            Displacement::Byte(-0x40)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Word),
@@ -3229,7 +3356,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Byte),
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Byte(0x4e)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::Byte(0x4e)
+                        ),
                         OperandSize::Byte
                     ),
                 )
@@ -3246,7 +3377,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(AddressingMode::Si, Displacement::Byte(0x34)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Si,
+                            Displacement::Byte(0x34)
+                        ),
                         OperandSize::Word
                     ),
                 )
@@ -3277,7 +3412,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(AddressingMode::Si, Displacement::Byte(-0x7e)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Si,
+                            Displacement::Byte(-0x7e)
+                        ),
                         OperandSize::Word
                     ),
                 )
@@ -3494,7 +3633,7 @@ mod test {
                 Operation::Mov,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
-                    Operand(OperandType::Direct(0x430c), OperandSize::Byte),
+                    Operand(OperandType::Direct(Segment::Ds, 0x430c), OperandSize::Byte),
                 )
             )
         );
@@ -3508,7 +3647,7 @@ mod test {
                 Operation::Mov,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
-                    Operand(OperandType::Direct(0x8be5), OperandSize::Word),
+                    Operand(OperandType::Direct(Segment::Ds, 0x8be5), OperandSize::Word),
                 )
             )
         );
@@ -3521,7 +3660,7 @@ mod test {
             Instruction::new(
                 Operation::Mov,
                 OperandSet::DestinationAndSource(
-                    Operand(OperandType::Direct(0x9d98), OperandSize::Byte),
+                    Operand(OperandType::Direct(Segment::Ds, 0x9d98), OperandSize::Byte),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                 )
             )
@@ -3535,7 +3674,7 @@ mod test {
             Instruction::new(
                 Operation::Mov,
                 OperandSet::DestinationAndSource(
-                    Operand(OperandType::Direct(0xf847), OperandSize::Word),
+                    Operand(OperandType::Direct(Segment::Ds, 0xf847), OperandSize::Word),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                 )
             )
@@ -3882,7 +4021,11 @@ mod test {
                 Operation::Shl,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BxDi, Displacement::Byte(-0x05)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BxDi,
+                            Displacement::Byte(-0x05)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Immediate(0x83), OperandSize::Byte),
@@ -3899,7 +4042,11 @@ mod test {
                 Operation::Rcl,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpSi, Displacement::Word(0x4f49)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpSi,
+                            Displacement::Word(0x4f49)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Immediate(0xa0), OperandSize::Byte),
@@ -3936,7 +4083,11 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(AddressingMode::Si, Displacement::Byte(0x5c)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Si,
+                            Displacement::Byte(0x5c)
+                        ),
                         OperandSize::Word
                     ),
                 )
@@ -3953,7 +4104,7 @@ mod test {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(AddressingMode::Di, Displacement::None),
+                        OperandType::Indirect(Segment::Ds, AddressingMode::Di, Displacement::None),
                         OperandSize::Word
                     ),
                 )
@@ -3969,7 +4120,11 @@ mod test {
                 Operation::Mov,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::Word(0xcd8)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Bx,
+                            Displacement::Word(0xcd8)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Immediate(0xc9), OperandSize::Byte),
@@ -3986,7 +4141,11 @@ mod test {
                 Operation::Mov,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpDi, Displacement::Byte(-0x24)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpDi,
+                            Displacement::Byte(-0x24)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Immediate(0x5505), OperandSize::Word),
@@ -4078,7 +4237,7 @@ mod test {
                 Operation::Shl,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::None),
+                        OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Immediate(1), OperandSize::Byte),
@@ -4095,7 +4254,11 @@ mod test {
                 Operation::Sar,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BpSi, Displacement::Word(-0x12D6)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BpSi,
+                            Displacement::Word(-0x12D6)
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Immediate(1), OperandSize::Byte),
@@ -4112,7 +4275,11 @@ mod test {
                 Operation::Rcr,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::Bx, Displacement::Byte(-0x47)),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::Bx,
+                            Displacement::Byte(-0x47)
+                        ),
                         OperandSize::Byte
                     ),
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Byte),
@@ -4129,7 +4296,11 @@ mod test {
                 Operation::Shl,
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandType::Indirect(AddressingMode::BxDi, Displacement::None),
+                        OperandType::Indirect(
+                            Segment::Ds,
+                            AddressingMode::BxDi,
+                            Displacement::None
+                        ),
                         OperandSize::Word
                     ),
                     Operand(OperandType::Register(ClCx), OperandSize::Byte),
@@ -4520,7 +4691,7 @@ mod test {
             Instruction::new(
                 Operation::Div,
                 OperandSet::Destination(Operand(
-                    OperandType::Indirect(AddressingMode::BpSi, Displacement::None),
+                    OperandType::Indirect(Segment::Ds, AddressingMode::BpSi, Displacement::None),
                     OperandSize::Word
                 ))
             )
@@ -4582,7 +4753,11 @@ mod test {
             Instruction::new(
                 Operation::Inc,
                 OperandSet::Destination(Operand(
-                    OperandType::Indirect(AddressingMode::BxSi, Displacement::Word(0x3b0a)),
+                    OperandType::Indirect(
+                        Segment::Ds,
+                        AddressingMode::BxSi,
+                        Displacement::Word(0x3b0a)
+                    ),
                     OperandSize::Byte
                 ))
             )

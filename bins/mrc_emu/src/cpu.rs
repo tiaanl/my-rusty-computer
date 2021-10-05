@@ -205,7 +205,7 @@ impl<M: MemoryInterface> Cpu<M> {
         cpu
     }
 
-    pub fn print_registers(&mut self) {
+    pub fn _print_registers(&mut self) {
         print!(
             "AX: {:04X} BX: {:04X} CX: {:04X} DX: {:04X} ",
             self.registers[REG_AX],
@@ -648,11 +648,11 @@ impl<M: MemoryInterface> Cpu<M> {
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(register), OperandSize::Word),
                     Operand(
-                        OperandType::Indirect(ref addressing_mode, ref displacement),
+                        OperandType::Indirect(segment, ref addressing_mode, ref displacement),
                         OperandSize::Word,
                     ),
                 ) => {
-                    let addr = self.get_indirect_addr(addressing_mode, displacement);
+                    let addr = self.get_indirect_addr(segment, addressing_mode, displacement);
                     self.set_word_register_value(register, addr as u16);
                 }
                 _ => panic!("Illegal operands!"),
@@ -871,10 +871,10 @@ impl<M: MemoryInterface> Cpu<M> {
                     _ => unreachable!(),
                 };
 
-                let ds = self.get_segment_value(SEG_DS);
+                let ds = self.segments[SEG_DS];
                 let mut si = self.get_word_register_value(Register::DhSi);
 
-                let es = self.get_segment_value(SEG_ES);
+                let es = self.segments[SEG_ES];
                 let mut di = self.get_word_register_value(Register::BhDi);
 
                 let mut count = match instruction.repeat {
@@ -1042,49 +1042,48 @@ impl<M: MemoryInterface> Cpu<M> {
 
     fn get_indirect_addr(
         &self,
+        segment: Segment,
         addressing_mode: &AddressingMode,
         displacement: &Displacement,
     ) -> SegmentAndOffset {
+        let seg = self.get_segment_value(segment);
+
         let mut addr = match addressing_mode {
             AddressingMode::BxSi => {
                 let bx = self.get_word_register_value(Register::BlBx);
                 let si = self.get_word_register_value(Register::DhSi);
-                segment_and_offset(bx, si)
+                segment_and_offset(seg, bx + si)
             }
             AddressingMode::BxDi => {
                 let bx = self.get_word_register_value(Register::BlBx);
                 let di = self.get_word_register_value(Register::BhDi);
-                segment_and_offset(bx, di)
+                segment_and_offset(seg, bx + di)
             }
             AddressingMode::BpSi => {
                 let bp = self.get_word_register_value(Register::ChBp);
                 let si = self.get_word_register_value(Register::DhSi);
-                segment_and_offset(bp, si)
+                segment_and_offset(seg, bp + si)
             }
             AddressingMode::BpDi => {
                 let bp = self.get_word_register_value(Register::ChBp);
                 let di = self.get_word_register_value(Register::BhDi);
-                segment_and_offset(bp, di)
+                segment_and_offset(seg, bp + di)
             }
             AddressingMode::Si => {
-                let ds = self.get_segment_value(SEG_DS);
                 let si = self.get_word_register_value(Register::DhSi);
-                segment_and_offset(ds, si)
+                segment_and_offset(seg, si)
             }
             AddressingMode::Di => {
-                let ds = self.get_segment_value(SEG_DS);
                 let di = self.get_word_register_value(Register::BhDi);
-                segment_and_offset(ds, di)
+                segment_and_offset(seg, di)
             }
             AddressingMode::Bp => {
-                let ds = self.get_segment_value(SEG_DS);
                 let bp = self.get_word_register_value(Register::ChBp);
-                segment_and_offset(ds, bp)
+                segment_and_offset(seg, bp)
             }
             AddressingMode::Bx => {
-                let ds = self.get_segment_value(SEG_DS);
                 let bx = self.get_word_register_value(Register::BlBx);
-                segment_and_offset(ds, bx)
+                segment_and_offset(seg, bx)
             }
         } as i64;
 
@@ -1099,16 +1098,16 @@ impl<M: MemoryInterface> Cpu<M> {
 
     fn get_byte_operand_type_value(&self, operand_type: &OperandType) -> u8 {
         match operand_type {
-            OperandType::Direct(offset) => {
+            OperandType::Direct(segment, offset) => {
                 // Get a single byte from DS:offset
-                let ds = self.get_segment_value(SEG_DS);
+                let ds = self.get_segment_value(*segment);
                 let addr = segment_and_offset(ds, *offset);
                 self.bus.read_u8(addr)
             }
 
-            OperandType::Indirect(addressing_mode, displacement) => self
+            OperandType::Indirect(segment, addressing_mode, displacement) => self
                 .bus
-                .read_u8(self.get_indirect_addr(addressing_mode, displacement)),
+                .read_u8(self.get_indirect_addr(*segment, addressing_mode, displacement)),
 
             OperandType::Register(ref register) => self.get_byte_register_value(*register),
 
@@ -1125,25 +1124,25 @@ impl<M: MemoryInterface> Cpu<M> {
 
     fn get_word_operand_type_value(&self, operand_type: &OperandType) -> u16 {
         match operand_type {
-            OperandType::Direct(offset) => {
+            OperandType::Direct(segment, offset) => {
                 // Get a single byte from DS:offset
-                let ds = self.get_segment_value(SEG_DS);
-                let addr = segment_and_offset(ds, *offset);
+                let seg = self.get_segment_value(*segment);
+                let addr = segment_and_offset(seg, *offset);
 
                 self.bus.read_u16(addr)
             }
 
-            OperandType::Indirect(addressing_mode, displacement) => self
+            OperandType::Indirect(segment, addressing_mode, displacement) => self
                 .bus
-                .read_u16(self.get_indirect_addr(addressing_mode, displacement)),
+                .read_u16(self.get_indirect_addr(*segment, addressing_mode, displacement)),
 
             OperandType::Register(register) => self.get_word_register_value(*register),
 
             OperandType::Segment(segment) => match segment {
-                Segment::Es => self.get_segment_value(SEG_ES),
-                Segment::Cs => self.get_segment_value(SEG_CS),
-                Segment::Ss => self.get_segment_value(SEG_SS),
-                Segment::Ds => self.get_segment_value(SEG_DS),
+                Segment::Es => self.segments[SEG_ES],
+                Segment::Cs => self.segments[SEG_CS],
+                Segment::Ss => self.segments[SEG_SS],
+                Segment::Ds => self.segments[SEG_DS],
             },
 
             OperandType::Immediate(value) => *value,
@@ -1158,13 +1157,15 @@ impl<M: MemoryInterface> Cpu<M> {
 
     fn set_byte_operand_type_value(&mut self, operand_type: &OperandType, value: u8) {
         match operand_type {
-            OperandType::Direct(offset) => {
-                let ds = self.get_segment_value(SEG_DS);
-                self.bus.write_u8(segment_and_offset(ds, *offset), value);
+            OperandType::Direct(segment, offset) => {
+                let seg = self.get_segment_value(*segment);
+                self.bus.write_u8(segment_and_offset(seg, *offset), value);
             }
-            OperandType::Indirect(addressing_mode, displacement) => {
-                self.bus
-                    .write_u8(self.get_indirect_addr(addressing_mode, displacement), value);
+            OperandType::Indirect(segment, addressing_mode, displacement) => {
+                self.bus.write_u8(
+                    self.get_indirect_addr(*segment, addressing_mode, displacement),
+                    value,
+                );
             }
             OperandType::Register(register) => self.set_byte_register_value(*register, value),
             OperandType::Segment(_) => panic!("Cannot set segment value with a byte!"),
@@ -1179,13 +1180,15 @@ impl<M: MemoryInterface> Cpu<M> {
 
     fn set_word_operand_type_value(&mut self, operand_type: &OperandType, value: u16) {
         match operand_type {
-            OperandType::Direct(offset) => {
-                let ds = self.get_segment_value(SEG_DS);
-                self.bus.write_u16(segment_and_offset(ds, *offset), value);
+            OperandType::Direct(segment, offset) => {
+                let seg = self.get_segment_value(*segment);
+                self.bus.write_u16(segment_and_offset(seg, *offset), value);
             }
-            OperandType::Indirect(addressing_mode, displacement) => {
-                self.bus
-                    .write_u16(self.get_indirect_addr(addressing_mode, displacement), value);
+            OperandType::Indirect(segment, addressing_mode, displacement) => {
+                self.bus.write_u16(
+                    self.get_indirect_addr(*segment, addressing_mode, displacement),
+                    value,
+                );
             }
             OperandType::Register(register) => self.set_word_register_value(*register, value),
             OperandType::Segment(segment) => self.set_segment_value(*segment, value),
@@ -1291,8 +1294,13 @@ impl<M: MemoryInterface> Cpu<M> {
         }
     }
 
-    fn get_segment_value(&self, segment: usize) -> u16 {
-        self.segments[segment]
+    fn get_segment_value(&self, segment: Segment) -> u16 {
+        match segment {
+            Segment::Es => self.segments[SEG_ES],
+            Segment::Cs => self.segments[SEG_CS],
+            Segment::Ss => self.segments[SEG_SS],
+            Segment::Ds => self.segments[SEG_DS],
+        }
     }
 
     fn set_segment_value(&mut self, segment: Segment, value: u16) {
@@ -1350,7 +1358,7 @@ impl<M: MemoryInterface> Cpu<M> {
     }
 
     fn get_stack_pointer(&self) -> SegmentAndOffset {
-        let ss = self.get_segment_value(SEG_SS);
+        let ss = self.segments[SEG_SS];
         let sp = self.get_word_register_value(Register::AhSp);
         segment_and_offset(ss, sp)
     }

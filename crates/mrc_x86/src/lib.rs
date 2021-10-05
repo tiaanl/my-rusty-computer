@@ -152,8 +152,8 @@ pub enum Displacement {
 
 #[derive(PartialEq, Debug)]
 pub enum OperandType {
-    Direct(u16),
-    Indirect(AddressingMode, Displacement),
+    Direct(Segment, u16),
+    Indirect(Segment, AddressingMode, Displacement),
     Register(Register),
     Segment(Segment),
     Immediate(u16),
@@ -181,7 +181,6 @@ pub enum Repeat {
 pub struct Instruction {
     pub operation: Operation,
     pub operands: OperandSet,
-    pub segment_override: Option<Segment>,
     pub repeat: Option<Repeat>,
     pub lock: bool,
 }
@@ -191,21 +190,6 @@ impl Instruction {
         Self {
             operation,
             operands,
-            segment_override: None,
-            repeat: None,
-            lock: false,
-        }
-    }
-
-    pub fn with_segment_override(
-        segment: Segment,
-        operation: Operation,
-        operands: OperandSet,
-    ) -> Self {
-        Self {
-            operation,
-            operands,
-            segment_override: Some(segment),
             repeat: None,
             lock: false,
         }
@@ -215,7 +199,6 @@ impl Instruction {
         Self {
             operation,
             operands,
-            segment_override: None,
             repeat: Some(repeat),
             lock: false,
         }

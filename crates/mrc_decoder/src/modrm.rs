@@ -1,6 +1,6 @@
 use crate::errors::Result;
 use crate::{it_read_byte, it_read_word, Error, LowBitsDecoder};
-use mrc_x86::{AddressingMode, Displacement, OperandType, Register};
+use mrc_x86::{AddressingMode, Displacement, OperandType, Register, Segment};
 
 impl LowBitsDecoder<Self> for AddressingMode {
     fn try_from_low_bits(byte: u8) -> Result<Self> {
@@ -58,16 +58,20 @@ impl RegisterOrMemory {
 impl From<RegisterOrMemory> for OperandType {
     fn from(register_or_memory: RegisterOrMemory) -> Self {
         match register_or_memory {
-            RegisterOrMemory::Direct(offset) => OperandType::Direct(offset),
+            RegisterOrMemory::Direct(offset) => OperandType::Direct(Segment::Ds, offset),
             RegisterOrMemory::Indirect(encoding) => {
-                OperandType::Indirect(encoding, Displacement::None)
+                OperandType::Indirect(Segment::Ds, encoding, Displacement::None)
             }
-            RegisterOrMemory::DisplacementByte(encoding, displacement) => {
-                OperandType::Indirect(encoding, Displacement::Byte(displacement as i8))
-            }
-            RegisterOrMemory::DisplacementWord(encoding, displacement) => {
-                OperandType::Indirect(encoding, Displacement::Word(displacement as i16))
-            }
+            RegisterOrMemory::DisplacementByte(encoding, displacement) => OperandType::Indirect(
+                Segment::Ds,
+                encoding,
+                Displacement::Byte(displacement as i8),
+            ),
+            RegisterOrMemory::DisplacementWord(encoding, displacement) => OperandType::Indirect(
+                Segment::Ds,
+                encoding,
+                Displacement::Word(displacement as i16),
+            ),
             RegisterOrMemory::Register(encoding) => OperandType::Register(encoding),
         }
     }

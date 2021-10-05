@@ -19,7 +19,7 @@ impl MemoryInterface for VideoMemory {
         self.data[so as usize]
     }
 
-    fn write(&mut self, so: SegmentAndOffset, value: u8) {
+    fn write(&mut self, _so: SegmentAndOffset, _value: u8) {
         todo!()
     }
 }

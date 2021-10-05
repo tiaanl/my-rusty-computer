@@ -98,10 +98,8 @@ fn main() {
     if let Err(err) = file.seek(SeekFrom::Start(
         exe_header.mz_header.relocation_table.into(),
     )) {
-        eprintln!(
-            "Invalid relocation table position. ({:04X}) ({})",
-            exe_header.mz_header.relocation_table, err
-        );
+        let rt: u16 = exe_header.mz_header.relocation_table;
+        eprintln!("Invalid relocation table position. ({:04X}) ({})", rt, err);
         return;
     }
 

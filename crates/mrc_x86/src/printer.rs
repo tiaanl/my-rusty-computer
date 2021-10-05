@@ -198,10 +198,22 @@ impl fmt::Display for Displacement {
 impl fmt::Display for Operand {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.0 {
-            OperandType::Direct(displacement) => {
+            OperandType::Direct(segment, displacement) => {
+                match segment {
+                    Segment::Es => write!(f, "es:")?,
+                    Segment::Cs => write!(f, "cs:")?,
+                    Segment::Ss => write!(f, "ss:")?,
+                    Segment::Ds => write!(f, "ds:")?,
+                }
                 write!(f, "[{:#06x}]", displacement)?;
             }
-            OperandType::Indirect(encoding, displacement) => {
+            OperandType::Indirect(segment, encoding, displacement) => {
+                match segment {
+                    Segment::Es => write!(f, "es:")?,
+                    Segment::Cs => write!(f, "cs:")?,
+                    Segment::Ss => write!(f, "ss:")?,
+                    Segment::Ds => write!(f, "ds:")?,
+                }
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
             OperandType::Register(encoding) => {
