@@ -928,7 +928,27 @@ impl<M: MemoryInterface> Cpu<M> {
 
             Operation::Rcr => todo!(),
 
-            Operation::Rol => todo!(),
+            Operation::Rol => match instruction.operands {
+                OperandSet::DestinationAndSource(
+                    Operand(ref destination_type, OperandSize::Byte),
+                    Operand(ref source_type, OperandSize::Byte),
+                ) => {
+                    let destination = self.get_byte_operand_type_value(destination_type);
+                    let source = self.get_byte_operand_type_value(source_type);
+                    let result = operations::rol_byte(destination, source, &mut self.flags);
+                    self.set_byte_operand_type_value(destination_type, result);
+                }
+                OperandSet::DestinationAndSource(
+                    Operand(ref destination_type, OperandSize::Word),
+                    Operand(ref source_type, OperandSize::Word),
+                ) => {
+                    let destination = self.get_word_operand_type_value(destination_type);
+                    let source = self.get_word_operand_type_value(source_type);
+                    let result = operations::rol_word(destination, source, &mut self.flags);
+                    self.set_word_operand_type_value(destination_type, result);
+                }
+                _ => panic!("Illegal operands! {:?}", &instruction.operands),
+            },
 
             Operation::Ror => todo!(),
 
@@ -948,6 +968,26 @@ impl<M: MemoryInterface> Cpu<M> {
             Operation::Sti => {
                 self.flags.insert(Flags::INTERRUPT);
             }
+
+            Operation::Test => match instruction.operands {
+                OperandSet::DestinationAndSource(
+                    Operand(ref destination_type, OperandSize::Byte),
+                    Operand(ref source_type, OperandSize::Byte),
+                ) => {
+                    let destination = self.get_byte_operand_type_value(destination_type);
+                    let source = self.get_byte_operand_type_value(source_type);
+                    operations::test_byte(destination, source, &mut self.flags);
+                }
+                OperandSet::DestinationAndSource(
+                    Operand(ref destination_type, OperandSize::Word),
+                    Operand(ref source_type, OperandSize::Word),
+                ) => {
+                    let destination = self.get_word_operand_type_value(destination_type);
+                    let source = self.get_word_operand_type_value(source_type);
+                    operations::test_word(destination, source, &mut self.flags);
+                }
+                _ => panic!("Illegal operands! {:?}", &instruction.operands),
+            },
 
             _ => {
                 todo!("Unknown instruction! {}", instruction.operation);
@@ -1288,16 +1328,6 @@ impl<M: MemoryInterface> Cpu<M> {
         let sp = self.get_word_register_value(Register::AhSp);
         let sp = (sp as i16).wrapping_add(offset) as u16;
         self.set_word_register_value(Register::AhSp, sp);
-    }
-
-    fn step_si_di(&mut self, si: u16, di: u16, adjust: u16) {
-        if self.flags.contains(Flags::DIRECTION) {
-            self.set_word_register_value(Register::BhDi, di.wrapping_add(adjust));
-            self.set_word_register_value(Register::DhSi, si.wrapping_add(adjust));
-        } else {
-            self.set_word_register_value(Register::BhDi, di.wrapping_sub(adjust));
-            self.set_word_register_value(Register::DhSi, si.wrapping_sub(adjust));
-        }
     }
 }
 

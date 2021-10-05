@@ -714,6 +714,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
+            let source = Operand(OperandType::Register(modrm.register), operand_size);
 
             Ok(Instruction::new(
                 match (modrm_byte >> 3) & 0b111 {
@@ -727,7 +728,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
                     0b111 => Operation::Idiv,
                     _ => unreachable!(),
                 },
-                OperandSet::Destination(destination),
+                OperandSet::DestinationAndSource(destination, source),
             ))
         }
 
