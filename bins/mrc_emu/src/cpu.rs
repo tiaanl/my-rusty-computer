@@ -833,10 +833,10 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => todo!("Illegal operands!"),
             },
 
-            Operation::Movsb | Operation::Movsw => {
+            Operation::Movsb | Operation::Movsw | Operation::Stosb | Operation::Stosw => {
                 let value_size: u16 = match instruction.operation {
-                    Operation::Movsb => 1,
-                    Operation::Movsw => 2,
+                    Operation::Movsb | Operation::Stosb => 1,
+                    Operation::Movsw | Operation::Stosw => 2,
                     _ => unreachable!(),
                 };
 
@@ -865,6 +865,16 @@ impl<M: MemoryInterface> Cpu<M> {
 
                         Operation::Movsw => {
                             let value = self.bus.read_u16(segment_and_offset(ds, si));
+                            self.bus.write_u16(segment_and_offset(es, di), value);
+                        }
+
+                        Operation::Stosb => {
+                            let value = self.get_byte_register_value(Register::AlAx);
+                            self.bus.write_u8(segment_and_offset(es, di), value);
+                        }
+
+                        Operation::Stosw => {
+                            let value = self.get_word_register_value(Register::AlAx);
                             self.bus.write_u16(segment_and_offset(es, di), value);
                         }
 
@@ -937,32 +947,6 @@ impl<M: MemoryInterface> Cpu<M> {
 
             Operation::Sti => {
                 self.flags.insert(Flags::INTERRUPT);
-            }
-
-            Operation::Stosb => {
-                // Store AL into ES:DI
-                let al = self.get_byte_register_value(Register::AlAx);
-
-                let es = self.get_segment_value(SEG_ES);
-                let di = self.get_word_register_value(Register::BhDi);
-                let si = self.get_word_register_value(Register::DhSi);
-
-                self.bus.write_u8(segment_and_offset(es, di), al);
-
-                self.step_si_di(si, di, 1);
-            }
-
-            Operation::Stosw => {
-                // Store AX into ES:DI
-                let ax = self.get_word_register_value(Register::AlAx);
-
-                let es = self.get_segment_value(SEG_ES);
-                let di = self.get_word_register_value(Register::BhDi);
-                let si = self.get_word_register_value(Register::DhSi);
-
-                self.bus.write_u16(segment_and_offset(es, di), ax);
-
-                self.step_si_di(si, di, 2);
             }
 
             _ => {
