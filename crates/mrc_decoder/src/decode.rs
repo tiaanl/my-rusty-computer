@@ -709,27 +709,45 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         0xF5 => Ok(Instruction::new(Operation::Cmc, OperandSet::None)),
 
         0xF6 | 0xF7 => {
+            // TEST     1 1 1 1 0 1 1 w     mod 0 0 0 r/m   data data if w e 1
+            //                                  0 0 1
+            // NOT      1 1 1 1 0 1 1 w     mod 0 1 0 r/m
+            // NEG      1 1 1 1 0 1 1 w     mod 0 1 1 r/m
+            // MUL      1 1 1 1 0 1 1 w     mod 1 0 0 r/m
+            // IMUL     1 1 1 1 0 1 1 w     mod 1 0 1 r/m
+            // DIV      1 1 1 1 0 1 1 w     mod 1 1 0 r/m
+            // IDIV     1 1 1 1 0 1 1 w     mod 1 1 1 r/m
+
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
             let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
-            let source = Operand(OperandType::Register(modrm.register), operand_size);
 
-            Ok(Instruction::new(
-                match (modrm_byte >> 3) & 0b111 {
-                    0b000 => Operation::Test,
-                    // 0b001 => ,
-                    0b010 => Operation::Not,
-                    0b011 => Operation::Neg,
-                    0b100 => Operation::Mul,
-                    0b101 => Operation::Imul,
-                    0b110 => Operation::Div,
-                    0b111 => Operation::Idiv,
-                    _ => unreachable!(),
-                },
-                OperandSet::DestinationAndSource(destination, source),
-            ))
+            let operation = match (modrm_byte >> 3) & 0b111 {
+                0b000 => Operation::Test,
+                // 0b001 => ,
+                0b010 => Operation::Not,
+                0b011 => Operation::Neg,
+                0b100 => Operation::Mul,
+                0b101 => Operation::Imul,
+                0b110 => Operation::Div,
+                0b111 => Operation::Idiv,
+                _ => unreachable!(),
+            };
+
+            if operation == Operation::Test {
+                let source = immediate_operand_from_it(it, operand_size)?;
+                Ok(Instruction::new(
+                    operation,
+                    OperandSet::DestinationAndSource(destination, source),
+                ))
+            } else {
+                Ok(Instruction::new(
+                    operation,
+                    OperandSet::Destination(destination),
+                ))
+            }
         }
 
         0xF8 => Ok(Instruction::new(Operation::Clc, OperandSet::None)),
@@ -4472,6 +4490,17 @@ mod test {
 
     #[test]
     fn test_f6() {
+        test_decoder!(
+            &[0xF6, 0b11000000, 0xF0], // TEST  AL, 0xF0
+            Instruction::new(
+                Operation::Test,
+                OperandSet::DestinationAndSource(
+                    Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
+                    Operand(OperandType::Immediate(0xF0), OperandSize::Byte)
+                )
+            )
+        );
+
         test_decoder!(
             &[0xF6, 0xD0, 0x15, 0x36, 0x19, 0xAC], // NOT        AL
             Instruction::new(
