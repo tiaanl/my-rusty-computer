@@ -1,7 +1,7 @@
 use super::flags_from_byte_result;
 use crate::cpu::Flags;
 
-pub fn sub_byte(destination: u8, source: u8, flags: &mut Flags) -> u8 {
+pub fn sub_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
     let destination = destination as u16;
     let source = source as u16;
 
@@ -17,10 +17,10 @@ pub fn sub_byte(destination: u8, source: u8, flags: &mut Flags) -> u8 {
     );
     flags.set(Flags::AUX_CARRY, (destination ^ source ^ wide) & 0x10 != 0);
 
-    result as u8
+    Some(result as u8)
 }
 
-pub fn sub_word(destination: u16, source: u16, flags: &mut Flags) -> u16 {
+pub fn sub_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16> {
     let destination = destination as u32;
     let source = source as u32;
 
@@ -39,7 +39,7 @@ pub fn sub_word(destination: u16, source: u16, flags: &mut Flags) -> u16 {
         (destination as u32 ^ source as u32 ^ wide) & 0x10 != 0,
     );
 
-    result as u16
+    Some(result as u16)
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use super::{flags_from_byte_result, flags_from_word_result};
 use crate::cpu::{Flags, SignificantBit};
 
-pub fn shift_right_byte(value: u8, by: u8, flags: &mut Flags) -> u8 {
+pub fn shift_right_byte(value: u8, by: u8, flags: &mut Flags) -> Option<u8> {
     flags.set(Flags::OVERFLOW, by == 1 && value.most_significant_bit());
 
     let mut result = value;
@@ -12,10 +12,10 @@ pub fn shift_right_byte(value: u8, by: u8, flags: &mut Flags) -> u8 {
 
     flags_from_byte_result(flags, result);
 
-    result
+    Some(result)
 }
 
-pub fn shift_right_word(value: u16, by: u16, flags: &mut Flags) -> u16 {
+pub fn shift_right_word(value: u16, by: u16, flags: &mut Flags) -> Option<u16> {
     flags.set(Flags::OVERFLOW, by == 1 && value.most_significant_bit());
 
     let mut result = value;
@@ -26,7 +26,7 @@ pub fn shift_right_word(value: u16, by: u16, flags: &mut Flags) -> u16 {
 
     flags_from_word_result(flags, result);
 
-    result
+    Some(result)
 }
 
 #[cfg(test)]
@@ -36,7 +36,7 @@ mod test {
     #[test]
     fn test_shift_right_byte() {
         let mut flags = Flags::empty();
-        let result = shift_right_byte(0xFF, 0x01, &mut flags);
+        let result = shift_right_byte(0xFF, 0x01, &mut flags).unwrap();
         assert_eq!(0x7F, result);
         assert!(flags.contains(Flags::CARRY));
         assert!(flags.contains(Flags::OVERFLOW));
@@ -48,7 +48,7 @@ mod test {
     #[test]
     fn test_shift_right_word() {
         let mut flags = Flags::empty();
-        let result = shift_right_word(0xFFFF, 0x0001, &mut flags);
+        let result = shift_right_word(0xFFFF, 0x0001, &mut flags).unwrap();
         assert_eq!(0x7FFF, result);
         assert!(flags.contains(Flags::CARRY));
         assert!(flags.contains(Flags::OVERFLOW));

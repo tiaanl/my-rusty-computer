@@ -1,7 +1,7 @@
 use crate::cpu::operations::{flags_from_byte_result, flags_from_word_result};
 use crate::cpu::{Flags, SignificantBit};
 
-pub fn shift_left_byte(value: u8, by: u8, flags: &mut Flags) -> u8 {
+pub fn shift_left_byte(value: u8, by: u8, flags: &mut Flags) -> Option<u8> {
     let result = value.wrapping_shl(by.into());
 
     flags.set(
@@ -15,10 +15,10 @@ pub fn shift_left_byte(value: u8, by: u8, flags: &mut Flags) -> u8 {
 
     flags_from_byte_result(flags, result);
 
-    result
+    Some(result)
 }
 
-pub fn shift_left_word(value: u16, by: u16, flags: &mut Flags) -> u16 {
+pub fn shift_left_word(value: u16, by: u16, flags: &mut Flags) -> Option<u16> {
     let result = value.wrapping_shl(by.into());
 
     flags.set(
@@ -32,7 +32,7 @@ pub fn shift_left_word(value: u16, by: u16, flags: &mut Flags) -> u16 {
 
     flags_from_word_result(flags, result);
 
-    result
+    Some(result)
 }
 
 #[cfg(test)]

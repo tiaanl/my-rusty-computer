@@ -300,87 +300,80 @@ impl<M: MemoryInterface> Cpu<M> {
         log::info!("Instructions executed: {}", instructions_executed);
     }
 
+    fn destination_and_source_op<
+        ByteFn: Fn(u8, u8, &mut Flags) -> Option<u8>,
+        WordFn: Fn(u16, u16, &mut Flags) -> Option<u16>,
+    >(
+        &mut self,
+        operands: &OperandSet,
+        byte_fn: ByteFn,
+        word_fn: WordFn,
+    ) {
+        match operands {
+            OperandSet::DestinationAndSource(
+                Operand(destination_type, OperandSize::Byte),
+                Operand(source_type, OperandSize::Byte),
+            ) => {
+                let destination_value = self.get_byte_operand_type_value(destination_type);
+                let source_value = self.get_byte_operand_type_value(source_type);
+                if let Some(result) = byte_fn(destination_value, source_value, &mut self.flags) {
+                    self.set_byte_operand_type_value(destination_type, result);
+                }
+            }
+            OperandSet::DestinationAndSource(
+                Operand(destination_type, OperandSize::Word),
+                Operand(source_type, OperandSize::Word),
+            ) => {
+                let destination_value = self.get_word_operand_type_value(destination_type);
+                let source_value = self.get_word_operand_type_value(source_type);
+                if let Some(result) = word_fn(destination_value, source_value, &mut self.flags) {
+                    self.set_word_operand_type_value(destination_type, result);
+                }
+            }
+            // _ => illegal_operands(instruction),
+            _ => todo!(),
+        };
+    }
+
     fn execute(&mut self, instruction: &Instruction) -> ExecuteResult {
         match instruction.operation {
-            Operation::Add => match &instruction.operands {
-                OperandSet::DestinationAndSource(
-                    Operand(destination_type, OperandSize::Byte),
-                    Operand(source_type, OperandSize::Byte),
-                ) => {
-                    let mut destination_value = self.get_byte_operand_type_value(destination_type);
-                    let source_value = self.get_byte_operand_type_value(source_type);
-                    destination_value = destination_value.wrapping_add(source_value);
-                    self.set_byte_operand_type_value(destination_type, destination_value);
-                }
-                OperandSet::DestinationAndSource(
-                    Operand(destination_type, OperandSize::Word),
-                    Operand(source_type, OperandSize::Word),
-                ) => {
-                    let mut destination_value = self.get_word_operand_type_value(destination_type);
-                    let source_value = self.get_word_operand_type_value(source_type);
-                    destination_value = destination_value.wrapping_add(source_value);
-                    self.set_word_operand_type_value(destination_type, destination_value);
-                }
-                _ => illegal_operands(instruction),
-            },
+            Operation::Add => self.destination_and_source_op(
+                &instruction.operands,
+                |d, s, _| Some(d.wrapping_add(s)),
+                |d, s, _| Some(d.wrapping_add(s)),
+            ),
 
-            Operation::Adc => match &instruction.operands {
-                OperandSet::DestinationAndSource(destination, source) => match destination.1 {
-                    OperandSize::Byte => {
-                        let mut destination_value = self.get_byte_operand_value(destination);
-                        let source_value = self.get_byte_operand_value(source);
-                        destination_value = destination_value.wrapping_add(source_value);
-                        destination_value =
-                            destination_value.wrapping_add(if self.flags.contains(Flags::CARRY) {
-                                1
-                            } else {
-                                0
-                            });
-                        self.set_byte_operand_value(destination, destination_value);
-                    }
-                    OperandSize::Word => {
-                        let mut destination_value = self.get_word_operand_value(destination);
-                        let source_value = self.get_word_operand_value(source);
-                        destination_value = destination_value.wrapping_add(source_value);
-                        destination_value =
-                            destination_value.wrapping_add(if self.flags.contains(Flags::CARRY) {
-                                1
-                            } else {
-                                0
-                            });
-                        self.set_word_operand_value(destination, destination_value);
-                    }
+            Operation::Adc => self.destination_and_source_op(
+                &instruction.operands,
+                |d, s, flags| {
+                    Some(
+                        d.wrapping_add(s)
+                            .wrapping_add(if flags.contains(Flags::CARRY) { 1 } else { 0 }),
+                    )
                 },
-                _ => illegal_operands(instruction),
-            },
+                |d, s, flags| {
+                    Some(
+                        d.wrapping_add(s)
+                            .wrapping_add(if flags.contains(Flags::CARRY) { 1 } else { 0 }),
+                    )
+                },
+            ),
 
-            Operation::And => match &instruction.operands {
-                OperandSet::DestinationAndSource(destination, source) => {
-                    match destination.1 {
-                        OperandSize::Byte => {
-                            let source_value = self.get_byte_operand_value(source);
-                            let destination_value = self.get_byte_operand_value(destination);
-
-                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
-
-                            let result = destination_value as i16 & source_value as i16;
-                            self.set_byte_result_flags(result);
-                        }
-                        OperandSize::Word => {
-                            let source_value = self.get_word_operand_value(source);
-                            let destination_value = self.get_word_operand_value(destination);
-
-                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
-
-                            let result = destination_value as i32 & source_value as i32;
-                            self.set_word_result_flags(result);
-                        }
-                    }
-
-                    // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
-                }
-                _ => illegal_operands(instruction),
-            },
+            Operation::And => self.destination_and_source_op(
+                &instruction.operands,
+                |d, s, flags| {
+                    flags.remove(Flags::OVERFLOW | Flags::CARRY);
+                    let result = d & s;
+                    operations::flags_from_byte_result(flags, result);
+                    Some(result)
+                },
+                |d, s, flags| {
+                    flags.remove(Flags::OVERFLOW | Flags::CARRY);
+                    let result = d & s;
+                    operations::flags_from_word_result(flags, result);
+                    Some(result)
+                },
+            ),
 
             Operation::Call => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
@@ -401,30 +394,17 @@ impl<M: MemoryInterface> Cpu<M> {
                 }
             }
 
-            Operation::Cmp => match &instruction.operands {
-                OperandSet::DestinationAndSource(destination, source) => {
-                    macro_rules! op {
-                        ($get_operand_value:ident, $set_result_flags:ident, $up_type:tt) => {{
-                            let destination_value = self.$get_operand_value(destination);
-                            let source_value = self.$get_operand_value(source);
-
-                            let result = destination_value as $up_type - source_value as $up_type;
-                            self.$set_result_flags(result);
-                        }};
-                    }
-
-                    match destination.1 {
-                        OperandSize::Byte => {
-                            op!(get_byte_operand_value, set_byte_result_flags, i16)
-                        }
-
-                        OperandSize::Word => {
-                            op!(get_word_operand_value, set_word_result_flags, i32)
-                        }
-                    }
-                }
-                _ => unreachable!(),
-            },
+            Operation::Cmp => self.destination_and_source_op(
+                &instruction.operands,
+                |d, s, flags| {
+                    operations::flags_from_byte_result(flags, d - s);
+                    None
+                },
+                |d, s, flags| {
+                    operations::flags_from_word_result(flags, d - s);
+                    None
+                },
+            ),
 
             Operation::Clc => {
                 self.flags.remove(Flags::CARRY);
@@ -679,53 +659,27 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => illegal_operands(instruction),
             },
 
-            Operation::Mul => match &instruction.operands {
-                OperandSet::Destination(destination) => match destination.1 {
-                    OperandSize::Byte => {
-                        let al = self.get_byte_register_value(Register::AlAx);
-                        let mut value = self.get_byte_operand_value(destination);
-                        value = value.wrapping_mul(al);
-                        self.set_byte_operand_value(destination, value);
-                    }
-                    OperandSize::Word => {
-                        let ax = self.get_word_register_value(Register::AlAx);
-                        let mut value = self.get_word_operand_value(destination);
-                        value = value.wrapping_mul(ax);
-                        self.set_word_operand_value(destination, value);
-                    }
-                },
-                _ => illegal_operands(instruction),
-            },
+            Operation::Mul => self.destination_and_source_op(
+                &instruction.operands,
+                |d, s, _| Some(d.wrapping_mul(s)),
+                |d, s, _| Some(d.wrapping_mul(s)),
+            ),
 
             Operation::Nop => {}
 
-            Operation::Or => match &instruction.operands {
-                OperandSet::DestinationAndSource(destination, source) => {
-                    match destination.1 {
-                        OperandSize::Byte => {
-                            let source_value = self.get_byte_operand_value(source);
-                            let destination_value = self.get_byte_operand_value(destination);
-
-                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
-
-                            let result = destination_value as i16 | source_value as i16;
-                            self.set_byte_result_flags(result);
-                        }
-                        OperandSize::Word => {
-                            let source_value = self.get_word_operand_value(source);
-                            let destination_value = self.get_word_operand_value(destination);
-
-                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
-
-                            let result = destination_value as i32 | source_value as i32;
-                            self.set_word_result_flags(result);
-                        }
-                    }
-
-                    // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
-                }
-                _ => illegal_operands(instruction),
-            },
+            Operation::Or => self.destination_and_source_op(
+                &instruction.operands,
+                |d, s, flags| {
+                    let result = d | s;
+                    operations::flags_from_byte_result(flags, result);
+                    Some(result)
+                },
+                |d, s, flags| {
+                    let result = d | s;
+                    operations::flags_from_word_result(flags, result);
+                    Some(result)
+                },
+            ),
 
             Operation::Out => match instruction.operands {
                 OperandSet::DestinationAndSource(ref destination, ref source) => {
@@ -745,102 +699,39 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => illegal_operands(instruction),
             },
 
-            Operation::Shr => match instruction.operands {
-                OperandSet::DestinationAndSource(ref destination, ref source) => {
-                    match destination.1 {
-                        OperandSize::Byte => {
-                            let value = self.get_byte_operand_value(destination);
-                            let by = self.get_byte_operand_value(source);
-                            let result = operations::shift_right_byte(value, by, &mut self.flags);
-                            self.set_byte_operand_value(destination, result);
-                        }
-                        OperandSize::Word => {
-                            let value = self.get_word_operand_value(destination);
-                            let by = self.get_word_operand_value(source);
-                            let result = operations::shift_right_word(value, by, &mut self.flags);
-                            self.set_word_operand_value(destination, result);
-                        }
-                    }
-                }
-                _ => illegal_operands(instruction),
-            },
+            Operation::Shr => self.destination_and_source_op(
+                &instruction.operands,
+                operations::shift_right_byte,
+                operations::shift_right_word,
+            ),
 
-            Operation::Shl => match instruction.operands {
-                OperandSet::DestinationAndSource(ref destination, ref source) => {
-                    match destination.1 {
-                        OperandSize::Byte => {
-                            let value = self.get_byte_operand_value(destination);
-                            let by = self.get_byte_operand_value(source);
-                            let value = operations::shift_left_byte(value, by, &mut self.flags);
-                            self.set_byte_operand_value(destination, value);
-                        }
+            Operation::Shl => self.destination_and_source_op(
+                &instruction.operands,
+                operations::shift_left_byte,
+                operations::shift_left_word,
+            ),
 
-                        OperandSize::Word => {
-                            let value = self.get_word_operand_value(destination);
-                            let by = self.get_word_operand_value(source);
-                            let value = operations::shift_left_word(value, by, &mut self.flags);
-                            self.set_word_operand_value(destination, value);
-                        }
-                    }
-                }
-                _ => illegal_operands(instruction),
-            },
+            Operation::Sub => self.destination_and_source_op(
+                &instruction.operands,
+                operations::sub_byte,
+                operations::sub_word,
+            ),
 
-            Operation::Sub => match instruction.operands {
-                OperandSet::DestinationAndSource(
-                    Operand(ref destination_type, OperandSize::Byte),
-                    ref source,
-                ) => {
-                    let destination = self.get_byte_operand_type_value(destination_type);
-                    let source = self.get_byte_operand_value(source);
-                    let result = operations::sub_byte(destination, source, &mut self.flags);
-                    self.set_byte_operand_type_value(destination_type, result);
-                }
-                OperandSet::DestinationAndSource(
-                    Operand(ref destination_type, OperandSize::Word),
-                    ref source,
-                ) => {
-                    let destination = self.get_word_operand_type_value(destination_type);
-                    let source = self.get_word_operand_value(source);
-                    let result = operations::sub_word(destination, source, &mut self.flags);
-                    self.set_word_operand_type_value(destination_type, result);
-                }
-                _ => illegal_operands(instruction),
-            },
-
-            Operation::Xor => match &instruction.operands {
-                OperandSet::DestinationAndSource(destination, source) => {
-                    match destination.1 {
-                        OperandSize::Byte => {
-                            let left = self.get_byte_operand_value(destination);
-                            let right = self.get_byte_operand_value(source);
-
-                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
-
-                            let result = left ^ right;
-
-                            operations::flags_from_byte_result(&mut self.flags, result);
-
-                            self.set_byte_operand_value(destination, result);
-                        }
-                        OperandSize::Word => {
-                            let left = self.get_word_operand_value(destination);
-                            let right = self.get_word_operand_value(source);
-
-                            self.flags.remove(Flags::OVERFLOW | Flags::CARRY);
-
-                            let result = left ^ right;
-
-                            operations::flags_from_word_result(&mut self.flags, result);
-
-                            self.set_word_operand_value(destination, result);
-                        }
-                    }
-
-                    // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
-                }
-                _ => illegal_operands(instruction),
-            },
+            Operation::Xor => self.destination_and_source_op(
+                &instruction.operands,
+                |d, s, flags| {
+                    flags.remove(Flags::OVERFLOW | Flags::CARRY);
+                    let result = d ^ s;
+                    operations::flags_from_byte_result(flags, result);
+                    Some(result)
+                },
+                |d, s, flags| {
+                    flags.remove(Flags::OVERFLOW | Flags::CARRY);
+                    let result = d ^ s;
+                    operations::flags_from_word_result(flags, result);
+                    Some(result)
+                },
+            ),
 
             Operation::Push => match &instruction.operands {
                 OperandSet::Destination(destination) => {
@@ -859,17 +750,21 @@ impl<M: MemoryInterface> Cpu<M> {
             },
 
             Operation::Mov => match &instruction.operands {
-                OperandSet::DestinationAndSource(destination, source) => match destination.1 {
-                    OperandSize::Byte => {
-                        let source_value = self.get_byte_operand_value(source);
-                        self.set_byte_operand_value(destination, source_value);
-                    }
-                    OperandSize::Word => {
-                        let source_value = self.get_word_operand_value(source);
-                        self.set_word_operand_value(destination, source_value);
-                    }
-                },
-                _ => todo!("Illegal operands!"),
+                OperandSet::DestinationAndSource(
+                    Operand(destination, OperandSize::Byte),
+                    Operand(source, OperandSize::Byte),
+                ) => {
+                    let source_value = self.get_byte_operand_type_value(source);
+                    self.set_byte_operand_type_value(destination, source_value);
+                }
+                OperandSet::DestinationAndSource(
+                    Operand(destination, OperandSize::Word),
+                    Operand(source, OperandSize::Word),
+                ) => {
+                    let source_value = self.get_word_operand_type_value(source);
+                    self.set_word_operand_type_value(destination, source_value);
+                }
+                _ => illegal_operands(instruction),
             },
 
             Operation::Movsb | Operation::Movsw | Operation::Stosb | Operation::Stosw => {
@@ -967,27 +862,11 @@ impl<M: MemoryInterface> Cpu<M> {
 
             Operation::Rcr => todo!(),
 
-            Operation::Rol => match instruction.operands {
-                OperandSet::DestinationAndSource(
-                    Operand(ref destination_type, OperandSize::Byte),
-                    Operand(ref source_type, OperandSize::Byte),
-                ) => {
-                    let destination = self.get_byte_operand_type_value(destination_type);
-                    let source = self.get_byte_operand_type_value(source_type);
-                    let result = operations::rol_byte(destination, source, &mut self.flags);
-                    self.set_byte_operand_type_value(destination_type, result);
-                }
-                OperandSet::DestinationAndSource(
-                    Operand(ref destination_type, OperandSize::Word),
-                    Operand(ref source_type, OperandSize::Word),
-                ) => {
-                    let destination = self.get_word_operand_type_value(destination_type);
-                    let source = self.get_word_operand_type_value(source_type);
-                    let result = operations::rol_word(destination, source, &mut self.flags);
-                    self.set_word_operand_type_value(destination_type, result);
-                }
-                _ => illegal_operands(instruction),
-            },
+            Operation::Rol => self.destination_and_source_op(
+                &instruction.operands,
+                operations::rol_byte,
+                operations::rol_word,
+            ),
 
             Operation::Ror => todo!(),
 
@@ -1008,25 +887,11 @@ impl<M: MemoryInterface> Cpu<M> {
                 self.flags.insert(Flags::INTERRUPT);
             }
 
-            Operation::Test => match instruction.operands {
-                OperandSet::DestinationAndSource(
-                    Operand(ref destination_type, OperandSize::Byte),
-                    Operand(ref source_type, OperandSize::Byte),
-                ) => {
-                    let destination = self.get_byte_operand_type_value(destination_type);
-                    let source = self.get_byte_operand_type_value(source_type);
-                    operations::test_byte(destination, source, &mut self.flags);
-                }
-                OperandSet::DestinationAndSource(
-                    Operand(ref destination_type, OperandSize::Word),
-                    Operand(ref source_type, OperandSize::Word),
-                ) => {
-                    let destination = self.get_word_operand_type_value(destination_type);
-                    let source = self.get_word_operand_type_value(source_type);
-                    operations::test_word(destination, source, &mut self.flags);
-                }
-                _ => illegal_operands(instruction),
-            },
+            Operation::Test => self.destination_and_source_op(
+                &instruction.operands,
+                operations::test_byte,
+                operations::test_word,
+            ),
 
             _ => {
                 todo!("Unknown instruction! {}", instruction.operation);
