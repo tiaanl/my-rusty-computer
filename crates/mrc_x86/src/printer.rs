@@ -199,20 +199,28 @@ impl fmt::Display for Operand {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self.0 {
             OperandType::Direct(segment, displacement) => {
+                match self.1 {
+                    OperandSize::Byte => write!(f, "byte ")?,
+                    OperandSize::Word => write!(f, "word ")?,
+                }
                 match segment {
                     Segment::Es => write!(f, "es:")?,
                     Segment::Cs => write!(f, "cs:")?,
                     Segment::Ss => write!(f, "ss:")?,
-                    Segment::Ds => write!(f, "ds:")?,
+                    Segment::Ds => {}
                 }
                 write!(f, "[{:#06x}]", displacement)?;
             }
             OperandType::Indirect(segment, encoding, displacement) => {
+                match self.1 {
+                    OperandSize::Byte => write!(f, "byte ")?,
+                    OperandSize::Word => write!(f, "word ")?,
+                }
                 match segment {
                     Segment::Es => write!(f, "es:")?,
                     Segment::Cs => write!(f, "cs:")?,
                     Segment::Ss => write!(f, "ss:")?,
-                    Segment::Ds => write!(f, "ds:")?,
+                    Segment::Ds => {}
                 }
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
