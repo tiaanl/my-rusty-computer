@@ -209,7 +209,7 @@ impl<M: MemoryInterface> Cpu<M> {
         cpu
     }
 
-    pub fn _print_registers(&mut self) {
+    pub fn print_registers(&mut self) {
         print!(
             "AX: {:04X} BX: {:04X} CX: {:04X} DX: {:04X} ",
             self.registers[REG_AX],
@@ -252,7 +252,7 @@ impl<M: MemoryInterface> Cpu<M> {
     }
 
     pub fn start(&mut self) {
-        // self.print_registers();
+        self.print_registers();
 
         let mut instructions_executed = 0usize;
 
@@ -286,8 +286,10 @@ impl<M: MemoryInterface> Cpu<M> {
                     if self.execute(&instruction) == ExecuteResult::Stop {
                         break;
                     }
+
                     instructions_executed += 1;
-                    // self.print_registers();
+
+                    self.print_registers();
                 }
 
                 Err(err) => {
@@ -300,81 +302,74 @@ impl<M: MemoryInterface> Cpu<M> {
         log::info!("Instructions executed: {}", instructions_executed);
     }
 
-    fn destination_and_source_op<
-        ByteFn: Fn(u8, u8, &mut Flags) -> Option<u8>,
-        WordFn: Fn(u16, u16, &mut Flags) -> Option<u16>,
-    >(
-        &mut self,
-        operands: &OperandSet,
-        byte_fn: ByteFn,
-        word_fn: WordFn,
-    ) {
-        match operands {
-            OperandSet::DestinationAndSource(
-                Operand(destination_type, OperandSize::Byte),
-                Operand(source_type, OperandSize::Byte),
-            ) => {
-                let destination_value = self.get_byte_operand_type_value(destination_type);
-                let source_value = self.get_byte_operand_type_value(source_type);
-                if let Some(result) = byte_fn(destination_value, source_value, &mut self.flags) {
-                    self.set_byte_operand_type_value(destination_type, result);
-                }
-            }
-            OperandSet::DestinationAndSource(
-                Operand(destination_type, OperandSize::Word),
-                Operand(source_type, OperandSize::Word),
-            ) => {
-                let destination_value = self.get_word_operand_type_value(destination_type);
-                let source_value = self.get_word_operand_type_value(source_type);
-                if let Some(result) = word_fn(destination_value, source_value, &mut self.flags) {
-                    self.set_word_operand_type_value(destination_type, result);
-                }
-            }
-            // _ => illegal_operands(instruction),
-            _ => todo!(),
-        };
-    }
-
     fn execute(&mut self, instruction: &Instruction) -> ExecuteResult {
+        match instruction.operands {
+            OperandSet::DestinationAndSource(
+                Operand(ref destination, OperandSize::Byte),
+                Operand(ref source, OperandSize::Byte),
+            ) => {
+                use operations::*;
+                use Operation::*;
+
+                let d = self.get_byte_operand_type_value(destination);
+                let s = self.get_byte_operand_type_value(source);
+                if let Some(did_operation) = match instruction.operation {
+                    Adc => Some(arithmetic::add_with_carry_byte(d, s, &mut self.flags)),
+                    Add => Some(arithmetic::add_byte(d, s, &mut self.flags)),
+                    And => Some(logic::and_byte(d, s, &mut self.flags)),
+                    Cmp => Some(arithmetic::compare_byte(d, s, &mut self.flags)),
+                    Mul => Some(arithmetic::multiply_byte(d, s, &mut self.flags)),
+                    Or => Some(logic::or_byte(d, s, &mut self.flags)),
+                    Rol => Some(logic::rol_byte(d, s, &mut self.flags)),
+                    Shl => Some(logic::shift_left_byte(d, s, &mut self.flags)),
+                    Shr => Some(logic::shift_right_byte(d, s, &mut self.flags)),
+                    Sub => Some(arithmetic::sub_byte(d, s, &mut self.flags)),
+                    Test => Some(logic::test_byte(d, s, &mut self.flags)),
+                    Xor => Some(logic::xor_byte(d, s, &mut self.flags)),
+                    _ => None,
+                } {
+                    if let Some(result) = did_operation {
+                        self.set_byte_operand_type_value(destination, result);
+                    }
+                    return ExecuteResult::Continue;
+                }
+            }
+
+            OperandSet::DestinationAndSource(
+                Operand(ref destination, OperandSize::Word),
+                Operand(ref source, OperandSize::Word),
+            ) => {
+                use operations::*;
+                use Operation::*;
+
+                let d = self.get_word_operand_type_value(destination);
+                let s = self.get_word_operand_type_value(source);
+                if let Some(did_operation) = match instruction.operation {
+                    Adc => Some(arithmetic::add_with_carry_word(d, s, &mut self.flags)),
+                    Add => Some(arithmetic::add_word(d, s, &mut self.flags)),
+                    And => Some(logic::and_word(d, s, &mut self.flags)),
+                    Cmp => Some(arithmetic::compare_word(d, s, &mut self.flags)),
+                    Mul => Some(arithmetic::multiply_word(d, s, &mut self.flags)),
+                    Or => Some(logic::or_word(d, s, &mut self.flags)),
+                    Rol => Some(logic::rol_word(d, s, &mut self.flags)),
+                    Shl => Some(logic::shift_left_word(d, s, &mut self.flags)),
+                    Shr => Some(logic::shift_right_word(d, s, &mut self.flags)),
+                    Sub => Some(arithmetic::sub_word(d, s, &mut self.flags)),
+                    Test => Some(logic::test_word(d, s, &mut self.flags)),
+                    Xor => Some(logic::xor_word(d, s, &mut self.flags)),
+                    _ => None,
+                } {
+                    if let Some(result) = did_operation {
+                        self.set_word_operand_type_value(destination, result);
+                    }
+                    return ExecuteResult::Continue;
+                }
+            }
+
+            _ => {}
+        }
+
         match instruction.operation {
-            Operation::Add => self.destination_and_source_op(
-                &instruction.operands,
-                |d, s, _| Some(d.wrapping_add(s)),
-                |d, s, _| Some(d.wrapping_add(s)),
-            ),
-
-            Operation::Adc => self.destination_and_source_op(
-                &instruction.operands,
-                |d, s, flags| {
-                    Some(
-                        d.wrapping_add(s)
-                            .wrapping_add(if flags.contains(Flags::CARRY) { 1 } else { 0 }),
-                    )
-                },
-                |d, s, flags| {
-                    Some(
-                        d.wrapping_add(s)
-                            .wrapping_add(if flags.contains(Flags::CARRY) { 1 } else { 0 }),
-                    )
-                },
-            ),
-
-            Operation::And => self.destination_and_source_op(
-                &instruction.operands,
-                |d, s, flags| {
-                    flags.remove(Flags::OVERFLOW | Flags::CARRY);
-                    let result = d & s;
-                    operations::flags_from_byte_result(flags, result);
-                    Some(result)
-                },
-                |d, s, flags| {
-                    flags.remove(Flags::OVERFLOW | Flags::CARRY);
-                    let result = d & s;
-                    operations::flags_from_word_result(flags, result);
-                    Some(result)
-                },
-            ),
-
             Operation::Call => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
                     // Store the current IP (which is after this CALL) on the stack. So that RET
@@ -393,18 +388,6 @@ impl<M: MemoryInterface> Cpu<M> {
                     self.set_byte_register_value(Register::AhSp, 0b00000000);
                 }
             }
-
-            Operation::Cmp => self.destination_and_source_op(
-                &instruction.operands,
-                |d, s, flags| {
-                    operations::flags_from_byte_result(flags, d - s);
-                    None
-                },
-                |d, s, flags| {
-                    operations::flags_from_word_result(flags, d - s);
-                    None
-                },
-            ),
 
             Operation::Clc => {
                 self.flags.remove(Flags::CARRY);
@@ -659,27 +642,7 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => illegal_operands(instruction),
             },
 
-            Operation::Mul => self.destination_and_source_op(
-                &instruction.operands,
-                |d, s, _| Some(d.wrapping_mul(s)),
-                |d, s, _| Some(d.wrapping_mul(s)),
-            ),
-
             Operation::Nop => {}
-
-            Operation::Or => self.destination_and_source_op(
-                &instruction.operands,
-                |d, s, flags| {
-                    let result = d | s;
-                    operations::flags_from_byte_result(flags, result);
-                    Some(result)
-                },
-                |d, s, flags| {
-                    let result = d | s;
-                    operations::flags_from_word_result(flags, result);
-                    Some(result)
-                },
-            ),
 
             Operation::Out => match instruction.operands {
                 OperandSet::DestinationAndSource(ref destination, ref source) => {
@@ -698,40 +661,6 @@ impl<M: MemoryInterface> Cpu<M> {
                 }
                 _ => illegal_operands(instruction),
             },
-
-            Operation::Shr => self.destination_and_source_op(
-                &instruction.operands,
-                operations::shift_right_byte,
-                operations::shift_right_word,
-            ),
-
-            Operation::Shl => self.destination_and_source_op(
-                &instruction.operands,
-                operations::shift_left_byte,
-                operations::shift_left_word,
-            ),
-
-            Operation::Sub => self.destination_and_source_op(
-                &instruction.operands,
-                operations::sub_byte,
-                operations::sub_word,
-            ),
-
-            Operation::Xor => self.destination_and_source_op(
-                &instruction.operands,
-                |d, s, flags| {
-                    flags.remove(Flags::OVERFLOW | Flags::CARRY);
-                    let result = d ^ s;
-                    operations::flags_from_byte_result(flags, result);
-                    Some(result)
-                },
-                |d, s, flags| {
-                    flags.remove(Flags::OVERFLOW | Flags::CARRY);
-                    let result = d ^ s;
-                    operations::flags_from_word_result(flags, result);
-                    Some(result)
-                },
-            ),
 
             Operation::Push => match &instruction.operands {
                 OperandSet::Destination(destination) => {
@@ -858,18 +787,6 @@ impl<M: MemoryInterface> Cpu<M> {
                 self.ip = self.pop_word();
             }
 
-            Operation::Rcl => todo!(),
-
-            Operation::Rcr => todo!(),
-
-            Operation::Rol => self.destination_and_source_op(
-                &instruction.operands,
-                operations::rol_byte,
-                operations::rol_word,
-            ),
-
-            Operation::Ror => todo!(),
-
             Operation::Sahf => {
                 let ah = self.get_byte_register_value(Register::AhSp);
                 self.flags.bits = u16::from_le_bytes([ah, 0]);
@@ -886,12 +803,6 @@ impl<M: MemoryInterface> Cpu<M> {
             Operation::Sti => {
                 self.flags.insert(Flags::INTERRUPT);
             }
-
-            Operation::Test => self.destination_and_source_op(
-                &instruction.operands,
-                operations::test_byte,
-                operations::test_word,
-            ),
 
             _ => {
                 todo!("Unknown instruction! {}", instruction.operation);
@@ -1183,39 +1094,6 @@ impl<M: MemoryInterface> Cpu<M> {
             Segment::Ss => self.segments[SEG_SS] = value,
             Segment::Ds => self.segments[SEG_DS] = value,
         }
-    }
-
-    fn set_byte_result_flags(&mut self, result: i16) {
-        if result == 0 {
-            self.flags.insert(Flags::ZERO);
-        } else {
-            self.flags.remove(Flags::ZERO);
-        }
-
-        if result & 0x80 != 0 {
-            self.flags.insert(Flags::SIGN);
-        } else {
-            self.flags.remove(Flags::SIGN);
-        }
-
-        // TODO: Set parity flag.
-    }
-
-    fn set_word_result_flags(&mut self, result: i32) {
-        if result == 0 {
-            self.flags.insert(Flags::ZERO);
-        } else {
-            self.flags.remove(Flags::ZERO);
-        }
-
-        if result & 0x8000 != 0 {
-            self.flags.insert(Flags::SIGN);
-        } else {
-            self.flags.remove(Flags::SIGN);
-        }
-
-        // TODO: Set signed flag.
-        // TODO: Set parity flag.
     }
 
     fn displace_ip(&mut self, displacement: &Displacement) {

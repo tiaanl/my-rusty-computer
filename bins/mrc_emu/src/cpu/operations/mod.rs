@@ -1,15 +1,25 @@
-mod rol;
-mod shift_left;
-mod shift_right;
-mod sub;
-mod test;
+pub mod arithmetic;
+pub mod logic;
 
 use crate::cpu::{Flags, SignificantBit};
-pub use rol::{rol_byte, rol_word};
-pub use shift_left::{shift_left_byte, shift_left_word};
-pub use shift_right::{shift_right_byte, shift_right_word};
-pub use sub::{sub_byte, sub_word};
-pub use test::{test_byte, test_word};
+
+#[cfg(test)]
+pub fn test_flags(
+    flags: &Flags,
+    carry: bool,
+    parity: bool,
+    aux_carry: bool,
+    zero: bool,
+    sign: bool,
+    overflow: bool,
+) {
+    assert_eq!(carry, flags.contains(Flags::CARRY));
+    assert_eq!(parity, flags.contains(Flags::PARITY));
+    assert_eq!(aux_carry, flags.contains(Flags::AUX_CARRY));
+    assert_eq!(zero, flags.contains(Flags::ZERO));
+    assert_eq!(sign, flags.contains(Flags::SIGN));
+    assert_eq!(overflow, flags.contains(Flags::OVERFLOW));
+}
 
 const PARITY_TABLE: [u8; 0x100] = [
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
