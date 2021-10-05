@@ -159,6 +159,10 @@ pub enum ExecuteResult {
     Stop,
 }
 
+fn illegal_operands(instruction: &Instruction) {
+    panic!("Illegal operands! {:?}", instruction)
+}
+
 pub struct Cpu<M: MemoryInterface> {
     pub registers: [u16; 8],
     pub segments: [u16; 4],
@@ -299,21 +303,25 @@ impl<M: MemoryInterface> Cpu<M> {
     fn execute(&mut self, instruction: &Instruction) -> ExecuteResult {
         match instruction.operation {
             Operation::Add => match &instruction.operands {
-                OperandSet::DestinationAndSource(destination, source) => match destination.1 {
-                    OperandSize::Byte => {
-                        let mut destination_value = self.get_byte_operand_value(destination);
-                        let source_value = self.get_byte_operand_value(source);
-                        destination_value = destination_value.wrapping_add(source_value);
-                        self.set_byte_operand_value(destination, destination_value);
-                    }
-                    OperandSize::Word => {
-                        let mut destination_value = self.get_word_operand_value(destination);
-                        let source_value = self.get_word_operand_value(source);
-                        destination_value = destination_value.wrapping_add(source_value);
-                        self.set_word_operand_value(destination, destination_value);
-                    }
-                },
-                _ => panic!("Illegal operands!"),
+                OperandSet::DestinationAndSource(
+                    Operand(destination_type, OperandSize::Byte),
+                    Operand(source_type, OperandSize::Byte),
+                ) => {
+                    let mut destination_value = self.get_byte_operand_type_value(destination_type);
+                    let source_value = self.get_byte_operand_type_value(source_type);
+                    destination_value = destination_value.wrapping_add(source_value);
+                    self.set_byte_operand_type_value(destination_type, destination_value);
+                }
+                OperandSet::DestinationAndSource(
+                    Operand(destination_type, OperandSize::Word),
+                    Operand(source_type, OperandSize::Word),
+                ) => {
+                    let mut destination_value = self.get_word_operand_type_value(destination_type);
+                    let source_value = self.get_word_operand_type_value(source_type);
+                    destination_value = destination_value.wrapping_add(source_value);
+                    self.set_word_operand_type_value(destination_type, destination_value);
+                }
+                _ => illegal_operands(instruction),
             },
 
             Operation::Adc => match &instruction.operands {
@@ -343,7 +351,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.set_word_operand_value(destination, destination_value);
                     }
                 },
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::And => match &instruction.operands {
@@ -371,7 +379,7 @@ impl<M: MemoryInterface> Cpu<M> {
 
                     // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Call => match &instruction.operands {
@@ -443,7 +451,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.set_word_operand_value(destination, value);
                     }
                 },
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Hlt => {
@@ -459,7 +467,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     log::info!("PORT IN: {:02X}", port);
                     self.set_byte_operand_type_value(destination_type, 0);
                 }
-                _ => panic!("Illegal operands! {:?}", &instruction.operands),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Inc => match &instruction.operands {
@@ -475,7 +483,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.set_word_operand_value(destination, value);
                     }
                 },
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Int => match &instruction.operands {
@@ -496,7 +504,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         }
                     }
                 }
-                _ => panic!("Illegal operands! {:?}", &instruction.operands),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jb => match &instruction.operands {
@@ -505,7 +513,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jbe => match &instruction.operands {
@@ -514,7 +522,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Je => match &instruction.operands {
@@ -523,7 +531,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jl => match &instruction.operands {
@@ -532,7 +540,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jle => match &instruction.operands {
@@ -543,7 +551,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jmp => match &instruction.operands {
@@ -554,7 +562,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     self.segments[SEG_CS] = *segment;
                     self.ip = *offset;
                 }
-                _ => panic!("Illegal operands! {:?}", &instruction.operands),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jnb => match &instruction.operands {
@@ -563,7 +571,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jnbe => match &instruction.operands {
@@ -572,7 +580,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jne => match &instruction.operands {
@@ -581,7 +589,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jno => match &instruction.operands {
@@ -590,7 +598,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jnp => match &instruction.operands {
@@ -599,7 +607,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jns => match &instruction.operands {
@@ -608,7 +616,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jo => match &instruction.operands {
@@ -617,7 +625,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Jp => match &instruction.operands {
@@ -626,7 +634,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Js => match &instruction.operands {
@@ -635,7 +643,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Lahf => {
@@ -655,7 +663,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     let addr = self.get_indirect_addr(segment, addressing_mode, displacement);
                     self.set_word_register_value(register, addr as u16);
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Loop => match instruction.operands {
@@ -668,7 +676,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.displace_ip(displacement);
                     }
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Mul => match &instruction.operands {
@@ -686,7 +694,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.set_word_operand_value(destination, value);
                     }
                 },
-                _ => panic!(),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Nop => {}
@@ -716,7 +724,7 @@ impl<M: MemoryInterface> Cpu<M> {
 
                     // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Out => match instruction.operands {
@@ -734,7 +742,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         }
                     }
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Shr => match instruction.operands {
@@ -754,7 +762,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         }
                     }
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Shl => match instruction.operands {
@@ -775,7 +783,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         }
                     }
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Sub => match instruction.operands {
@@ -797,7 +805,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     let result = operations::sub_word(destination, source, &mut self.flags);
                     self.set_word_operand_type_value(destination_type, result);
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Xor => match &instruction.operands {
@@ -831,7 +839,7 @@ impl<M: MemoryInterface> Cpu<M> {
 
                     // The OF and CF flags are cleared; the SF, ZF, and PF flags are set according to the result. The state of the AF flag is undefined.
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Push => match &instruction.operands {
@@ -839,7 +847,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     let value = self.get_word_operand_value(destination);
                     self.push_word(value);
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Pop => match &instruction.operands {
@@ -847,7 +855,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     let value = self.pop_word();
                     self.set_word_operand_value(destination, value);
                 }
-                _ => panic!("Illegal operands!"),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Mov => match &instruction.operands {
@@ -978,7 +986,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     let result = operations::rol_word(destination, source, &mut self.flags);
                     self.set_word_operand_type_value(destination_type, result);
                 }
-                _ => panic!("Illegal operands! {:?}", &instruction.operands),
+                _ => illegal_operands(instruction),
             },
 
             Operation::Ror => todo!(),
@@ -1017,7 +1025,7 @@ impl<M: MemoryInterface> Cpu<M> {
                     let source = self.get_word_operand_type_value(source_type);
                     operations::test_word(destination, source, &mut self.flags);
                 }
-                _ => panic!("Illegal operands! {:?}", &instruction.operands),
+                _ => illegal_operands(instruction),
             },
 
             _ => {
@@ -1168,8 +1176,8 @@ impl<M: MemoryInterface> Cpu<M> {
                 );
             }
             OperandType::Register(register) => self.set_byte_register_value(*register, value),
-            OperandType::Segment(_) => panic!("Cannot set segment value with a byte!"),
-            OperandType::Immediate(_) => todo!(),
+            OperandType::Segment(_) => panic!("Can not set segment value with a byte!"),
+            OperandType::Immediate(_) => panic!("Can not set immediate value!"),
         }
     }
 
