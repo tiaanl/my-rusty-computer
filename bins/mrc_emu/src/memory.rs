@@ -127,7 +127,7 @@ impl MemoryMapper {
 impl MemoryInterface for MemoryMapper {
     fn read(&self, so: SegmentAndOffset) -> u8 {
         for container in &self.interfaces {
-            if so >= container.start && so <= container.start + container.size {
+            if so >= container.start && so < container.start + container.size {
                 return container.interface.borrow().read(so - container.start);
             }
         }
@@ -136,7 +136,7 @@ impl MemoryInterface for MemoryMapper {
 
     fn write(&mut self, so: SegmentAndOffset, value: u8) {
         for container in &mut self.interfaces {
-            if so >= container.start && so <= container.start + container.size {
+            if so >= container.start && so < container.start + container.size {
                 return container
                     .interface
                     .borrow_mut()

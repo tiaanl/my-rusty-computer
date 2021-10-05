@@ -27,18 +27,6 @@ Memory areas:
 0xF0000...0xFFFFF   64KiB           Motherboard BIOS
 */
 
-fn high_byte(word: u16) -> u8 {
-    (word >> 8) as u8
-}
-
-fn low_byte(word: u16) -> u8 {
-    word as u8
-}
-
-fn high_and_low(word: u16) -> (u8, u8) {
-    (high_byte(word), low_byte(word))
-}
-
 pub trait SignificantBit {
     fn least_significant_bit(&self) -> bool;
     fn most_significant_bit(&self) -> bool;
@@ -456,8 +444,8 @@ impl<M: MemoryInterface> Cpu<M> {
                 )) => {
                     if *value == 0x21 {
                         // DOS
-                        match high_and_low(self.registers[REG_AX]) {
-                            (0x4C, return_code) => {
+                        match self.registers[REG_AX].to_le_bytes() {
+                            [0x4C, return_code] => {
                                 println!("INT 21h: DOS exit with return code ({})", return_code);
                                 return ExecuteResult::Stop;
                             }

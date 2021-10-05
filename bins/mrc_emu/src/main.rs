@@ -80,7 +80,10 @@ fn main() {
     // Video
 
     let video_memory = VideoMemory::default();
-    memory_mapper.map(0xC0000, 0x80000, Rc::new(RefCell::new(video_memory)));
+    memory_mapper.map(0xC0000, 0x8000, Rc::new(RefCell::new(video_memory)));
+
+    let video_expansion = PhysicalMemory::with_capacity(0x28000);
+    memory_mapper.map(0xC8000, 0x28000, Rc::new(RefCell::new(video_expansion)));
 
     Cpu::new(memory_mapper).start();
 }
