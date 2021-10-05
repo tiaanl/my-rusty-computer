@@ -1,11 +1,11 @@
 mod operations;
 
-use crate::memory::{MemoryInterface, MemoryReader};
+use crate::memory::{Bus, MemoryInterface};
 use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
 use mrc_x86::{
     AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
-    Operation, Register, Segment,
+    Operation, Register, Repeat, Segment,
 };
 use std::cell::RefCell;
 use std::fmt::Formatter;
@@ -159,7 +159,7 @@ pub struct Cpu<M: MemoryInterface> {
     pub ip: u16,
     pub flags: Flags,
 
-    memory: MemoryReader<M>,
+    bus: Bus<M>,
 }
 
 impl<M: MemoryInterface> Cpu<M> {
@@ -169,7 +169,7 @@ impl<M: MemoryInterface> Cpu<M> {
             segments: [0; 4],
             ip: 0x0000,
             flags: Flags::empty(),
-            memory: MemoryReader::new(Rc::new(RefCell::new(memory_interface))),
+            bus: Bus::new(Rc::new(RefCell::new(memory_interface))),
         };
 
         // if cfg!(feature = "dos") {
@@ -247,7 +247,7 @@ impl<M: MemoryInterface> Cpu<M> {
         // for _ in 0..100 {
         loop {
             let mut it = CpuIterator {
-                memory: self.memory.interface(),
+                memory: self.bus.interface(),
                 position: segment_and_offset(self.segments[SEG_CS], self.ip),
             };
 
@@ -258,7 +258,7 @@ impl<M: MemoryInterface> Cpu<M> {
             for i in 0..5 {
                 print!(
                     "{:02X} ",
-                    self.memory
+                    self.bus
                         .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
                 );
             }
@@ -439,6 +439,17 @@ impl<M: MemoryInterface> Cpu<M> {
                 println!("HALT");
                 return Err(());
             }
+
+            Operation::In => match instruction.operands {
+                OperandSet::DestinationAndSource(
+                    Operand(ref destination_type, OperandSize::Byte),
+                    Operand(OperandType::Immediate(port), OperandSize::Byte),
+                ) => {
+                    log::info!("PORT IN: {:02X}", port);
+                    self.set_byte_operand_type_value(destination_type, 0);
+                }
+                _ => panic!("Illegal operands! {:?}", &instruction.operands),
+            },
 
             Operation::Inc => match &instruction.operands {
                 OperandSet::Destination(destination) => match destination.1 {
@@ -684,11 +695,11 @@ impl<M: MemoryInterface> Cpu<M> {
                     match destination.1 {
                         OperandSize::Byte => {
                             let port = self.get_byte_operand_value(destination);
-                            println!("OUT: {:02X} to port {:02X}", source_value, port);
+                            log::info!("OUT: {:02X} to port {:02X}", source_value, port);
                         }
                         OperandSize::Word => {
                             let port = self.get_word_operand_value(destination);
-                            println!("OUT: {:02X} to port {:04X}", source_value, port);
+                            log::info!("OUT: {:02X} to port {:04X}", source_value, port);
                         }
                     }
                 }
@@ -822,55 +833,79 @@ impl<M: MemoryInterface> Cpu<M> {
                 _ => todo!("Illegal operands!"),
             },
 
-            Operation::Movsb => {
+            Operation::Movsb | Operation::Movsw => {
+                let value_size: u16 = match instruction.operation {
+                    Operation::Movsb => 1,
+                    Operation::Movsw => 2,
+                    _ => unreachable!(),
+                };
+
                 let ds = self.get_segment_value(SEG_DS);
+                let mut si = self.get_word_register_value(Register::DhSi);
+
                 let es = self.get_segment_value(SEG_ES);
+                let mut di = self.get_word_register_value(Register::BhDi);
+
+                let mut count = match instruction.repeat {
+                    None => 1,
+                    Some(ref repeat) => match repeat {
+                        Repeat::Equal => self.get_word_register_value(Register::ClCx),
+                        Repeat::NotEqual => self.get_word_register_value(Register::ClCx),
+                    },
+                };
+
+                let forward = self.flags.contains(Flags::DIRECTION);
 
                 loop {
-                    let mut cx = self.get_word_register_value(Register::ClCx);
-                    let si = self.get_word_register_value(Register::DhSi);
-                    let di = self.get_word_register_value(Register::BhDi);
+                    match instruction.operation {
+                        Operation::Movsb => {
+                            let value = self.bus.read_u8(segment_and_offset(ds, si));
+                            self.bus.write_u8(segment_and_offset(es, di), value);
+                        }
 
-                    let byte = self.memory.read_u8(segment_and_offset(ds, si));
+                        Operation::Movsw => {
+                            let value = self.bus.read_u16(segment_and_offset(ds, si));
+                            self.bus.write_u16(segment_and_offset(es, di), value);
+                        }
 
-                    self.memory.write_u8(segment_and_offset(es, di), byte);
+                        _ => unreachable!(),
+                    };
 
-                    self.set_word_register_value(Register::DhSi, si + 1);
-                    self.set_word_register_value(Register::BhDi, di + 1);
+                    if forward {
+                        si = si.wrapping_add(value_size);
+                        di = si.wrapping_add(value_size);
+                    } else {
+                        si = si.wrapping_sub(value_size);
+                        di = si.wrapping_sub(value_size);
+                    }
 
-                    cx -= 1;
+                    count -= 1;
 
-                    self.set_word_register_value(Register::ClCx, cx);
-
-                    if cx == 0 {
+                    if count == 0 {
                         break;
+                    }
+
+                    if let Some(ref repeat) = instruction.repeat {
+                        match repeat {
+                            Repeat::Equal => {
+                                if self.flags.contains(Flags::ZERO) {
+                                    break;
+                                }
+                            }
+                            Repeat::NotEqual => {
+                                if !self.flags.contains(Flags::ZERO) {
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            Operation::Movsw => {
-                let ds = self.get_segment_value(SEG_DS);
-                let es = self.get_segment_value(SEG_ES);
+                self.set_word_register_value(Register::DhSi, si + 1);
+                self.set_word_register_value(Register::BhDi, di + 1);
 
-                loop {
-                    let mut cx = self.get_word_register_value(Register::ClCx);
-                    let si = self.get_word_register_value(Register::DhSi);
-                    let di = self.get_word_register_value(Register::BhDi);
-
-                    let word = self.memory.read_u16(segment_and_offset(ds, si));
-
-                    self.memory.write_u16(segment_and_offset(es, di), word);
-
-                    self.set_word_register_value(Register::DhSi, si + 2);
-                    self.set_word_register_value(Register::BhDi, di + 2);
-
-                    cx -= 1;
-
-                    self.set_word_register_value(Register::ClCx, cx);
-
-                    if cx == 0 {
-                        break;
-                    }
+                if instruction.repeat.is_some() {
+                    self.set_word_register_value(Register::ClCx, count);
                 }
             }
 
@@ -904,6 +939,32 @@ impl<M: MemoryInterface> Cpu<M> {
                 self.flags.insert(Flags::INTERRUPT);
             }
 
+            Operation::Stosb => {
+                // Store AL into ES:DI
+                let al = self.get_byte_register_value(Register::AlAx);
+
+                let es = self.get_segment_value(SEG_ES);
+                let di = self.get_word_register_value(Register::BhDi);
+                let si = self.get_word_register_value(Register::DhSi);
+
+                self.bus.write_u8(segment_and_offset(es, di), al);
+
+                self.step_si_di(si, di, 1);
+            }
+
+            Operation::Stosw => {
+                // Store AX into ES:DI
+                let ax = self.get_word_register_value(Register::AlAx);
+
+                let es = self.get_segment_value(SEG_ES);
+                let di = self.get_word_register_value(Register::BhDi);
+                let si = self.get_word_register_value(Register::DhSi);
+
+                self.bus.write_u16(segment_and_offset(es, di), ax);
+
+                self.step_si_di(si, di, 2);
+            }
+
             _ => {
                 todo!("Unknown instruction! {}", instruction.operation);
             }
@@ -914,14 +975,14 @@ impl<M: MemoryInterface> Cpu<M> {
 
     fn push_word(&mut self, value: u16) {
         let stack_pointer = self.get_stack_pointer();
-        self.memory.write_u16(stack_pointer, value);
+        self.bus.write_u16(stack_pointer, value);
         self.adjust_stack_pointer(-2);
     }
 
     fn pop_word(&mut self) -> u16 {
         self.adjust_stack_pointer(2);
         let stack_pointer = self.get_stack_pointer();
-        self.memory.read_u16(stack_pointer)
+        self.bus.read_u16(stack_pointer)
     }
 
     fn get_indirect_addr(
@@ -987,11 +1048,11 @@ impl<M: MemoryInterface> Cpu<M> {
                 // Get a single byte from DS:offset
                 let ds = self.get_segment_value(SEG_DS);
                 let addr = segment_and_offset(ds, *offset);
-                self.memory.read_u8(addr)
+                self.bus.read_u8(addr)
             }
 
             OperandType::Indirect(addressing_mode, displacement) => self
-                .memory
+                .bus
                 .read_u8(self.get_indirect_addr(addressing_mode, displacement)),
 
             OperandType::Register(ref register) => self.get_byte_register_value(*register),
@@ -1014,11 +1075,11 @@ impl<M: MemoryInterface> Cpu<M> {
                 let ds = self.get_segment_value(SEG_DS);
                 let addr = segment_and_offset(ds, *offset);
 
-                self.memory.read_u16(addr)
+                self.bus.read_u16(addr)
             }
 
             OperandType::Indirect(addressing_mode, displacement) => self
-                .memory
+                .bus
                 .read_u16(self.get_indirect_addr(addressing_mode, displacement)),
 
             OperandType::Register(register) => self.get_word_register_value(*register),
@@ -1044,10 +1105,10 @@ impl<M: MemoryInterface> Cpu<M> {
         match operand_type {
             OperandType::Direct(offset) => {
                 let ds = self.get_segment_value(SEG_DS);
-                self.memory.write_u8(segment_and_offset(ds, *offset), value);
+                self.bus.write_u8(segment_and_offset(ds, *offset), value);
             }
             OperandType::Indirect(addressing_mode, displacement) => {
-                self.memory
+                self.bus
                     .write_u8(self.get_indirect_addr(addressing_mode, displacement), value);
             }
             OperandType::Register(register) => self.set_byte_register_value(*register, value),
@@ -1065,11 +1126,10 @@ impl<M: MemoryInterface> Cpu<M> {
         match operand_type {
             OperandType::Direct(offset) => {
                 let ds = self.get_segment_value(SEG_DS);
-                self.memory
-                    .write_u16(segment_and_offset(ds, *offset), value);
+                self.bus.write_u16(segment_and_offset(ds, *offset), value);
             }
             OperandType::Indirect(addressing_mode, displacement) => {
-                self.memory
+                self.bus
                     .write_u16(self.get_indirect_addr(addressing_mode, displacement), value);
             }
             OperandType::Register(register) => self.set_word_register_value(*register, value),
@@ -1245,6 +1305,16 @@ impl<M: MemoryInterface> Cpu<M> {
         let sp = (sp as i16).wrapping_add(offset) as u16;
         self.set_word_register_value(Register::AhSp, sp);
     }
+
+    fn step_si_di(&mut self, si: u16, di: u16, adjust: u16) {
+        if self.flags.contains(Flags::DIRECTION) {
+            self.set_word_register_value(Register::BhDi, di.wrapping_add(adjust));
+            self.set_word_register_value(Register::DhSi, si.wrapping_add(adjust));
+        } else {
+            self.set_word_register_value(Register::BhDi, di.wrapping_sub(adjust));
+            self.set_word_register_value(Register::DhSi, si.wrapping_sub(adjust));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1272,10 +1342,7 @@ mod test {
 
         assert_eq!(Ok(()), result);
         assert_eq!(0x000E, cpu.registers[REG_SP]);
-        assert_eq!(
-            0x1010,
-            cpu.memory.read_u16(segment_and_offset(0x0000, 0x0010))
-        );
+        assert_eq!(0x1010, cpu.bus.read_u16(segment_and_offset(0x0000, 0x0010)));
 
         // pop bx
         let result = cpu.execute(&Instruction::new(

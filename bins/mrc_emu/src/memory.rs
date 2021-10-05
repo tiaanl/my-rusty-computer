@@ -12,11 +12,11 @@ pub trait MemoryInterface {
     fn write(&mut self, so: SegmentAndOffset, value: u8);
 }
 
-pub struct MemoryReader<M: MemoryInterface> {
+pub struct Bus<M: MemoryInterface> {
     interface: Rc<RefCell<M>>,
 }
 
-impl<M: MemoryInterface> MemoryReader<M> {
+impl<M: MemoryInterface> Bus<M> {
     pub fn new(interface: Rc<RefCell<M>>) -> Self {
         Self { interface }
     }
