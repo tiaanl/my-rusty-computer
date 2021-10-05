@@ -153,6 +153,12 @@ impl std::fmt::Display for Flags {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum ExecuteResult {
+    Continue,
+    Stop,
+}
+
 pub struct Cpu<M: MemoryInterface> {
     pub registers: [u16; 8],
     pub segments: [u16; 4],
@@ -244,6 +250,8 @@ impl<M: MemoryInterface> Cpu<M> {
     pub fn start(&mut self) {
         // self.print_registers();
 
+        let mut instructions_executed = 0usize;
+
         // for _ in 0..100 {
         loop {
             let mut it = CpuIterator {
@@ -254,15 +262,15 @@ impl<M: MemoryInterface> Cpu<M> {
             let start_position = it.position;
 
             // Print some bytes from memory.
-            print!("Bytes to decode: ");
-            for i in 0..5 {
-                print!(
-                    "{:02X} ",
-                    self.bus
-                        .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
-                );
-            }
-            println!();
+            // print!("Bytes to decode: ");
+            // for i in 0..5 {
+            //     print!(
+            //         "{:02X} ",
+            //         self.bus
+            //             .read_u8(segment_and_offset(self.segments[SEG_CS], self.ip + i))
+            //     );
+            // }
+            // println!();
 
             match decode_instruction(&mut it) {
                 Ok(instruction) => {
@@ -271,9 +279,10 @@ impl<M: MemoryInterface> Cpu<M> {
                         self.segments[SEG_CS], self.ip, instruction
                     );
                     self.ip += (it.position - start_position) as u16;
-                    if let Err(()) = self.execute(&instruction) {
+                    if self.execute(&instruction) == ExecuteResult::Stop {
                         break;
                     }
+                    instructions_executed += 1;
                     // self.print_registers();
                 }
 
@@ -283,9 +292,11 @@ impl<M: MemoryInterface> Cpu<M> {
                 }
             }
         }
+
+        log::info!("Instructions executed: {}", instructions_executed);
     }
 
-    fn execute(&mut self, instruction: &Instruction) -> Result<(), ()> {
+    fn execute(&mut self, instruction: &Instruction) -> ExecuteResult {
         match instruction.operation {
             Operation::Add => match &instruction.operands {
                 OperandSet::DestinationAndSource(destination, source) => match destination.1 {
@@ -437,7 +448,7 @@ impl<M: MemoryInterface> Cpu<M> {
 
             Operation::Hlt => {
                 println!("HALT");
-                return Err(());
+                return ExecuteResult::Stop;
             }
 
             Operation::In => match instruction.operands {
@@ -477,7 +488,7 @@ impl<M: MemoryInterface> Cpu<M> {
                         match high_and_low(self.registers[REG_AX]) {
                             (0x4C, return_code) => {
                                 println!("INT 21h: DOS exit with return code ({})", return_code);
-                                return Err(());
+                                return ExecuteResult::Stop;
                             }
                             _ => {
                                 println!("INT {}", value);
@@ -509,6 +520,26 @@ impl<M: MemoryInterface> Cpu<M> {
             Operation::Je => match &instruction.operands {
                 OperandSet::Displacement(displacement) => {
                     if self.flags.contains(Flags::ZERO) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
+            Operation::Jl => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if self.flags.contains(Flags::SIGN) != self.flags.contains(Flags::OVERFLOW) {
+                        self.displace_ip(displacement);
+                    }
+                }
+                _ => panic!(),
+            },
+
+            Operation::Jle => match &instruction.operands {
+                OperandSet::Displacement(displacement) => {
+                    if self.flags.contains(Flags::ZERO)
+                        || self.flags.contains(Flags::SIGN) != self.flags.contains(Flags::OVERFLOW)
+                    {
                         self.displace_ip(displacement);
                     }
                 }
@@ -994,7 +1025,7 @@ impl<M: MemoryInterface> Cpu<M> {
             }
         }
 
-        Ok(())
+        ExecuteResult::Continue
     }
 
     fn push_word(&mut self, value: u16) {
@@ -1354,7 +1385,7 @@ mod test {
             )),
         ));
 
-        assert_eq!(Ok(()), result);
+        assert_eq!(ExecuteResult::Continue, result);
         assert_eq!(0x000E, cpu.registers[REG_SP]);
         assert_eq!(0x1010, cpu.bus.read_u16(segment_and_offset(0x0000, 0x0010)));
 
@@ -1367,7 +1398,7 @@ mod test {
             )),
         ));
 
-        assert_eq!(Ok(()), result);
+        assert_eq!(ExecuteResult::Continue, result);
         assert_eq!(0x0010, cpu.registers[REG_SP]);
         assert_eq!(0x1010, cpu.registers[REG_BX]);
     }
@@ -1391,12 +1422,12 @@ mod test {
         assert_eq!(0xD5, cpu.flags.bits);
 
         let sahf = Instruction::new(Operation::Lahf, OperandSet::None);
-        cpu.execute(&sahf).unwrap();
+        cpu.execute(&sahf);
         assert_eq!(0x00D5, cpu.flags.bits);
 
         cpu.registers[REG_AX] = 0x0000;
         let sahf = Instruction::new(Operation::Sahf, OperandSet::None);
-        cpu.execute(&sahf).unwrap();
+        cpu.execute(&sahf);
         assert_eq!(0x0000, cpu.flags.bits);
     }
 }

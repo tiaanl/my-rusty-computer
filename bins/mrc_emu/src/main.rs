@@ -1,8 +1,10 @@
 mod cpu;
 mod memory;
+mod video;
 
 use crate::cpu::segment_and_offset;
 use crate::memory::{MemoryMapper, PhysicalMemory, ReadOnlyMemory};
+use crate::video::VideoMemory;
 use clap::{App, Arg};
 use cpu::Cpu;
 use std::cell::RefCell;
@@ -36,11 +38,11 @@ fn main() {
         )
         .get_matches();
 
-    let mut memory_manager = MemoryMapper::new();
+    let mut memory_mapper = MemoryMapper::new();
 
     // Physical memory is 640KiB.
     let physical_memory = PhysicalMemory::with_capacity(0xA0000);
-    memory_manager.map(
+    memory_mapper.map(
         segment_and_offset(0, 0),
         0xA0000,
         Rc::new(RefCell::new(physical_memory)),
@@ -68,12 +70,17 @@ fn main() {
         );
 
         let rom = ReadOnlyMemory::from_vec(data);
-        memory_manager.map(
+        memory_mapper.map(
             bios_start_addr,
             data_size as u32,
             Rc::new(RefCell::new(rom)),
         );
     }
 
-    Cpu::new(memory_manager).start();
+    // Video
+
+    let video_memory = VideoMemory::default();
+    memory_mapper.map(0xC0000, 0x80000, Rc::new(RefCell::new(video_memory)));
+
+    Cpu::new(memory_mapper).start();
 }
