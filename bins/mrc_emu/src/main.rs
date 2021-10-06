@@ -1,5 +1,6 @@
 mod cpu;
 mod memory;
+mod monitor;
 mod video;
 
 use crate::cpu::segment_and_offset;
@@ -84,6 +85,9 @@ fn main() {
 
     let video_expansion = PhysicalMemory::with_capacity(0x28000);
     memory_mapper.map(0xC8000, 0x28000, Rc::new(RefCell::new(video_expansion)));
+
+    let mut monitor = monitor::Monitor {};
+    monitor.start();
 
     Cpu::new(memory_mapper).start();
 }
