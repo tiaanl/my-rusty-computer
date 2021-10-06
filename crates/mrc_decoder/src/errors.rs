@@ -1,5 +1,6 @@
-use crate::modrm::RegisterOrMemory;
 use std::fmt;
+
+use crate::modrm::RegisterOrMemory;
 
 #[derive(PartialEq, Debug)]
 pub enum Error {
@@ -23,7 +24,16 @@ impl fmt::Display for Error {
             Error::InvalidModRmEncoding(mod_rm_byte) => {
                 write!(f, "invalid modR/M encoding: {:#04X}", mod_rm_byte)
             }
-            _ => write!(f, "unknown error"),
+            Error::CouldNotCreateOperandFromModRmEncoding(ref register_or_memory) => {
+                write!(f, "Could not create operand from mod reg r/m encoding. ({:?})", register_or_memory)
+            }
+            Error::CouldNotReadExtraBytes => {
+                write!(f, "Could not fetch extra bytes from bus.")
+            }
+            Error::InvalidDataSizeEncoding(byte) => {
+                write!(f, "Could not determine data size from encoding ({:02x})", byte)
+            }
+            _ => todo!()
         }
     }
 }

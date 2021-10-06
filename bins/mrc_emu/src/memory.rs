@@ -1,6 +1,7 @@
-use crate::cpu::SegmentAndOffset;
 use std::cell::RefCell;
 use std::rc::Rc;
+
+use crate::cpu::SegmentAndOffset;
 
 #[derive(Debug)]
 pub enum MemoryError {
@@ -48,55 +49,6 @@ impl<M: MemoryInterface> Bus<M> {
 }
 
 pub type MemoryInterfaceRef = Rc<RefCell<dyn MemoryInterface>>;
-
-pub struct PhysicalMemory {
-    pub data: Vec<u8>,
-}
-
-impl PhysicalMemory {
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            data: vec![0; capacity],
-        }
-    }
-}
-
-impl MemoryInterface for PhysicalMemory {
-    fn read(&self, so: SegmentAndOffset) -> u8 {
-        self.data[so as usize]
-    }
-
-    fn write(&mut self, so: SegmentAndOffset, value: u8) {
-        self.data[so as usize] = value;
-    }
-}
-
-pub struct ReadOnlyMemory {
-    data: Vec<u8>,
-}
-
-impl ReadOnlyMemory {
-    pub fn from_vec(data: Vec<u8>) -> Self {
-        Self { data }
-    }
-}
-
-impl MemoryInterface for ReadOnlyMemory {
-    fn read(&self, so: SegmentAndOffset) -> u8 {
-        match self.data.get(so as usize) {
-            None => panic!(
-                "Address out of range. ({:05X} of {:05X})",
-                so,
-                self.data.len()
-            ),
-            Some(&byte) => byte,
-        }
-    }
-
-    fn write(&mut self, _: SegmentAndOffset, _: u8) {
-        // panic!("Can't write to ROM's");
-    }
-}
 
 struct InterfaceContainer {
     start: SegmentAndOffset,
@@ -149,8 +101,9 @@ impl MemoryInterface for MemoryMapper {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use crate::cpu::segment_and_offset;
+
+    use super::*;
 
     #[test]
     fn test_memory_mapping() {

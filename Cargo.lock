@@ -775,6 +775,7 @@ dependencies = [
  "log",
  "mrc_decoder",
  "mrc_dos",
+ "mrc_emulator",
  "mrc_x86",
  "pretty_env_logger",
 ]
@@ -789,6 +790,16 @@ dependencies = [
 [[package]]
 name = "mrc_dos"
 version = "0.1.0"
+
+[[package]]
+name = "mrc_emulator"
+version = "0.0.1"
+dependencies = [
+ "bitflags",
+ "log",
+ "mrc_decoder",
+ "mrc_x86",
+]
 
 [[package]]
 name = "mrc_x86"

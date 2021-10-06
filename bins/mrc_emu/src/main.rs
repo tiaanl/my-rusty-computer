@@ -1,17 +1,23 @@
-mod cpu;
-mod memory;
-mod monitor;
-mod video;
-
-use crate::cpu::segment_and_offset;
-use crate::memory::{MemoryMapper, PhysicalMemory, ReadOnlyMemory};
-use crate::video::VideoMemory;
-use clap::{App, Arg};
-use cpu::Cpu;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io::Read;
 use std::rc::Rc;
+
+use clap::{App, Arg};
+
+use cpu::Cpu;
+use mrc_emulator::Emulator;
+use mrc_emulator::ram::RandomAccessMemory;
+use mrc_emulator::rom::ReadOnlyMemory;
+
+use crate::cpu::segment_and_offset;
+use crate::memory::MemoryMapper;
+use crate::video::VideoMemory;
+
+mod cpu;
+mod memory;
+mod monitor;
+mod video;
 
 fn load_bios<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
@@ -27,6 +33,42 @@ fn load_bios<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     Ok(data)
 }
 
+fn install_memory(emulator: &Emulator) {
+    // 640KiB RAM
+    let ram = RandomAccessMemory::with_capacity(0xA0000);
+    emulator.bus().borrow_mut().map(0x00000, 0xA0000, Rc::new(RefCell::new(ram)));
+}
+
+fn install_bios(emulator: &Emulator, path: &str) {
+    log::info!("Loading BIOS from: {}", path);
+
+    let data = match load_bios(path) {
+        Ok(r) => r,
+        Err(err) => {
+            log::error!("Could not read BIOS file. ({}) ({})", &path, err);
+            return;
+        }
+    };
+
+    let data_size = u32::try_from(data.len()).unwrap();
+    let bios_start_addr = segment_and_offset(0xF000, 0x0000);
+
+    log::info!(
+            "Loading BIOS to: {:#05X}..{:#05X} ({:05X}/{} bytes)",
+            bios_start_addr,
+            bios_start_addr + data_size as u32,
+            data_size,
+            data_size
+        );
+
+    let rom = ReadOnlyMemory::from_vec(data);
+    emulator.bus().borrow_mut().map(
+        bios_start_addr,
+        data_size as u32,
+        Rc::new(RefCell::new(rom)),
+    );
+}
+
 fn main() {
     pretty_env_logger::init();
 
@@ -39,45 +81,16 @@ fn main() {
         )
         .get_matches();
 
-    let mut memory_mapper = MemoryMapper::new();
+    let mut emulator = Emulator::new();
 
-    // Physical memory is 640KiB.
-    let physical_memory = PhysicalMemory::with_capacity(0xA0000);
-    memory_mapper.map(
-        segment_and_offset(0, 0),
-        0xA0000,
-        Rc::new(RefCell::new(physical_memory)),
-    );
+    install_memory(&emulator);
 
     if let Some(path) = matches.value_of("bios") {
-        log::info!("Loading BIOS from: {}", path);
-        let data = match load_bios(path) {
-            Ok(r) => r,
-            Err(err) => {
-                log::error!("Could not read BIOS file. ({}) ({})", &path, err);
-                return;
-            }
-        };
-
-        let data_size = u32::try_from(data.len()).unwrap();
-        let bios_start_addr = segment_and_offset(0xF000, 0x0000);
-
-        log::info!(
-            "Loading BIOS to: {:#05X}..{:#05X} ({:05X}/{} bytes)",
-            bios_start_addr,
-            bios_start_addr + data_size as u32,
-            data_size,
-            data_size
-        );
-
-        let rom = ReadOnlyMemory::from_vec(data);
-        memory_mapper.map(
-            bios_start_addr,
-            data_size as u32,
-            Rc::new(RefCell::new(rom)),
-        );
+        install_bios(&emulator, path);
+        emulator.set_reset_vector(0xF000, 0x000);
     }
 
+    /*
     // Video
 
     let video_memory = VideoMemory::default();
@@ -89,5 +102,8 @@ fn main() {
     let mut monitor = monitor::Monitor {};
     monitor.start();
 
-    Cpu::new(memory_mapper).start();
+    // Cpu::new(memory_mapper).start();
+    */
+
+    emulator.boot();
 }
