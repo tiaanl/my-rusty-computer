@@ -76,140 +76,146 @@ fn indirect_address_for(
     addr as Address
 }
 
-fn bus_read_byte(cpu: &CPU, address: Address) -> Result<u8> {
-    cpu.bus.borrow().read(address)
-}
+mod byte {
+    use super::*;
 
-fn bus_write_byte(cpu: &mut CPU, address: Address, value: u8) -> Result<()> {
-    cpu.bus.borrow_mut().write(address, value)
-}
+    pub fn bus_read(cpu: &CPU, address: Address) -> Result<u8> {
+        cpu.bus.borrow().read(address)
+    }
 
-fn bus_read_word(cpu: &CPU, address: Address) -> Result<u16> {
-    let lo = bus_read_byte(cpu, address)?;
-    let hi = bus_read_byte(cpu, address)?;
-    Ok(u16::from_le_bytes([lo, hi]))
-}
+    pub fn bus_write(cpu: &mut CPU, address: Address, value: u8) -> Result<()> {
+        cpu.bus.borrow_mut().write(address, value)
+    }
 
-fn bus_write_word(cpu: &mut CPU, address: Address, value: u16) -> Result<()> {
-    let bytes = value.to_le_bytes();
-    bus_write_byte(cpu, address, bytes[0])?;
-    bus_write_byte(cpu, address + 1, bytes[1])?;
-    Ok(())
-}
+    pub fn get_operand_type_value(cpu: &CPU, operand_type: &OperandType) -> Result<u8> {
+        match operand_type {
+            OperandType::Direct(segment, offset) => {
+                // TODO: Handle segment override.
+                let ds = cpu.get_segment_value(*segment);
+                let address = segment_and_offset(ds, *offset);
+                byte::bus_read(cpu, address)
+            }
 
-fn get_byte_operand_type_value(cpu: &CPU, operand_type: &OperandType) -> Result<u8> {
-    match operand_type {
-        OperandType::Direct(segment, offset) => {
-            // TODO: Handle segment override.
-            let ds = cpu.get_segment_value(*segment);
-            let address = segment_and_offset(ds, *offset);
-            bus_read_byte(cpu, address)
+            OperandType::Indirect(segment, addressing_mode, displacement) => {
+                let address = indirect_address_for(cpu, *segment, addressing_mode, displacement);
+                byte::bus_read(cpu, address)
+            }
+
+            OperandType::Register(register) => Ok(cpu.get_byte_register_value(*register)),
+
+            OperandType::Segment(_) => Err(Error::IllegalDataAccess),
+
+            OperandType::Immediate(value) => Ok(*value as u8),
         }
+    }
 
-        OperandType::Indirect(segment, addressing_mode, displacement) => {
-            let address = indirect_address_for(cpu, *segment, addressing_mode, displacement);
-            bus_read_byte(cpu, address)
+    pub fn get_operand_value(cpu: &CPU, operand: &Operand) -> Result<u8> {
+        assert_eq!(OperandSize::Byte, operand.1);
+        byte::get_operand_type_value(cpu, &operand.0)
+    }
+
+    pub fn set_operand_type_value(cpu: &mut CPU, operand_type: &OperandType, value: u8) -> Result<()> {
+        match operand_type {
+            OperandType::Direct(segment, offset) => {
+                // TODO: Handle segment override.
+                let seg = cpu.get_segment_value(*segment);
+                byte::bus_write(cpu, segment_and_offset(seg, *offset), value)
+            }
+            OperandType::Indirect(segment, addressing_mode, displacement) => {
+                let addr = indirect_address_for(cpu, *segment, addressing_mode, displacement);
+                byte::bus_write(cpu, addr, value)
+            }
+            OperandType::Register(register) => {
+                cpu.set_byte_register_value(*register, value);
+                Ok(())
+            }
+            _ => Err(Error::IllegalDataAccess),
         }
+    }
 
-        OperandType::Register(register) => Ok(cpu.get_byte_register_value(*register)),
-
-        OperandType::Segment(_) => Err(Error::IllegalDataAccess),
-
-        OperandType::Immediate(value) => Ok(*value as u8),
+    pub fn set_operand_value(cpu: &mut CPU, operand: &Operand, value: u8) -> Result<()> {
+        assert_eq!(OperandSize::Byte, operand.1);
+        byte::set_operand_type_value(cpu, &operand.0, value)
     }
 }
 
-fn get_byte_operand_value(cpu: &CPU, operand: &Operand) -> Result<u8> {
-    assert_eq!(OperandSize::Byte, operand.1);
-    get_byte_operand_type_value(cpu, &operand.0)
-}
+mod word {
+    use super::*;
 
-fn set_byte_operand_type_value(cpu: &mut CPU, operand_type: &OperandType, value: u8) -> Result<()> {
-    match operand_type {
-        OperandType::Direct(segment, offset) => {
-            // TODO: Handle segment override.
-            let seg = cpu.get_segment_value(*segment);
-            bus_write_byte(cpu, segment_and_offset(seg, *offset), value)
+    pub fn bus_read(cpu: &CPU, address: Address) -> Result<u16> {
+        let lo = byte::bus_read(cpu, address)?;
+        let hi = byte::bus_read(cpu, address)?;
+        Ok(u16::from_le_bytes([lo, hi]))
+    }
+
+    pub fn bus_write(cpu: &mut CPU, address: Address, value: u16) -> Result<()> {
+        let bytes = value.to_le_bytes();
+        byte::bus_write(cpu, address, bytes[0])?;
+        byte::bus_write(cpu, address + 1, bytes[1])?;
+        Ok(())
+    }
+
+    pub fn set_operand_type_value(cpu: &mut CPU, operand_type: &OperandType, value: u16) -> Result<()> {
+        match operand_type {
+            OperandType::Direct(segment, offset) => {
+                // TODO: Handle segment override.
+                let seg = cpu.get_segment_value(*segment);
+                word::bus_write(cpu, segment_and_offset(seg, *offset), value)
+            }
+            OperandType::Indirect(segment, addressing_mode, displacement) => {
+                let addr = indirect_address_for(cpu, *segment, addressing_mode, displacement);
+                word::bus_write(cpu, addr, value)
+            }
+            OperandType::Register(register) => {
+                cpu.set_word_register_value(*register, value);
+                Ok(())
+            }
+            OperandType::Segment(segment) => {
+                cpu.set_segment_value(*segment, value);
+                Ok(())
+            }
+            _ => Err(Error::IllegalDataAccess),
         }
-        OperandType::Indirect(segment, addressing_mode, displacement) => {
-            let addr = indirect_address_for(cpu, *segment, addressing_mode, displacement);
-            bus_write_byte(cpu, addr, value)
+    }
+
+    pub fn set_operand_value(cpu: &mut CPU, operand: &Operand, value: u16) -> Result<()> {
+        assert_eq!(OperandSize::Word, operand.1);
+        set_operand_type_value(cpu, &operand.0, value)
+    }
+
+    pub fn get_operand_type_value(cpu: &CPU, operand_type: &OperandType) -> Result<u16> {
+        match operand_type {
+            OperandType::Direct(segment, offset) => {
+                // Get a single byte from DS:offset
+                let seg = cpu.get_segment_value(*segment);
+                let addr = segment_and_offset(seg, *offset);
+
+                word::bus_read(cpu, addr)
+            }
+
+            OperandType::Indirect(segment, addressing_mode, displacement) => {
+                word::bus_read(cpu, indirect_address_for(cpu, *segment, addressing_mode, displacement))
+            }
+
+            OperandType::Register(register) => Ok(cpu.get_word_register_value(*register)),
+            OperandType::Segment(segment) => Ok(cpu.get_segment_value(*segment)),
+            OperandType::Immediate(value) => Ok(*value),
         }
-        OperandType::Register(register) => {
-            cpu.set_byte_register_value(*register, value);
-            Ok(())
-        }
-        _ => Err(Error::IllegalDataAccess),
+    }
+
+    pub fn get_operand_value(cpu: &CPU, operand: &Operand) -> Result<u16> {
+        assert_eq!(OperandSize::Word, operand.1);
+
+        word::get_operand_type_value(cpu, &operand.0)
     }
 }
 
-fn set_byte_operand_value(cpu: &mut CPU, operand: &Operand, value: u8) -> Result<()> {
-    assert_eq!(OperandSize::Byte, operand.1);
-    set_byte_operand_type_value(cpu, &operand.0, value)
-}
-
-fn set_word_operand_type_value(cpu: &mut CPU, operand_type: &OperandType, value: u16) -> Result<()> {
-    match operand_type {
-        OperandType::Direct(segment, offset) => {
-            // TODO: Handle segment override.
-            let seg = cpu.get_segment_value(*segment);
-            bus_write_word(cpu, segment_and_offset(seg, *offset), value)
-        }
-        OperandType::Indirect(segment, addressing_mode, displacement) => {
-            let addr = indirect_address_for(cpu, *segment, addressing_mode, displacement);
-            bus_write_word(cpu, addr, value)
-        }
-        OperandType::Register(register) => {
-            cpu.set_word_register_value(*register, value);
-            Ok(())
-        }
-        OperandType::Segment(segment) => {
-            cpu.set_segment_value(*segment, value);
-            Ok(())
-        }
-        _ => Err(Error::IllegalDataAccess),
-    }
-}
-
-fn set_word_operand_value(cpu: &mut CPU, operand: &Operand, value: u16) -> Result<()> {
-    assert_eq!(OperandSize::Word, operand.1);
-    set_word_operand_type_value(cpu, &operand.0, value)
-}
-
-fn get_word_operand_type_value(cpu: &CPU, operand_type: &OperandType) -> Result<u16> {
-    match operand_type {
-        OperandType::Direct(segment, offset) => {
-            // Get a single byte from DS:offset
-            let seg = cpu.get_segment_value(*segment);
-            let addr = segment_and_offset(seg, *offset);
-
-            bus_read_word(cpu, addr)
-        }
-
-        OperandType::Indirect(segment, addressing_mode, displacement) => {
-            bus_read_word(cpu, indirect_address_for(cpu, *segment, addressing_mode, displacement))
-        }
-
-        OperandType::Register(register) => Ok(cpu.get_word_register_value(*register)),
-
-        OperandType::Segment(segment) => Ok(cpu.get_segment_value(*segment)),
-
-        OperandType::Immediate(value) => Ok(*value),
-    }
-}
-
-fn get_word_operand_value(cpu: &CPU, operand: &Operand) -> Result<u16> {
-    assert_eq!(OperandSize::Word, operand.1);
-
-    get_word_operand_type_value(cpu, &operand.0)
-}
-
-fn push_word(cpu: &mut CPU, value: u16) -> Result<()> {
+fn push(cpu: &mut CPU, value: u16) -> Result<()> {
     let ss = cpu.get_segment_value(Segment::Ss);
     let sp = cpu.get_word_register_value(Register::AhSp);
     let stack_pointer = segment_and_offset(ss, sp);
 
-    let result = bus_write_word(cpu, stack_pointer, value);
+    let result = word::bus_write(cpu, stack_pointer, value);
 
     let sp = sp.wrapping_sub(2);
     cpu.set_word_register_value(Register::AhSp, sp);
@@ -217,14 +223,14 @@ fn push_word(cpu: &mut CPU, value: u16) -> Result<()> {
     result
 }
 
-fn pop_word(cpu: &mut CPU) -> Result<u16> {
+fn pop(cpu: &mut CPU) -> Result<u16> {
     let mut sp = cpu.get_word_register_value(Register::AhSp);
     sp = sp.wrapping_add(2);
     cpu.set_word_register_value(Register::AhSp, sp);
 
     let ss = cpu.get_segment_value(Segment::Ss);
 
-    bus_read_word(cpu, segment_and_offset(ss, sp))
+    word::bus_read(cpu, segment_and_offset(ss, sp))
 }
 
 fn displace_ip(cpu: &mut CPU, displacement: &Displacement) -> Result<()> {
@@ -249,8 +255,8 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         ) => {
             use Operation::*;
 
-            let d = get_byte_operand_type_value(cpu, destination)?;
-            let s = get_byte_operand_type_value(cpu, source)?;
+            let d = byte::get_operand_type_value(cpu, destination)?;
+            let s = byte::get_operand_type_value(cpu, source)?;
             if let Some(did_operation) = match instruction.operation {
                 Adc => Some(arithmetic::add_with_carry_byte(d, s, &mut cpu.flags)),
                 Add => Some(arithmetic::add_byte(d, s, &mut cpu.flags)),
@@ -267,7 +273,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 _ => None,
             } {
                 if let Some(result) = did_operation {
-                    set_byte_operand_type_value(cpu, destination, result)?;
+                    byte::set_operand_type_value(cpu, destination, result)?;
                 }
                 return Ok(ExecuteResult::Continue);
             }
@@ -279,8 +285,8 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         ) => {
             use Operation::*;
 
-            let d = get_word_operand_type_value(cpu, destination)?;
-            let s = get_word_operand_type_value(cpu, source)?;
+            let d = word::get_operand_type_value(cpu, destination)?;
+            let s = word::get_operand_type_value(cpu, source)?;
             if let Some(did_operation) = match instruction.operation {
                 Adc => Some(arithmetic::add_with_carry_word(d, s, &mut cpu.flags)),
                 Add => Some(arithmetic::add_word(d, s, &mut cpu.flags)),
@@ -297,7 +303,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 _ => None,
             } {
                 if let Some(result) = did_operation {
-                    set_word_operand_type_value(cpu, destination, result)?;
+                    word::set_operand_type_value(cpu, destination, result)?;
                 }
                 return Ok(ExecuteResult::Continue);
             }
@@ -311,7 +317,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             OperandSet::Displacement(displacement) => {
                 // Store the current IP (which is after this CALL) on the stack. So that RET
                 // can pop it.
-                push_word(cpu, cpu.ip)?;
+                push(cpu, cpu.ip)?;
                 displace_ip(cpu, displacement)?;
             }
             _ => todo!(),
@@ -340,14 +346,14 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Dec => match instruction.operands {
             OperandSet::Destination(Operand(ref destination, OperandSize::Byte)) => {
-                let mut value = get_byte_operand_type_value(cpu, destination)?;
+                let mut value = byte::get_operand_type_value(cpu, destination)?;
                 value = value.wrapping_sub(1);
-                set_byte_operand_type_value(cpu, destination, value)?;
+                byte::set_operand_type_value(cpu, destination, value)?;
             }
             OperandSet::Destination(Operand(ref destination, OperandSize::Word)) => {
-                let mut value = get_word_operand_type_value(cpu, destination)?;
+                let mut value = word::get_operand_type_value(cpu, destination)?;
                 value = value.wrapping_sub(1);
-                set_word_operand_type_value(cpu, destination, value)?;
+                word::set_operand_type_value(cpu, destination, value)?;
             }
             _ => illegal_operands(instruction),
         }
@@ -363,7 +369,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 Operand(OperandType::Immediate(port), OperandSize::Byte),
             ) => {
                 log::info!("PORT IN: {:02X}", port);
-                set_byte_operand_type_value(cpu, destination_type, 0)?;
+                byte::set_operand_type_value(cpu, destination_type, 0)?;
             }
             _ => illegal_operands(instruction),
         },
@@ -371,14 +377,14 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Inc => match &instruction.operands {
             OperandSet::Destination(destination) => match destination.1 {
                 OperandSize::Byte => {
-                    let mut value = get_byte_operand_value(cpu, destination)?;
+                    let mut value = byte::get_operand_value(cpu, destination)?;
                     value = value.wrapping_add(1);
-                    set_byte_operand_value(cpu, destination, value)?;
+                    byte::set_operand_value(cpu, destination, value)?;
                 }
                 OperandSize::Word => {
-                    let mut value = get_word_operand_value(cpu, destination)?;
+                    let mut value = word::get_operand_value(cpu, destination)?;
                     value = value.wrapping_add(1);
-                    set_word_operand_value(cpu, destination, value)?;
+                    word::set_operand_value(cpu, destination, value)?;
                 }
             },
             _ => illegal_operands(instruction),
@@ -581,15 +587,15 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Out => match instruction.operands {
             OperandSet::DestinationAndSource(ref destination, ref source) => {
-                let source_value = get_byte_operand_value(cpu, source)?;
+                let source_value = byte::get_operand_value(cpu, source)?;
 
                 match destination.1 {
                     OperandSize::Byte => {
-                        let port = get_byte_operand_value(cpu, destination)?;
+                        let port = byte::get_operand_value(cpu, destination)?;
                         log::info!("OUT: {:02X} to port {:02X}", source_value, port);
                     }
                     OperandSize::Word => {
-                        let port = get_word_operand_value(cpu, destination)?;
+                        let port = word::get_operand_value(cpu, destination)?;
                         log::info!("OUT: {:02X} to port {:04X}", source_value, port);
                     }
                 }
@@ -599,16 +605,16 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Push => match &instruction.operands {
             OperandSet::Destination(destination) => {
-                let value = get_word_operand_value(cpu, destination)?;
-                push_word(cpu, value)?;
+                let value = word::get_operand_value(cpu, destination)?;
+                push(cpu, value)?;
             }
             _ => illegal_operands(instruction),
         },
 
         Operation::Pop => match &instruction.operands {
             OperandSet::Destination(destination) => {
-                let value = pop_word(cpu)?;
-                set_word_operand_value(cpu, destination, value)?;
+                let value = pop(cpu)?;
+                word::set_operand_value(cpu, destination, value)?;
             }
             _ => illegal_operands(instruction),
         },
@@ -618,15 +624,15 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 Operand(destination, OperandSize::Byte),
                 Operand(source, OperandSize::Byte),
             ) => {
-                let source_value = get_byte_operand_type_value(cpu, source)?;
-                set_byte_operand_type_value(cpu, destination, source_value)?;
+                let source_value = byte::get_operand_type_value(cpu, source)?;
+                byte::set_operand_type_value(cpu, destination, source_value)?;
             }
             OperandSet::DestinationAndSource(
                 Operand(destination, OperandSize::Word),
                 Operand(source, OperandSize::Word),
             ) => {
-                let source_value = get_word_operand_type_value(cpu, source)?;
-                set_word_operand_type_value(cpu, destination, source_value)?;
+                let source_value = word::get_operand_type_value(cpu, source)?;
+                word::set_operand_type_value(cpu, destination, source_value)?;
             }
             _ => illegal_operands(instruction),
         },
@@ -657,23 +663,23 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             loop {
                 match instruction.operation {
                     Operation::Movsb => {
-                        let value = bus_read_byte(cpu, segment_and_offset(ds, si))?;
-                        bus_write_byte(cpu, segment_and_offset(es, di), value)?;
+                        let value = byte::bus_read(cpu, segment_and_offset(ds, si))?;
+                        byte::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
                     Operation::Movsw => {
-                        let value = bus_read_word(cpu, segment_and_offset(ds, si))?;
-                        bus_write_word(cpu, segment_and_offset(es, di), value)?;
+                        let value = word::bus_read(cpu, segment_and_offset(ds, si))?;
+                        word::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
                     Operation::Stosb => {
                         let value = cpu.get_byte_register_value(Register::AlAx);
-                        bus_write_byte(cpu, segment_and_offset(es, di), value)?;
+                        byte::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
                     Operation::Stosw => {
                         let value = cpu.get_word_register_value(Register::AlAx);
-                        bus_write_word(cpu, segment_and_offset(es, di), value)?;
+                        word::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
                     _ => unreachable!(),
@@ -719,7 +725,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Ret => {
             // Pop the return address from the stack.
-            cpu.ip = pop_word(cpu)?;
+            cpu.ip = pop(cpu)?;
         }
 
         Operation::Sahf => {
