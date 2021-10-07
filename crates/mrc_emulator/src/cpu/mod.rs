@@ -10,6 +10,7 @@ use mrc_x86::{Register, Segment};
 use crate::bus::{Address, BusInterface, segment_and_offset};
 use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::{Error, Result};
+use crate::io::IOController;
 
 mod executor;
 
@@ -102,17 +103,19 @@ impl Display for State {
 pub struct CPU {
     // TODO: This is public because ip is public.
     pub state: State,
+    io_controller: Option<Rc<RefCell<IOController>>>,
     bus: Rc<RefCell<dyn BusInterface>>,
 
-    breakpoint: Address,
+    breakpoint: Option<Address>,
 }
 
 impl CPU {
-    pub fn new(bus: Rc<RefCell<dyn BusInterface>>) -> Self {
+    pub fn new(bus: Rc<RefCell<dyn BusInterface>>, io_controller: Option<Rc<RefCell<IOController>>>) -> Self {
         Self {
             state: Default::default(),
+            io_controller,
             bus,
-            breakpoint: 0xFE0AC,
+            breakpoint: None, // Some(0xFE0AC),
         }
     }
 
@@ -120,14 +123,16 @@ impl CPU {
         let mut hit_bp = false;
 
         loop {
-            println!("state: {}", self.state);
+            // println!("state: {}", self.state);
             // print_bus_bytes(self);
 
             let start_cs = self.state.segments[Segment::Cs as usize];
             let start_ip = self.state.ip;
 
-            if self.breakpoint == segment_and_offset(start_cs, start_ip) {
-                hit_bp = true;
+            if let Some(breakpoint) = self.breakpoint {
+                if breakpoint == segment_and_offset(start_cs, start_ip) {
+                    hit_bp = true;
+                }
             }
 
             let instruction = match decode_instruction(self) {
@@ -140,7 +145,7 @@ impl CPU {
                 }
             };
 
-            println!("{:04X}:{:04X} {}", start_cs, start_ip, &instruction);
+            // println!("{:04X}:{:04X} {}", start_cs, start_ip, &instruction);
 
             let result = execute(self, &instruction)?;
             if result == ExecuteResult::Stop {
@@ -294,7 +299,7 @@ impl Iterator for CPU {
     }
 }
 
-fn print_bus_bytes(cpu: &CPU) {
+fn _print_bus_bytes(cpu: &CPU) {
     print!("Bytes to decode: ");
     let start = segment_and_offset(cpu.get_segment_value(Segment::Cs), cpu.state.ip);
     for i in 0..5 {

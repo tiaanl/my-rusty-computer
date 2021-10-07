@@ -1,4 +1,7 @@
-use mrc_x86::{AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Repeat, Segment};
+use mrc_x86::{
+    AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
+    Operation, Register, Repeat, Segment,
+};
 
 use crate::bus::Address;
 use crate::cpu::executor::operations::{arithmetic, logic};
@@ -114,7 +117,11 @@ mod byte {
         byte::get_operand_type_value(cpu, &operand.0)
     }
 
-    pub fn set_operand_type_value(cpu: &mut CPU, operand_type: &OperandType, value: u8) -> Result<()> {
+    pub fn set_operand_type_value(
+        cpu: &mut CPU,
+        operand_type: &OperandType,
+        value: u8,
+    ) -> Result<()> {
         match operand_type {
             OperandType::Direct(segment, offset) => {
                 // TODO: Handle segment override.
@@ -155,7 +162,11 @@ mod word {
         Ok(())
     }
 
-    pub fn set_operand_type_value(cpu: &mut CPU, operand_type: &OperandType, value: u16) -> Result<()> {
+    pub fn set_operand_type_value(
+        cpu: &mut CPU,
+        operand_type: &OperandType,
+        value: u16,
+    ) -> Result<()> {
         match operand_type {
             OperandType::Direct(segment, offset) => {
                 // TODO: Handle segment override.
@@ -193,9 +204,10 @@ mod word {
                 word::bus_read(cpu, addr)
             }
 
-            OperandType::Indirect(segment, addressing_mode, displacement) => {
-                word::bus_read(cpu, indirect_address_for(cpu, *segment, addressing_mode, displacement))
-            }
+            OperandType::Indirect(segment, addressing_mode, displacement) => word::bus_read(
+                cpu,
+                indirect_address_for(cpu, *segment, addressing_mode, displacement),
+            ),
 
             OperandType::Register(register) => Ok(cpu.get_word_register_value(*register)),
             OperandType::Segment(segment) => Ok(cpu.get_segment_value(*segment)),
@@ -356,7 +368,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 word::set_operand_type_value(cpu, destination, value)?;
             }
             _ => illegal_operands(instruction),
-        }
+        },
 
         Operation::Hlt => {
             log::info!("HALT");
@@ -368,8 +380,10 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 Operand(ref destination_type, OperandSize::Byte),
                 Operand(OperandType::Immediate(port), OperandSize::Byte),
             ) => {
-                log::info!("PORT IN: {:02X}", port);
-                byte::set_operand_type_value(cpu, destination_type, 0)?;
+                if let Some(io_controller) = &cpu.io_controller {
+                    let value = io_controller.borrow().read_byte(port)?;
+                    byte::set_operand_type_value(cpu, destination_type, value)?;
+                }
             }
             _ => illegal_operands(instruction),
         },
@@ -391,10 +405,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         },
 
         Operation::Int => match &instruction.operands {
-            OperandSet::Destination(Operand(
-                                        OperandType::Immediate(value),
-                                        OperandSize::Byte,
-                                    )) => {
+            OperandSet::Destination(Operand(OperandType::Immediate(value), OperandSize::Byte)) => {
                 if *value == 0x21 {
                     // DOS
                     match cpu.get_word_register_value(Register::AlAx).to_le_bytes() {
@@ -440,7 +451,9 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Jl => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
-                if cpu.state.flags.contains(Flags::SIGN) != cpu.state.flags.contains(Flags::OVERFLOW) {
+                if cpu.state.flags.contains(Flags::SIGN)
+                    != cpu.state.flags.contains(Flags::OVERFLOW)
+                {
                     displace_ip(cpu, displacement)?;
                 }
             }
@@ -450,7 +463,8 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jle => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::ZERO)
-                    || cpu.state.flags.contains(Flags::SIGN) != cpu.state.flags.contains(Flags::OVERFLOW)
+                    || cpu.state.flags.contains(Flags::SIGN)
+                    != cpu.state.flags.contains(Flags::OVERFLOW)
                 {
                     displace_ip(cpu, displacement)?;
                 }
@@ -480,7 +494,8 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Jnbe => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
-                if !cpu.state.flags.contains(Flags::CARRY) && !cpu.state.flags.contains(Flags::ZERO) {
+                if !cpu.state.flags.contains(Flags::CARRY) && !cpu.state.flags.contains(Flags::ZERO)
+                {
                     displace_ip(cpu, displacement)?;
                 }
             }
@@ -586,20 +601,45 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Nop => {}
 
         Operation::Out => match instruction.operands {
-            OperandSet::DestinationAndSource(ref destination, ref source) => {
-                let source_value = byte::get_operand_value(cpu, source)?;
+            OperandSet::DestinationAndSource(
+                Operand(OperandType::Immediate(port), OperandSize::Byte),
+                Operand(OperandType::Register(Register::AlAx), operand_size),
+            ) => match operand_size {
+                OperandSize::Byte => {
+                    let value = cpu.get_byte_register_value(Register::AlAx);
+                    if let Some(io_controller) = &cpu.io_controller {
+                        io_controller.borrow_mut().write_byte(port, value);
+                    }
+                }
+                OperandSize::Word => {
+                    let value = cpu.get_word_register_value(Register::AlAx);
+                    if let Some(io_controller) = &cpu.io_controller {
+                        io_controller.borrow_mut().write_word(port, value);
+                    }
+                }
+            },
+            OperandSet::DestinationAndSource(
+                Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
+                Operand(OperandType::Register(Register::AlAx), operand_size),
+            ) => {
+                let port = cpu.get_word_register_value(Register::DlDx);
 
-                match destination.1 {
+                match operand_size {
                     OperandSize::Byte => {
-                        let port = byte::get_operand_value(cpu, destination)?;
-                        log::info!("OUT: {:02X} to port {:02X}", source_value, port);
+                        let value = cpu.get_byte_register_value(Register::AlAx);
+                        if let Some(io_controller) = &cpu.io_controller {
+                            io_controller.borrow_mut().write_byte(port, value);
+                        }
                     }
                     OperandSize::Word => {
-                        let port = word::get_operand_value(cpu, destination)?;
-                        log::info!("OUT: {:02X} to port {:04X}", source_value, port);
+                        let value = cpu.get_word_register_value(Register::AlAx);
+                        if let Some(io_controller) = &cpu.io_controller {
+                            io_controller.borrow_mut().write_word(port, value);
+                        }
                     }
                 }
             }
+
             _ => illegal_operands(instruction),
         },
 

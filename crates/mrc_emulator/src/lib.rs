@@ -7,9 +7,11 @@ use mrc_x86::Segment;
 use crate::bus::Bus;
 use crate::cpu::CPU;
 use crate::error::Result;
+use crate::io::IOController;
 
 mod bus;
 mod cpu;
+mod io;
 pub mod error;
 pub mod ram;
 pub mod rom;
@@ -21,15 +23,18 @@ trait Installable {
 /// An emulator with some basic components.
 pub struct Emulator {
     bus: Rc<RefCell<Bus>>,
+    io_controller: Rc<RefCell<IOController>>,
     cpu: CPU,
 }
 
 impl Emulator {
     pub fn new() -> Self {
         let bus = Rc::new(RefCell::new(Bus::default()));
+        let io_controller = Rc::new(RefCell::new(IOController::default()));
         Self {
             bus: Rc::clone(&bus),
-            cpu: CPU::new(bus),
+            io_controller: Default::default(),
+            cpu: CPU::new(bus, Some(io_controller)),
         }
     }
 
