@@ -1,4 +1,5 @@
-use crate::bus::{Address, BusError, BusInterface};
+use crate::bus::{Address, BusInterface};
+use crate::error::{Error, Result};
 
 pub struct RandomAccessMemory {
     data: Vec<u8>,
@@ -13,17 +14,17 @@ impl RandomAccessMemory {
 }
 
 impl BusInterface for RandomAccessMemory {
-    fn read(&self, address: Address) -> Result<u8, BusError> {
+    fn read(&self, address: Address) -> Result<u8> {
         if address as usize >= self.data.len() {
-            Err(BusError::AddressNotMapped(address))
+            Err(Error::AddressNotMapped(address))
         } else {
             Ok(self.data[address as usize])
         }
     }
 
-    fn write(&mut self, address: Address, value: u8) -> Result<(), BusError> {
+    fn write(&mut self, address: Address, value: u8) -> Result<()> {
         if address as usize >= self.data.len() {
-            Err(BusError::AddressNotMapped(address))
+            Err(Error::AddressNotMapped(address))
         } else {
             self.data[address as usize] = value;
             Ok(())

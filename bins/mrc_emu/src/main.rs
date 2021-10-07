@@ -5,14 +5,9 @@ use std::rc::Rc;
 
 use clap::{App, Arg};
 
-use cpu::Cpu;
-use mrc_emulator::Emulator;
+use mrc_emulator::{Emulator, segment_and_offset};
 use mrc_emulator::ram::RandomAccessMemory;
 use mrc_emulator::rom::ReadOnlyMemory;
-
-use crate::cpu::segment_and_offset;
-use crate::memory::MemoryMapper;
-use crate::video::VideoMemory;
 
 mod cpu;
 mod memory;
@@ -87,7 +82,7 @@ fn main() {
 
     if let Some(path) = matches.value_of("bios") {
         install_bios(&emulator, path);
-        emulator.set_reset_vector(0xF000, 0x000);
+        emulator.set_reset_vector(0xF000, 0xFFF0);
     }
 
     /*

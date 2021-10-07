@@ -1,5 +1,6 @@
-use crate::cpu::operations::{flags_from_byte_result, flags_from_word_result};
-use crate::cpu::{Flags, SignificantBit};
+use crate::cpu::Flags;
+
+use super::{flags_from_byte_result, flags_from_word_result, SignificantBit};
 
 pub fn and_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
     flags.remove(Flags::OVERFLOW | Flags::CARRY);
@@ -149,8 +150,8 @@ pub fn xor_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16>
 
 #[cfg(test)]
 mod test {
-    use super::super::test_flags;
     use super::*;
+    use super::super::test_flags;
 
     #[test]
     fn test_shift_left_byte() {

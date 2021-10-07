@@ -1,6 +1,7 @@
 use std::cell::RefCell;
-use std::fmt::{Display, Formatter};
 use std::rc::Rc;
+
+use crate::error::{Error, Result};
 
 pub type Address = u32;
 
@@ -8,28 +9,10 @@ pub fn segment_and_offset(segment: u16, offset: u16) -> Address {
     ((segment as Address) << 4) + (offset as Address)
 }
 
-pub enum BusError {
-    AddressNotMapped(Address),
-    AddressOutOfRange(Address),
-}
-
-impl Display for BusError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BusError::AddressNotMapped(address) => {
-                write!(f, "Address not mapped. ({:02x})", address)
-            }
-            BusError::AddressOutOfRange(address) => {
-                write!(f, "Address out of range. ({:02x})", address)
-            }
-        }
-    }
-}
-
 /// An object where bytes can be read from or written to.
 pub trait BusInterface {
-    fn read(&self, address: Address) -> Result<u8, BusError>;
-    fn write(&mut self, address: Address, value: u8) -> Result<(), BusError>;
+    fn read(&self, address: Address) -> Result<u8>;
+    fn write(&mut self, address: Address, value: u8) -> Result<()>;
 }
 
 struct InterfaceContainer {
@@ -72,19 +55,19 @@ impl Bus {
 }
 
 impl BusInterface for Bus {
-    fn read(&self, address: Address) -> Result<u8, BusError> {
+    fn read(&self, address: Address) -> Result<u8> {
         if let Some(container) = self.interfaces.iter().find(|interface| interface.contains(address)) {
-            container.interface.borrow().read(address)
+            container.interface.borrow().read(address - container.start_address)
         } else {
-            Err(BusError::AddressNotMapped(address))
+            Err(Error::AddressNotMapped(address))
         }
     }
 
-    fn write(&mut self, address: Address, value: u8) -> Result<(), BusError> {
+    fn write(&mut self, address: Address, value: u8) -> Result<()> {
         if let Some(container) = self.interfaces.iter().find(|interface| interface.contains(address)) {
-            container.interface.borrow_mut().write(address, value)
+            container.interface.borrow_mut().write(address - container.start_address, value)
         } else {
-            Err(BusError::AddressNotMapped(address))
+            Err(Error::AddressNotMapped(address))
         }
     }
 }

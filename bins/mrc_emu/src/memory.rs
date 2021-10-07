@@ -1,7 +1,6 @@
+/*
 use std::cell::RefCell;
 use std::rc::Rc;
-
-use crate::cpu::SegmentAndOffset;
 
 #[derive(Debug)]
 pub enum MemoryError {
@@ -9,8 +8,8 @@ pub enum MemoryError {
 }
 
 pub trait MemoryInterface {
-    fn read(&self, so: SegmentAndOffset) -> u8;
-    fn write(&mut self, so: SegmentAndOffset, value: u8);
+    fn read(&self, so: Address) -> u8;
+    fn write(&mut self, so: Address, value: u8);
 }
 
 pub struct Bus<M: MemoryInterface> {
@@ -26,22 +25,22 @@ impl<M: MemoryInterface> Bus<M> {
         Rc::clone(&self.interface)
     }
 
-    pub fn read_u8(&self, so: SegmentAndOffset) -> u8 {
+    pub fn read_u8(&self, so: Address) -> u8 {
         self.interface.borrow().read(so)
     }
 
-    pub fn read_u16(&self, so: SegmentAndOffset) -> u16 {
+    pub fn read_u16(&self, so: Address) -> u16 {
         u16::from_le_bytes([
             self.interface.borrow().read(so),
             self.interface.borrow().read(so + 1),
         ])
     }
 
-    pub fn write_u8(&mut self, so: SegmentAndOffset, value: u8) {
+    pub fn write_u8(&mut self, so: Address, value: u8) {
         self.interface.borrow_mut().write(so, value);
     }
 
-    pub fn write_u16(&mut self, so: SegmentAndOffset, value: u16) {
+    pub fn write_u16(&mut self, so: Address, value: u16) {
         let bytes: [u8; 2] = value.to_le_bytes();
         self.interface.borrow_mut().write(so, bytes[0]);
         self.interface.borrow_mut().write(so + 1, bytes[1]);
@@ -51,7 +50,7 @@ impl<M: MemoryInterface> Bus<M> {
 pub type MemoryInterfaceRef = Rc<RefCell<dyn MemoryInterface>>;
 
 struct InterfaceContainer {
-    start: SegmentAndOffset,
+    start: Address,
     size: u32,
     interface: MemoryInterfaceRef,
 }
@@ -67,7 +66,7 @@ impl MemoryMapper {
         }
     }
 
-    pub fn map(&mut self, start: SegmentAndOffset, size: u32, interface: MemoryInterfaceRef) {
+    pub fn map(&mut self, start: Address, size: u32, interface: MemoryInterfaceRef) {
         self.interfaces.push(InterfaceContainer {
             start,
             size,
@@ -77,7 +76,7 @@ impl MemoryMapper {
 }
 
 impl MemoryInterface for MemoryMapper {
-    fn read(&self, so: SegmentAndOffset) -> u8 {
+    fn read(&self, so: Address) -> u8 {
         for container in &self.interfaces {
             if so >= container.start && so < container.start + container.size {
                 return container.interface.borrow().read(so - container.start);
@@ -86,7 +85,7 @@ impl MemoryInterface for MemoryMapper {
         panic!("No interface found for address {:05X}", so);
     }
 
-    fn write(&mut self, so: SegmentAndOffset, value: u8) {
+    fn write(&mut self, so: Address, value: u8) {
         for container in &mut self.interfaces {
             if so >= container.start && so < container.start + container.size {
                 return container
@@ -125,3 +124,4 @@ mod test {
         assert_eq!(0xFF, mm.read(segment_and_offset(0x0000, 0x00FF)));
     }
 }
+*/

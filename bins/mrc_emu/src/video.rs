@@ -1,4 +1,4 @@
-use crate::cpu::SegmentAndOffset;
+/*
 use crate::memory::MemoryInterface;
 
 pub struct VideoMemory {
@@ -23,3 +23,4 @@ impl MemoryInterface for VideoMemory {
         todo!()
     }
 }
+*/

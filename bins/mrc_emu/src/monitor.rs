@@ -1,5 +1,5 @@
-use glium::glutin::{event, event_loop, window, ContextBuilder};
-use glium::{implement_vertex, uniform, Display, Surface};
+use glium::{Display, implement_vertex, Surface, uniform};
+use glium::glutin::{ContextBuilder, event, event_loop, window};
 
 #[derive(Copy, Clone)]
 struct Vertex {
@@ -35,7 +35,7 @@ const FRAGMENT_SHADER_SRC: &str = r#"
 pub struct Monitor {}
 
 impl Monitor {
-    pub fn start(&mut self) {
+    pub fn _start(&mut self) {
         let event_loop = event_loop::EventLoop::new();
         let wb = window::WindowBuilder::new().with_title("My Rusty Computer - Emulator");
         let cb = ContextBuilder::new().with_vsync(false);

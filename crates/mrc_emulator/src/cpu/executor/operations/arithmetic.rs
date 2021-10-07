@@ -1,5 +1,6 @@
-use crate::cpu::operations::{flags_from_byte_result, flags_from_word_result};
-use crate::cpu::{Flags, SignificantBit};
+use crate::cpu::Flags;
+
+use super::{flags_from_byte_result, flags_from_word_result, SignificantBit};
 
 pub fn add_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
     let (result, carry) = destination.overflowing_add(source);

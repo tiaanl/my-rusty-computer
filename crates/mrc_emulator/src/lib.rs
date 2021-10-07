@@ -1,18 +1,21 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+pub use bus::segment_and_offset;
 use mrc_x86::Segment;
 
-use crate::bus::{Bus, BusError};
+use crate::bus::Bus;
 use crate::cpu::CPU;
+use crate::error::Result;
 
-mod cpu;
 mod bus;
+mod cpu;
+pub mod error;
 pub mod ram;
 pub mod rom;
 
 trait Installable {
-    fn install(bus: &mut Bus) -> Result<(), BusError>;
+    fn install(bus: &mut Bus) -> Result<()>;
 }
 
 /// An emulator with some basic components.
@@ -42,6 +45,8 @@ impl Emulator {
     /// Start the emulator. This function will not return until the emulator is requested to exit
     /// or it runs into an error.
     pub fn boot(&mut self) {
-        self.cpu.start();
+        if let Err(err) = self.cpu.start() {
+            log::error!("{}", err);
+        }
     }
 }

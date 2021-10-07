@@ -1,7 +1,33 @@
+use crate::cpu::Flags;
+
 pub mod arithmetic;
 pub mod logic;
 
-use crate::cpu::{Flags, SignificantBit};
+
+pub trait SignificantBit {
+    fn least_significant_bit(&self) -> bool;
+    fn most_significant_bit(&self) -> bool;
+}
+
+impl SignificantBit for u8 {
+    fn least_significant_bit(&self) -> bool {
+        self & 0x1 != 0
+    }
+
+    fn most_significant_bit(&self) -> bool {
+        self & 0x80 != 0
+    }
+}
+
+impl SignificantBit for u16 {
+    fn least_significant_bit(&self) -> bool {
+        self & 0x1 != 0
+    }
+
+    fn most_significant_bit(&self) -> bool {
+        self & 0x8000 != 0
+    }
+}
 
 #[cfg(test)]
 pub fn test_flags(
