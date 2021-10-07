@@ -35,7 +35,7 @@ impl Emulator {
 
     pub fn set_reset_vector(&mut self, segment: u16, offset: u16) {
         self.cpu.set_segment_value(Segment::Cs, segment);
-        self.cpu.ip = offset;
+        self.cpu.state.ip = offset;
     }
 
     pub fn bus(&self) -> Rc<RefCell<Bus>> {
