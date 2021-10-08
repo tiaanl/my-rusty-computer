@@ -601,42 +601,21 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Nop => {}
 
         Operation::Out => match instruction.operands {
-            OperandSet::DestinationAndSource(
-                Operand(OperandType::Immediate(port), OperandSize::Byte),
-                Operand(OperandType::Register(Register::AlAx), operand_size),
-            ) => match operand_size {
-                OperandSize::Byte => {
-                    let value = cpu.get_byte_register_value(Register::AlAx);
-                    if let Some(io_controller) = &cpu.io_controller {
-                        io_controller.borrow_mut().write_byte(port, value);
-                    }
-                }
-                OperandSize::Word => {
-                    let value = cpu.get_word_register_value(Register::AlAx);
-                    if let Some(io_controller) = &cpu.io_controller {
-                        io_controller.borrow_mut().write_word(port, value);
-                    }
-                }
-            },
-            OperandSet::DestinationAndSource(
-                Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
-                Operand(OperandType::Register(Register::AlAx), operand_size),
-            ) => {
-                let port = cpu.get_word_register_value(Register::DlDx);
+            OperandSet::DestinationAndSource(ref port, ref value) => {
+                if let Some(io_controller) = &cpu.io_controller {
+                    let port = match port.1 {
+                        OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
+                        OperandSize::Word => word::get_operand_value(cpu, port)?,
+                    };
 
-                match operand_size {
-                    OperandSize::Byte => {
-                        let value = cpu.get_byte_register_value(Register::AlAx);
-                        if let Some(io_controller) = &cpu.io_controller {
-                            io_controller.borrow_mut().write_byte(port, value);
-                        }
-                    }
-                    OperandSize::Word => {
-                        let value = cpu.get_word_register_value(Register::AlAx);
-                        if let Some(io_controller) = &cpu.io_controller {
-                            io_controller.borrow_mut().write_word(port, value);
-                        }
-                    }
+                    let value = match value.1 {
+                        OperandSize::Byte => io_controller
+                            .borrow_mut()
+                            .write_byte(port, byte::get_operand_value(cpu, value)?),
+                        OperandSize::Word => io_controller
+                            .borrow_mut()
+                            .write_word(port, word::get_operand_value(cpu, value)?),
+                    };
                 }
             }
 
