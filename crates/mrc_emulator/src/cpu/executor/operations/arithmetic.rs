@@ -71,12 +71,12 @@ pub fn add_with_carry_word(destination: u16, source: u16, flags: &mut Flags) -> 
 }
 
 pub fn compare_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
-    sub_byte(destination, source, flags);
+    subtract_byte(destination, source, flags);
     None
 }
 
 pub fn compare_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16> {
-    sub_word(destination, source, flags);
+    subtract_word(destination, source, flags);
     None
 }
 
@@ -108,7 +108,7 @@ pub fn multiply_word(destination: u16, source: u16, flags: &mut Flags) -> Option
     Some(result)
 }
 
-pub fn sub_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
+pub fn subtract_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
     let (result, carry) = destination.overflowing_sub(source);
 
     flags.set(Flags::CARRY, carry);
@@ -122,7 +122,7 @@ pub fn sub_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
     Some(result)
 }
 
-pub fn sub_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16> {
+pub fn subtract_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16> {
     let (result, carry) = destination.overflowing_sub(source);
 
     flags.set(Flags::CARRY, carry);
@@ -143,7 +143,7 @@ mod test {
     #[test]
     fn test_sub_byte() {
         let mut flags = Flags::empty();
-        let result = sub_byte(0x10, 0x09, &mut flags).unwrap();
+        let result = subtract_byte(0x10, 0x09, &mut flags).unwrap();
         assert_eq!(0x07, result);
         assert!(!flags.contains(Flags::CARRY | Flags::ZERO | Flags::SIGN));
     }
@@ -151,7 +151,7 @@ mod test {
     #[test]
     fn test_sub_word() {
         let mut flags = Flags::empty();
-        let result = sub_word(0x1000, 0x0900, &mut flags).unwrap();
+        let result = subtract_word(0x1000, 0x0900, &mut flags).unwrap();
         assert_eq!(0x0700, result);
         assert!(!flags.contains(Flags::CARRY | Flags::ZERO | Flags::SIGN));
     }

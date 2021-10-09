@@ -115,7 +115,8 @@ impl CPU {
             state: Default::default(),
             io_controller,
             bus,
-            breakpoint: None, // Some(0xFE0AC),
+            breakpoint: None,
+            // breakpoint: Some(0xff9ea),
         }
     }
 
@@ -155,7 +156,7 @@ impl CPU {
             if hit_bp {
                 let mut line = "".to_owned();
                 std::io::stdin().read_line(&mut line).unwrap();
-                println!("line: {}", line);
+                // println!("line: {}", line);
             }
         }
 

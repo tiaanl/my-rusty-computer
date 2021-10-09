@@ -59,7 +59,9 @@ impl BusInterface for Bus {
         if let Some(container) = self.interfaces.iter().find(|interface| interface.contains(address)) {
             container.interface.borrow().read(address - container.start_address)
         } else {
-            Err(Error::AddressNotMapped(address))
+            // Err(Error::AddressNotMapped(address))
+            log::warn!("Reading from unmapped memory: [{:05X}]", address);
+            Ok(0)
         }
     }
 
@@ -67,7 +69,9 @@ impl BusInterface for Bus {
         if let Some(container) = self.interfaces.iter().find(|interface| interface.contains(address)) {
             container.interface.borrow_mut().write(address - container.start_address, value)
         } else {
-            Err(Error::AddressNotMapped(address))
+            // Err(Error::AddressNotMapped(address))
+            log::warn!("Writing to unmapped memory: {:02X} -> [{:05X}]", value, address);
+            Ok(())
         }
     }
 }

@@ -46,7 +46,7 @@ fn install_bios(emulator: &Emulator, path: &str) {
     };
 
     let data_size = u32::try_from(data.len()).unwrap();
-    let bios_start_addr = segment_and_offset(0xF000, 0x0000);
+    let bios_start_addr = 0x100000 - data_size;
 
     log::info!(
             "Loading BIOS to: {:#05X}..{:#05X} ({:05X}/{} bytes)",

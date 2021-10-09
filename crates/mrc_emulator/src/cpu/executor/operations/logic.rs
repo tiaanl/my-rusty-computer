@@ -30,7 +30,7 @@ pub fn or_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16> 
     Some(result)
 }
 
-pub fn rol_byte(left: u8, right: u8, flags: &mut Flags) -> Option<u8> {
+pub fn rotate_left_byte(left: u8, right: u8, flags: &mut Flags) -> Option<u8> {
     let right = right % 8;
     let res = left << right | left >> (8 - right);
 
@@ -40,7 +40,7 @@ pub fn rol_byte(left: u8, right: u8, flags: &mut Flags) -> Option<u8> {
     Some(res)
 }
 
-pub fn rol_word(left: u16, right: u16, flags: &mut Flags) -> Option<u16> {
+pub fn rorate_left_word(left: u16, right: u16, flags: &mut Flags) -> Option<u16> {
     let right = right % 16;
     let res = left << right | left >> (16 - right);
 
@@ -112,6 +112,30 @@ pub fn shift_right_word(value: u16, by: u16, flags: &mut Flags) -> Option<u16> {
     Some(result)
 }
 
+pub fn rotate_right_byte(value: u8, by: u8, flags: &mut Flags) -> Option<u8> {
+    let by = by % 8;
+    let result = value >> by | value << (8 - by);
+
+    flags.set(Flags::CARRY, result & 1 << 7 != 0);
+    flags.set(Flags::OVERFLOW, value & 1 << 7 != result & 1 << 7);
+
+    flags_from_byte_result(flags, result);
+
+    Some(result)
+}
+
+pub fn rotate_right_word(value: u16, by: u16, flags: &mut Flags) -> Option<u16> {
+    let by = by % 16;
+    let result = value >> by | value << (16 - by);
+
+    flags.set(Flags::CARRY, result & 1 << 15 != 0);
+    flags.set(Flags::OVERFLOW, value & 1 << 15 != result & 1 << 15);
+
+    flags_from_word_result(flags, result);
+
+    Some(result)
+}
+
 pub fn test_byte(left: u8, right: u8, flags: &mut Flags) -> Option<u8> {
     let result = left & right;
 
@@ -134,14 +158,14 @@ pub fn test_word(left: u16, right: u16, flags: &mut Flags) -> Option<u16> {
     None
 }
 
-pub fn xor_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
+pub fn exclusive_or_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
     flags.remove(Flags::OVERFLOW | Flags::CARRY);
     let result = destination ^ source;
     flags_from_byte_result(flags, result);
     Some(result)
 }
 
-pub fn xor_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16> {
+pub fn exclusive_or_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16> {
     flags.remove(Flags::OVERFLOW | Flags::CARRY);
     let result = destination ^ source;
     flags_from_word_result(flags, result);
