@@ -1,10 +1,12 @@
 [workspace]
 members = [
+    "bins/display",
     "bins/gen_test_bin",
     "bins/mrc_dis",
     "bins/mrc_emu",
     "bins/mz_inspect",
     "crates/mrc_decoder",
+    "crates/mrc_display",
     "crates/mrc_dos",
     "crates/mrc_emulator",
     "crates/mrc_x86",
