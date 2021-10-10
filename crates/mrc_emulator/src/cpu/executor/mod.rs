@@ -230,7 +230,7 @@ fn push(cpu: &mut CPU, value: u16) -> Result<()> {
     sp = sp.wrapping_sub(2);
     cpu.set_word_register_value(Register::AhSp, sp);
 
-    log::info!("Push {:04X} to [{:04X}:{:04X}]", value, ss, sp,);
+    // log::info!("Push {:04X} to [{:04X}:{:04X}]", value, ss, sp,);
 
     word::bus_write(cpu, segment_and_offset(ss, sp), value)
 }
@@ -241,7 +241,7 @@ fn pop(cpu: &mut CPU) -> Result<u16> {
 
     let value = word::bus_read(cpu, segment_and_offset(ss, sp))?;
 
-    log::info!("Pop {:04X} from [{:04X}:{:04X}]", value, ss, sp,);
+    // log::info!("Pop {:04X} from [{:04X}:{:04X}]", value, ss, sp,);
 
     sp = sp.wrapping_add(2);
     cpu.set_word_register_value(Register::AhSp, sp);
@@ -311,7 +311,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 Cmp => Some(arithmetic::compare_word(d, s, &mut cpu.state.flags)),
                 Mul => Some(arithmetic::multiply_word(d, s, &mut cpu.state.flags)),
                 Or => Some(logic::or_word(d, s, &mut cpu.state.flags)),
-                Rol => Some(logic::rorate_left_word(d, s, &mut cpu.state.flags)),
+                Rol => Some(logic::rotate_left_word(d, s, &mut cpu.state.flags)),
                 Ror => Some(logic::rotate_right_word(d, s, &mut cpu.state.flags)),
                 Shl => Some(logic::shift_left_word(d, s, &mut cpu.state.flags)),
                 Shr => Some(logic::shift_right_word(d, s, &mut cpu.state.flags)),
@@ -426,42 +426,23 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Int => match &instruction.operands {
             OperandSet::Destination(Operand(OperandType::Immediate(value), OperandSize::Byte)) => {
-                if *value == 0x10 {
-                    let ah = cpu.get_byte_register_value(Register::AhSp);
-                    if ah == 0x02 {
-                        // BH = page number
-                        // DH = row
-                        // DL = column
-                        let page_number = cpu.get_byte_register_value(Register::BhDi);
-                        let row = cpu.get_byte_register_value(DhSi);
-                        let column = cpu.get_byte_register_value(DlDx);
-
-                        log::info!("Set cursor position. | character: {:02X} | row: {:02X} | column: {:02X}", page_number, row, column);
-                    } else if ah == 0x09 {
-                        // AL = character
-                        // BH = page number
-                        // BL = color
-                        // CX = number of times to print character
-                        let character = cpu.get_byte_register_value(Register::AlAx);
-                        let page_number = cpu.get_byte_register_value(Register::BhDi);
-                        let color = cpu.get_byte_register_value(Register::BlBx);
-                        let count = cpu.get_word_register_value(Register::ClCx);
-
-                        log::info!("Write character and attribute at cursor position. | character: {:02X} \"{}\" | page_number: {:02X} | color: {:02X} | count: {:04X}",
-                        character, character as char, page_number, color, count);
-                    }
-                } else if *value == 0x21 {
-                    // DOS
-                    match cpu.get_word_register_value(Register::AlAx).to_le_bytes() {
-                        [0x4C, return_code] => {
-                            println!("INT 21h: DOS exit with return code ({})", return_code);
-                            return Ok(ExecuteResult::Stop);
-                        }
-                        _ => {
-                            println!("INT {}", value);
-                        }
-                    }
+                if let Some(interrupt_controller) = &cpu.interrupt_controller {
+                    interrupt_controller.borrow_mut().handle(*value as u8, &cpu);
                 }
+
+                // if *value == 0x10 {
+                // } else if *value == 0x21 {
+                //     // DOS
+                //     match cpu.get_word_register_value(Register::AlAx).to_le_bytes() {
+                //         [0x4C, return_code] => {
+                //             println!("INT 21h: DOS exit with return code ({})", return_code);
+                //             return Ok(ExecuteResult::Stop);
+                //         }
+                //         _ => {
+                //             println!("INT {}", value);
+                //         }
+                //     }
+                // }
             }
 
             _ => illegal_operands(instruction),
@@ -819,6 +800,23 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         }
 
         Operation::Nop => {}
+
+        Operation::Not => match instruction.operands {
+            OperandSet::Destination(Operand(ref destination, OperandSize::Byte)) => {
+                let value = byte::get_operand_type_value(cpu, destination)?;
+                if let Some(result) = logic::not_byte(value) {
+                    byte::set_operand_type_value(cpu, destination, result)?;
+                }
+            }
+            OperandSet::Destination(Operand(ref destination, OperandSize::Word)) => {
+                let value = word::get_operand_type_value(cpu, destination)?;
+                if let Some(result) = logic::not_word(value) {
+                    word::set_operand_type_value(cpu, destination, result)?;
+                }
+            }
+
+            _ => illegal_operands(&instruction),
+        }
 
         Operation::Out => match instruction.operands {
             OperandSet::DestinationAndSource(ref port, ref value) => {

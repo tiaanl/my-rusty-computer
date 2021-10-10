@@ -11,6 +11,7 @@ use crate::bus::{Address, BusInterface, segment_and_offset};
 use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::{Error, Result};
 use crate::io::IOController;
+use crate::irq::InterruptController;
 
 mod executor;
 
@@ -55,20 +56,23 @@ impl Default for State {
 
 impl Display for State {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AX: {:04X} ", self.registers[Register::AlAx as usize])?;
-        write!(f, "BX: {:04X} ", self.registers[Register::BlBx as usize])?;
-        write!(f, "CX: {:04X} ", self.registers[Register::ClCx as usize])?;
-        write!(f, "DX: {:04X} ", self.registers[Register::DlDx as usize])?;
+        use mrc_x86::Register::*;
+        use mrc_x86::Segment::*;
 
-        write!(f, "SP: {:04X} ", self.registers[Register::AhSp as usize])?;
-        write!(f, "BP: {:04X} ", self.registers[Register::ChBp as usize])?;
-        write!(f, "SI: {:04X} ", self.registers[Register::DhSi as usize])?;
-        write!(f, "DI: {:04X} ", self.registers[Register::BhDi as usize])?;
+        write!(f, "AX: {:04X} ", self.registers[AlAx as usize])?;
+        write!(f, "BX: {:04X} ", self.registers[BlBx as usize])?;
+        write!(f, "CX: {:04X} ", self.registers[ClCx as usize])?;
+        write!(f, "DX: {:04X} ", self.registers[DlDx as usize])?;
 
-        write!(f, "ES: {:04X} ", self.segments[Segment::Es as usize])?;
-        write!(f, "CS: {:04X} ", self.segments[Segment::Cs as usize])?;
-        write!(f, "SS: {:04X} ", self.segments[Segment::Ss as usize])?;
-        write!(f, "DS: {:04X} ", self.segments[Segment::Ds as usize])?;
+        write!(f, "SP: {:04X} ", self.registers[AhSp as usize])?;
+        write!(f, "BP: {:04X} ", self.registers[ChBp as usize])?;
+        write!(f, "SI: {:04X} ", self.registers[DhSi as usize])?;
+        write!(f, "DI: {:04X} ", self.registers[BhDi as usize])?;
+
+        write!(f, "ES: {:04X} ", self.segments[Es as usize])?;
+        write!(f, "CS: {:04X} ", self.segments[Cs as usize])?;
+        write!(f, "SS: {:04X} ", self.segments[Ss as usize])?;
+        write!(f, "DS: {:04X} ", self.segments[Ds as usize])?;
 
         write!(f, "IP: {:04X} ", self.ip);
 
@@ -104,82 +108,87 @@ pub struct CPU {
     // TODO: This is public because ip is public.
     pub state: State,
     io_controller: Option<Rc<RefCell<IOController>>>,
+    interrupt_controller: Option<Rc<RefCell<InterruptController>>>,
     bus: Rc<RefCell<dyn BusInterface>>,
 
     breakpoint: Option<Address>,
 }
 
 impl CPU {
-    pub fn new(bus: Rc<RefCell<dyn BusInterface>>, io_controller: Option<Rc<RefCell<IOController>>>) -> Self {
+    pub fn new(bus: Rc<RefCell<dyn BusInterface>>,
+               io_controller: Option<Rc<RefCell<IOController>>>,
+               interrupt_controller: Option<Rc<RefCell<InterruptController>>>,
+    ) -> Self {
         Self {
             state: Default::default(),
             io_controller,
+            interrupt_controller,
             bus,
             breakpoint: None,
             // breakpoint: Some(0xff9ea),
         }
     }
 
-    pub fn start(&mut self) -> Result<()> {
+    pub fn tick(&mut self) -> Result<ExecuteResult> {
         let mut hit_bp = false;
 
+        // println!("state: {}", self.state);
+        // print_bus_bytes(self);
+
+        let start_cs = self.state.segments[Segment::Cs as usize];
+        let start_ip = self.state.ip;
+
+        if let Some(breakpoint) = self.breakpoint {
+            if breakpoint == segment_and_offset(start_cs, start_ip) {
+                hit_bp = true;
+            }
+        }
+
+        let instruction = match decode_instruction(self) {
+            Ok(instruction) => {
+                instruction
+            }
+            Err(err) => {
+                log::error!("CPU Error: {}", err);
+                return Err(Error::DecodeError(err));
+            }
+        };
+
+        // Print instruction.
+        // println!("{:04X}:{:04X} {}", start_cs, start_ip, &instruction);
+
+        execute(self, &instruction)
+    }
+
+    pub fn start(&mut self) -> Result<()> {
         loop {
-            // println!("state: {}", self.state);
-            // print_bus_bytes(self);
-
-            let start_cs = self.state.segments[Segment::Cs as usize];
-            let start_ip = self.state.ip;
-
-            if let Some(breakpoint) = self.breakpoint {
-                if breakpoint == segment_and_offset(start_cs, start_ip) {
-                    hit_bp = true;
+            if let Ok(result) = self.tick() {
+                if result == ExecuteResult::Stop {
+                    break;
                 }
-            }
-
-            let instruction = match decode_instruction(self) {
-                Ok(instruction) => {
-                    instruction
-                }
-                Err(err) => {
-                    log::error!("CPU Error: {}", err);
-                    return Err(Error::DecodeError(err));
-                }
-            };
-
-            // println!("{:04X}:{:04X} {}", start_cs, start_ip, &instruction);
-
-            let result = execute(self, &instruction)?;
-            if result == ExecuteResult::Stop {
-                break;
-            }
-
-            if hit_bp {
-                let mut line = "".to_owned();
-                std::io::stdin().read_line(&mut line).unwrap();
-                // println!("line: {}", line);
             }
         }
 
         Ok(())
     }
 
-    fn get_byte_register_value(&self, register: Register) -> u8 {
+    pub fn get_byte_register_value(&self, register: Register) -> u8 {
         use Register::*;
 
         let byte: u8 = match register {
-            AlAx => self.state.registers[Register::AlAx as usize].to_le_bytes()[0],
-            ClCx => self.state.registers[Register::ClCx as usize].to_le_bytes()[0],
-            DlDx => self.state.registers[Register::DlDx as usize].to_le_bytes()[0],
-            BlBx => self.state.registers[Register::BlBx as usize].to_le_bytes()[0],
-            AhSp => self.state.registers[Register::AlAx as usize].to_le_bytes()[1],
-            ChBp => self.state.registers[Register::ClCx as usize].to_le_bytes()[1],
-            DhSi => self.state.registers[Register::DlDx as usize].to_le_bytes()[1],
-            BhDi => self.state.registers[Register::BlBx as usize].to_le_bytes()[1],
+            AlAx => self.state.registers[AlAx as usize].to_le_bytes()[0],
+            ClCx => self.state.registers[ClCx as usize].to_le_bytes()[0],
+            DlDx => self.state.registers[DlDx as usize].to_le_bytes()[0],
+            BlBx => self.state.registers[BlBx as usize].to_le_bytes()[0],
+            AhSp => self.state.registers[AlAx as usize].to_le_bytes()[1],
+            ChBp => self.state.registers[ClCx as usize].to_le_bytes()[1],
+            DhSi => self.state.registers[DlDx as usize].to_le_bytes()[1],
+            BhDi => self.state.registers[BlBx as usize].to_le_bytes()[1],
         } as u8;
         byte
     }
 
-    fn get_word_register_value(&self, register: Register) -> u16 {
+    pub fn get_word_register_value(&self, register: Register) -> u16 {
         use Register::*;
 
         match register {
@@ -194,7 +203,7 @@ impl CPU {
         }
     }
 
-    fn set_byte_register_value(&mut self, register: Register, value: u8) {
+    pub fn set_byte_register_value(&mut self, register: Register, value: u8) {
         use Register::*;
 
         match register {
@@ -241,7 +250,7 @@ impl CPU {
         };
     }
 
-    fn set_word_register_value(&mut self, register: Register, value: u16) {
+    pub fn set_word_register_value(&mut self, register: Register, value: u16) {
         use Register::*;
 
         match register {

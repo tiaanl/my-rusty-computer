@@ -2,16 +2,17 @@ use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io::Read;
 use std::rc::Rc;
+use std::time::Instant;
 
 use clap::{App, Arg};
 
-use mrc_emulator::{Emulator, segment_and_offset};
+use mrc_display::Monitor;
+use mrc_emulator::{BusInterface, Emulator, segment_and_offset};
 use mrc_emulator::ram::RandomAccessMemory;
 use mrc_emulator::rom::ReadOnlyMemory;
 
 mod cpu;
 mod memory;
-mod monitor;
 mod video;
 
 fn load_bios<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
@@ -31,7 +32,10 @@ fn load_bios<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
 fn install_memory(emulator: &Emulator) {
     // 640KiB RAM
     let ram = RandomAccessMemory::with_capacity(0xA0000);
-    emulator.bus().borrow_mut().map(0x00000, 0xA0000, Rc::new(RefCell::new(ram)));
+    emulator
+        .bus()
+        .borrow_mut()
+        .map(0x00000, 0xA0000, Rc::new(RefCell::new(ram)));
 }
 
 fn install_bios(emulator: &Emulator, path: &str) {
@@ -49,12 +53,12 @@ fn install_bios(emulator: &Emulator, path: &str) {
     let bios_start_addr = 0x100000 - data_size;
 
     log::info!(
-            "Loading BIOS to: {:#05X}..{:#05X} ({:05X}/{} bytes)",
-            bios_start_addr,
-            bios_start_addr + data_size as u32,
-            data_size,
-            data_size
-        );
+        "Loading BIOS to: {:#05X}..{:#05X} ({:05X}/{} bytes)",
+        bios_start_addr,
+        bios_start_addr + data_size as u32,
+        data_size,
+        data_size
+    );
 
     let rom = ReadOnlyMemory::from_vec(data);
     emulator.bus().borrow_mut().map(
@@ -85,20 +89,43 @@ fn main() {
         emulator.set_reset_vector(0xF000, 0xFFF0);
     }
 
-    /*
-    // Video
+    let mut event_loop = glutin::event_loop::EventLoop::new();
 
-    let video_memory = VideoMemory::default();
-    memory_mapper.map(0xC0000, 0x8000, Rc::new(RefCell::new(video_memory)));
+    let mut monitor = Rc::new(RefCell::new(Monitor::new(&event_loop)));
+    emulator
+        .bus()
+        .borrow_mut()
+        .map(0xB8000, 0x4000, monitor.clone());
+    emulator.interrupt_controller().borrow_mut().map(0x10, monitor.clone());
 
-    let video_expansion = PhysicalMemory::with_capacity(0x28000);
-    memory_mapper.map(0xC8000, 0x28000, Rc::new(RefCell::new(video_expansion)));
+    let last_monitor_update = Instant::now();
 
-    let mut monitor = monitor::Monitor {};
-    monitor.start();
+    event_loop.run(move |event, _, control_flow| {
+        match event {
+            glutin::event::Event::NewEvents(cause) => match cause {
+                glutin::event::StartCause::ResumeTimeReached { .. } => (),
+                glutin::event::StartCause::Init => (),
+                _ => return,
+            },
+            _ => {
+                if let Some(cf) = monitor.borrow().handle_events(&event) {
+                    *control_flow = cf;
+                    return;
+                }
+            }
+        }
 
-    // Cpu::new(memory_mapper).start();
-    */
+        let now = Instant::now();
 
-    emulator.boot();
+        if now >= last_monitor_update + std::time::Duration::from_nanos(16_666_667) {
+            monitor.borrow_mut().tick();
+        }
+
+        let next_frame_time = now + std::time::Duration::from_nanos(0);
+        *control_flow = glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
+
+        for _ in 0..1000 {
+            emulator.tick();
+        }
+    });
 }

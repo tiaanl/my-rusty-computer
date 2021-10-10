@@ -4,5 +4,7 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+mrc_emulator = { path = "../mrc_emulator" }
+mrc_x86 = { path = "../mrc_x86" }
 glium = "*"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }

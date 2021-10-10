@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 mrc_decoder = { path = "../../crates/mrc_decoder" }
+mrc_display = { path = "../../crates/mrc_display" }
 mrc_dos = { path = "../../crates/mrc_dos" }
 mrc_emulator = { path = "../../crates/mrc_emulator" }
 mrc_x86 = { path = "../../crates/mrc_x86" }
@@ -13,3 +14,4 @@ clap = "2"
 glium = "*"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
 pretty_env_logger = "0.4"
+glutin = "*"

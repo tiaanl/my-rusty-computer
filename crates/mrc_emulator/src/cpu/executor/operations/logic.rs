@@ -16,6 +16,16 @@ pub fn and_word(destination: u16, source: u16, flags: &mut Flags) -> Option<u16>
     Some(result)
 }
 
+pub fn not_byte(destination: u8) -> Option<u8> {
+    let result = !destination;
+    Some(result)
+}
+
+pub fn not_word(destination: u16) -> Option<u16> {
+    let result = !destination;
+    Some(result)
+}
+
 pub fn or_byte(destination: u8, source: u8, flags: &mut Flags) -> Option<u8> {
     flags.remove(Flags::OVERFLOW | Flags::CARRY);
     let result = destination | source;
@@ -40,7 +50,7 @@ pub fn rotate_left_byte(left: u8, right: u8, flags: &mut Flags) -> Option<u8> {
     Some(res)
 }
 
-pub fn rorate_left_word(left: u16, right: u16, flags: &mut Flags) -> Option<u16> {
+pub fn rotate_left_word(left: u16, right: u16, flags: &mut Flags) -> Option<u16> {
     let right = right % 16;
     let res = left << right | left >> (16 - right);
 

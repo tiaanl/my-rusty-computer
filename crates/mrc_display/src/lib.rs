@@ -1,6 +1,17 @@
-use glium::{Display, implement_vertex, Surface, uniform};
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+
+use glium::{Display, implement_vertex, Program, Surface, uniform, VertexBuffer};
 use glium::glutin::{ContextBuilder, event, event_loop, window};
+use glium::glutin::event::Event;
+use glium::glutin::event_loop::EventLoop;
+use glium::glutin::platform::windows::EventLoopExtWindows;
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
+
+use mrc_emulator::{BusInterface, InterruptHandler};
+use mrc_emulator::cpu::{CPU, State};
+use mrc_x86::Register;
 
 // const VGA_FONT: [u8; 1 * 8] = [
 //     0x7e,  // .111111.
@@ -161,32 +172,54 @@ struct Character {
     color: u32,
 }
 
-pub struct Monitor {
-    buffer: Vec<Character>,
+struct TextMode {
+    cursor_position: (u8, u8),
 }
 
-impl Default for Monitor {
-    fn default() -> Self {
+pub struct Monitor {
+    buffer: Vec<Character>,
+    display: Display,
+    program: Program,
+    vertex_buffer: VertexBuffer<Character>,
+    texture: glium::Texture2d,
+
+    text_mode: TextMode,
+}
+
+impl Monitor {
+    pub fn new(event_loop: &EventLoop<()>) -> Self {
         let c = Character {
             letter: 0x00,
             color: 0x0F,
         };
         let mut buffer: Vec<Character> = vec![c; 80 * 25];
-        buffer[0].letter = 'L' as u32;
-        buffer[1].letter = 'i' as u32;
-        buffer[2].letter = 'e' as u32;
-        buffer[3].letter = 'f' as u32;
-        buffer[4].letter = 'i' as u32;
-        buffer[5].letter = 'e' as u32;
-        buffer[6].letter = ' ' as u32;
-        buffer[7].letter = 'P' as u32;
-        buffer[8].letter = 'o' as u32;
-        buffer[9].letter = 'k' as u32;
-        buffer[10].letter = 'k' as u32;
-        buffer[11].letter = 'e' as u32;
-        buffer[12].letter = 'l' as u32;
 
-        Self { buffer }
+        let wb = window::WindowBuilder::new().with_title("My Rusty Computer - Emulator");
+        let cb = ContextBuilder::new().with_vsync(false);
+        let display = Display::new(wb, cb, &event_loop).unwrap();
+
+        let program = glium::Program::from_source(
+            &display,
+            VERTEX_SHADER_SRC,
+            FRAGMENT_SHADER_SRC,
+            Some(GEOMETRY_SHADER_SRC),
+        )
+            .unwrap();
+
+        let vertex_buffer = VertexBuffer::new(&display, buffer.as_slice()).unwrap();
+
+        let texture = create_texture(&display);
+
+        Self {
+            buffer,
+            display,
+            program,
+            vertex_buffer,
+            texture,
+            text_mode: TextMode {
+                cursor_position: (0, 0),
+            },
+        }
     }
 }
 
@@ -356,70 +389,110 @@ fn create_texture(display: &Display) -> glium::Texture2d {
 }
 
 impl Monitor {
-    pub fn start(&mut self) {
-        let event_loop = event_loop::EventLoop::new();
-        let wb = window::WindowBuilder::new().with_title("My Rusty Computer - Emulator");
-        let cb = ContextBuilder::new().with_vsync(false);
-        let display = Display::new(wb, cb, &event_loop).unwrap();
+    pub fn handle_events(&self, event: &Event<()>) -> Option<event_loop::ControlFlow> {
+        match event {
+            event::Event::WindowEvent { event, .. } => match event {
+                event::WindowEvent::CloseRequested => {
+                    Some(event_loop::ControlFlow::Exit)
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 
-        let vertex_buffer = glium::VertexBuffer::new(&display, &self.buffer.as_slice()).unwrap();
+    pub fn tick(&mut self) {
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
-        let program = glium::Program::from_source(
-            &display,
-            VERTEX_SHADER_SRC,
-            FRAGMENT_SHADER_SRC,
-            Some(GEOMETRY_SHADER_SRC),
-        )
+        self.vertex_buffer.write(self.buffer.as_slice());
+
+        let mut target = self.display.draw();
+        target.clear_color(0.0, 0.0, 1.0, 1.0);
+
+        let behavior = glium::uniforms::SamplerBehavior {
+            minify_filter: MinifySamplerFilter::Nearest,
+            magnify_filter: MagnifySamplerFilter::Nearest,
+            ..Default::default()
+        };
+        let uniforms = uniform! {
+                matrix: orthogonal_projection(0.0, 320.0, 0.0, 200.0, 1.0, -1.0),
+                texture: glium::uniforms::Sampler(&self.texture, behavior),
+            };
+
+        target
+            .draw(
+                &self.vertex_buffer,
+                &indices,
+                &self.program,
+                &uniforms,
+                &Default::default(),
+            )
             .unwrap();
 
-        let texture = create_texture(&display);
+        target.finish().unwrap();
+    }
+}
 
-        event_loop.run(move |event, _, control_flow| {
-            match &event {
-                event::Event::WindowEvent { event, .. } => match event {
-                    event::WindowEvent::CloseRequested => {
-                        *control_flow = event_loop::ControlFlow::Exit;
-                        return;
-                    }
-                    _ => return,
-                },
-                event::Event::NewEvents(cause) => match cause {
-                    event::StartCause::ResumeTimeReached { .. } => (),
-                    event::StartCause::Init => (),
-                    _ => return,
-                },
-                _ => return,
+impl BusInterface for Monitor {
+    fn read(&self, address: mrc_emulator::Address) -> mrc_emulator::error::Result<u8> {
+        let index = address as usize / 2;
+        let value = if address % 2 == 0 {
+            self.buffer[index].letter as u8
+        } else {
+            self.buffer[index].color as u8
+        };
+
+        // log::info!("Read \"{:02X}\" from VGA memory at [{:05X}]", value, address);
+
+        Ok(value)
+    }
+
+    fn write(&mut self, address: mrc_emulator::Address, value: u8) -> mrc_emulator::error::Result<()> {
+        let index = address as usize / 2;
+        if address % 2 == 0 {
+            self.buffer[index].letter = value as u32;
+        } else {
+            self.buffer[index].color = value as u32;
+        }
+
+        // log::info!("Wrote \"{:02X}\" to VGA memory at [{:05X}] ", value, address);
+
+        Ok(())
+    }
+}
+
+impl InterruptHandler for Monitor {
+    fn handle(&mut self, cpu: &CPU) {
+        let ah = cpu.get_byte_register_value(Register::AhSp);
+        if ah == 0x02 {
+            // BH = page number
+            // DH = row
+            // DL = column
+            let page_number = cpu.get_byte_register_value(Register::BhDi);
+            let row = cpu.get_byte_register_value(Register::DhSi);
+            let column = cpu.get_byte_register_value(Register::DlDx);
+
+            // log::info!("Set cursor position. | page_number: {:02X} | row: {:02X} | column: {:02X}", page_number, row, column);
+
+            self.text_mode.cursor_position = (column, row);
+        } else if ah == 0x09 {
+            // AL = character
+            // BH = page number
+            // BL = color
+            // CX = number of times to print character
+            let character = cpu.get_byte_register_value(Register::AlAx);
+            let page_number = cpu.get_byte_register_value(Register::BhDi);
+            let color = cpu.get_byte_register_value(Register::BlBx);
+            let count = cpu.get_word_register_value(Register::ClCx);
+
+            // log::info!("Write character and attribute at cursor position. | character: {:02X} \"{}\" | page_number: {:02X} | color: {:02X} | count: {:04X}",
+            //     character, character as char, page_number, color, count);
+
+            let index = self.text_mode.cursor_position.1 * 40 + self.text_mode.cursor_position.0;
+
+            if let Some(c) = self.buffer.get_mut(index as usize) {
+                c.letter = character as u32;
             }
-
-            let next_frame_time =
-                std::time::Instant::now() + std::time::Duration::from_nanos(16_666_667);
-            *control_flow = event_loop::ControlFlow::WaitUntil(next_frame_time);
-
-            let mut target = display.draw();
-            target.clear_color(0.0, 0.0, 1.0, 1.0);
-
-            let behavior = glium::uniforms::SamplerBehavior {
-                minify_filter: MinifySamplerFilter::Nearest,
-                magnify_filter: MagnifySamplerFilter::Nearest,
-                ..Default::default()
-            };
-            let uniforms = uniform! {
-                matrix: orthogonal_projection(0.0, 320.0, 0.0, 200.0, -1.0, 1.0),
-                texture: glium::uniforms::Sampler(&texture, behavior),
-            };
-
-            target
-                .draw(
-                    &vertex_buffer,
-                    &indices,
-                    &program,
-                    &uniforms,
-                    &Default::default(),
-                )
-                .unwrap();
-
-            target.finish().unwrap();
-        });
+        }
     }
 }

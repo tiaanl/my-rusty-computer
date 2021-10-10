@@ -779,8 +779,10 @@ dependencies = [
  "bitflags",
  "clap",
  "glium",
+ "glutin",
  "log",
  "mrc_decoder",
+ "mrc_display",
  "mrc_dos",
  "mrc_emulator",
  "mrc_x86",
@@ -800,6 +802,8 @@ version = "0.0.1"
 dependencies = [
  "glium",
  "log",
+ "mrc_emulator",
+ "mrc_x86",
 ]
 
 [[package]]
