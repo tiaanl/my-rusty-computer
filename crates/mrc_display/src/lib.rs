@@ -340,7 +340,7 @@ fn create_texture(display: &Display) -> glium::Texture2d {
             for char_row in 0..rows_per_char {
                 let row_char = VGA_FONT[(y * chars_per_row + x) * rows_per_char + char_row];
                 for bit in 0..=7 {
-                    let white = row_char & 1 << bit != 0;
+                    let white = row_char & 1 << (7 - bit) != 0;
                     let color = if white { 255 } else { 0 };
                     set_pixel(x * cols_per_char + bit, y * rows_per_char + char_row, color);
                 }
@@ -405,7 +405,7 @@ impl Monitor {
                 ..Default::default()
             };
             let uniforms = uniform! {
-                matrix: orthogonal_projection(320.0, 0.0, 0.0, 200.0, -1.0, 1.0),
+                matrix: orthogonal_projection(0.0, 320.0, 0.0, 200.0, -1.0, 1.0),
                 texture: glium::uniforms::Sampler(&texture, behavior),
             };
 
