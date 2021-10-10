@@ -348,7 +348,7 @@ fn create_texture(display: &Display) -> glium::Texture2d {
         }
     }
 
-    let image = glium::texture::RawImage2d::from_raw(
+    let image = glium::texture::RawImage2d::from_raw_rgba(
         converted,
         (texture_width as u32, texture_height as u32),
     );
