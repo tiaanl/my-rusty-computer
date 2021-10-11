@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 pub type Address = u32;
 

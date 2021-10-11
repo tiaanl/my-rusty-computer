@@ -4,6 +4,7 @@ use mrc_decoder::Error as DecodeError;
 
 use crate::bus::Address;
 
+#[derive(Debug)]
 pub enum Error {
     AddressNotMapped(Address),
     AddressOutOfRange(Address),

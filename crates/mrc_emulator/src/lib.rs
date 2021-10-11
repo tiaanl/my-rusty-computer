@@ -8,7 +8,7 @@ pub use irq::InterruptHandler;
 use mrc_x86::Segment;
 
 use crate::bus::Bus;
-use crate::cpu::CPU;
+use crate::cpu::{CPU, ExecuteResult};
 use crate::error::Result;
 use crate::io::IOController;
 use crate::irq::InterruptController;
@@ -28,7 +28,7 @@ trait Installable {
 /// An emulator with some basic components.
 pub struct Emulator {
     bus: Rc<RefCell<Bus>>,
-    io_controller: Rc<RefCell<IOController>>,
+    _io_controller: Rc<RefCell<IOController>>,
     interrupt_controller: Rc<RefCell<InterruptController>>,
     cpu: CPU,
 }
@@ -40,7 +40,7 @@ impl Emulator {
         let interrupt_controller = Rc::new(RefCell::new(InterruptController::default()));
         Self {
             bus: Rc::clone(&bus),
-            io_controller: io_controller.clone(),
+            _io_controller: io_controller.clone(),
             interrupt_controller: interrupt_controller.clone(),
 
             cpu: CPU::new(bus, Some(io_controller), Some(interrupt_controller)),
@@ -68,7 +68,7 @@ impl Emulator {
         }
     }
 
-    pub fn tick(&mut self) {
-        self.cpu.tick();
+    pub fn tick(&mut self) -> bool {
+        self.cpu.tick().unwrap() == ExecuteResult::Continue
     }
 }

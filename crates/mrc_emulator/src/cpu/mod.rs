@@ -7,8 +7,8 @@ use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
 use mrc_x86::{Register, Segment};
 
-use crate::bus::{Address, BusInterface, segment_and_offset};
-use crate::cpu::executor::{execute, ExecuteResult};
+use crate::bus::{BusInterface, segment_and_offset};
+pub use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::{Error, Result};
 use crate::io::IOController;
 use crate::irq::InterruptController;
@@ -74,7 +74,7 @@ impl Display for State {
         write!(f, "SS: {:04X} ", self.segments[Ss as usize])?;
         write!(f, "DS: {:04X} ", self.segments[Ds as usize])?;
 
-        write!(f, "IP: {:04X} ", self.ip);
+        write!(f, "IP: {:04X} ", self.ip)?;
 
         macro_rules! print_flag {
             ($name:ident,$flag:expr) => {{
@@ -110,8 +110,6 @@ pub struct CPU {
     io_controller: Option<Rc<RefCell<IOController>>>,
     interrupt_controller: Option<Rc<RefCell<InterruptController>>>,
     bus: Rc<RefCell<dyn BusInterface>>,
-
-    breakpoint: Option<Address>,
 }
 
 impl CPU {
@@ -124,25 +122,15 @@ impl CPU {
             io_controller,
             interrupt_controller,
             bus,
-            breakpoint: None,
-            // breakpoint: Some(0xff9ea),
         }
     }
 
     pub fn tick(&mut self) -> Result<ExecuteResult> {
-        let mut hit_bp = false;
-
-        // println!("state: {}", self.state);
+        println!("state: {}", self.state);
         // print_bus_bytes(self);
 
-        let start_cs = self.state.segments[Segment::Cs as usize];
-        let start_ip = self.state.ip;
-
-        if let Some(breakpoint) = self.breakpoint {
-            if breakpoint == segment_and_offset(start_cs, start_ip) {
-                hit_bp = true;
-            }
-        }
+        let _start_cs = self.state.segments[Segment::Cs as usize];
+        let _start_ip = self.state.ip;
 
         let instruction = match decode_instruction(self) {
             Ok(instruction) => {
@@ -155,7 +143,7 @@ impl CPU {
         };
 
         // Print instruction.
-        // println!("{:04X}:{:04X} {}", start_cs, start_ip, &instruction);
+        println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);
 
         execute(self, &instruction)
     }

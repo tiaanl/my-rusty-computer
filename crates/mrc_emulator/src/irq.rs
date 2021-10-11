@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::cpu::{CPU, State};
+use crate::cpu::CPU;
 
 pub trait InterruptHandler {
     fn handle(&mut self, state: &CPU);

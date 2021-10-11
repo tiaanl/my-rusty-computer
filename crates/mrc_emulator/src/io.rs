@@ -1,8 +1,8 @@
-use mrc_x86::OperandSize;
+#![allow(unused_variables)]
 
 use crate::error::Result;
 
-fn port_name(port: u16) -> Option<&'static str> {
+fn _port_name(port: u16) -> Option<&'static str> {
     match port {
         0x20 | 0x21 => Some("PIC1"),
         0xA0 | 0xA1 => Some("PIC2"),

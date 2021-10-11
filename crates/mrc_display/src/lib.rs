@@ -1,16 +1,11 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex};
-
 use glium::{Display, implement_vertex, Program, Surface, uniform, VertexBuffer};
 use glium::glutin::{ContextBuilder, event, event_loop, window};
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::EventLoop;
-use glium::glutin::platform::windows::EventLoopExtWindows;
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 
 use mrc_emulator::{BusInterface, InterruptHandler};
-use mrc_emulator::cpu::{CPU, State};
+use mrc_emulator::cpu::CPU;
 use mrc_x86::Register;
 
 // const VGA_FONT: [u8; 1 * 8] = [
@@ -210,7 +205,7 @@ impl Monitor {
             letter: 0x00,
             color: 0x0F,
         };
-        let mut buffer: Vec<Character> = vec![c; 80 * 25];
+        let buffer: Vec<Character> = vec![c; 80 * 25];
 
         let wb = window::WindowBuilder::new().with_title("My Rusty Computer - Emulator");
         let cb = ContextBuilder::new().with_vsync(false);
@@ -488,7 +483,7 @@ impl InterruptHandler for Monitor {
             0x00 => {
                 // AL = video mode
 
-                let video_mode = cpu.get_byte_register_value(Register::AlAx);
+                let _video_mode = cpu.get_byte_register_value(Register::AlAx);
 
                 // log::info!("Setting video mode. | video_mode: {:02X}", video_mode);
             }
@@ -498,8 +493,8 @@ impl InterruptHandler for Monitor {
                 // CH = scan row start
                 // CL = scan row end
 
-                let scan_line_start = cpu.get_byte_register_value(Register::ChBp);
-                let scan_line_end = cpu.get_byte_register_value(Register::ClCx);
+                let _scan_line_start = cpu.get_byte_register_value(Register::ChBp);
+                let _scan_line_end = cpu.get_byte_register_value(Register::ClCx);
 
                 // log::info!(
                 //     "Setting cursor shape: {:02X}..{:02X}",
@@ -512,7 +507,7 @@ impl InterruptHandler for Monitor {
                 // BH = page number
                 // DH = row
                 // DL = column
-                let page_number = cpu.get_byte_register_value(Register::BhDi);
+                let _page_number = cpu.get_byte_register_value(Register::BhDi);
                 let row = cpu.get_byte_register_value(Register::DhSi);
                 let column = cpu.get_byte_register_value(Register::DlDx);
 
@@ -525,7 +520,7 @@ impl InterruptHandler for Monitor {
                 // Select active display page
                 // AL = page number
 
-                let page_number = cpu.get_byte_register_value(Register::AlAx);
+                let _page_number = cpu.get_byte_register_value(Register::AlAx);
 
                 // log::info!(
                 //     "Select active display page. | page_number: {:02X}",
@@ -542,12 +537,12 @@ impl InterruptHandler for Monitor {
                 // DH = lower row number
                 // DL = right column number
 
-                let lines_to_scroll = cpu.get_byte_register_value(Register::AlAx);
-                let color = cpu.get_byte_register_value(Register::BhDi);
-                let upper_row_number = cpu.get_byte_register_value(Register::ChBp);
-                let left_column_number = cpu.get_byte_register_value(Register::ClCx);
-                let lower_row_number = cpu.get_byte_register_value(Register::DhSi);
-                let right_column_number = cpu.get_byte_register_value(Register::DlDx);
+                let _lines_to_scroll = cpu.get_byte_register_value(Register::AlAx);
+                let _color = cpu.get_byte_register_value(Register::BhDi);
+                let _upper_row_number = cpu.get_byte_register_value(Register::ChBp);
+                let _left_column_number = cpu.get_byte_register_value(Register::ClCx);
+                let _lower_row_number = cpu.get_byte_register_value(Register::DhSi);
+                let _right_column_number = cpu.get_byte_register_value(Register::DlDx);
 
                 // log::info!("Scroll up window. | lines_to_scroll: {:02X} | color: {:02X} | upper_row_number: {:02X} | left_column_number: {:02X} | lower_row_number: {:02X} | right_column_number: {:02X}", lines_to_scroll, color, upper_row_number, left_column_number, lower_row_number, right_column_number);
             }
@@ -558,9 +553,9 @@ impl InterruptHandler for Monitor {
                 // BL = color
                 // CX = number of times to print character
                 let character = cpu.get_byte_register_value(Register::AlAx);
-                let page_number = cpu.get_byte_register_value(Register::BhDi);
-                let color = cpu.get_byte_register_value(Register::BlBx);
-                let count = cpu.get_word_register_value(Register::ClCx);
+                let _page_number = cpu.get_byte_register_value(Register::BhDi);
+                let _color = cpu.get_byte_register_value(Register::BlBx);
+                let _count = cpu.get_word_register_value(Register::ClCx);
 
                 // log::info!("Write character and attribute at cursor position. | character: {:02X} \"{}\" | page_number: {:02X} | color: {:02X} | count: {:04X}",
                 //     character, character as char, page_number, color, count);
@@ -580,8 +575,8 @@ impl InterruptHandler for Monitor {
                 // BL = color (only in graphic mode)
 
                 let character = cpu.get_byte_register_value(Register::AlAx);
-                let page_number = cpu.get_byte_register_value(Register::BhDi);
-                let color = cpu.get_byte_register_value(Register::BlBx);
+                let _page_number = cpu.get_byte_register_value(Register::BhDi);
+                let _color = cpu.get_byte_register_value(Register::BlBx);
 
                 // log::info!(
                 //     "Teletype output. | character: {:02X} | page_number: {:02X} | color: {:02X}",

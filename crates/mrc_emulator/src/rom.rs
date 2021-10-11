@@ -22,7 +22,7 @@ impl BusInterface for ReadOnlyMemory {
 
     fn write(&mut self, address: Address, value: u8) -> Result<()> {
         log::warn!("Writing {:#02x} to ROM at {:05x}", value, address);
-        //self.data[address as usize] = value;
+        self.data[address as usize] = value;
         Ok(())
     }
 }

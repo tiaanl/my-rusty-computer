@@ -2,7 +2,6 @@ use mrc_x86::{
     AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
     Operation, Register, Repeat, Segment,
 };
-use mrc_x86::Register::{DhSi, DlDx};
 
 use crate::bus::Address;
 use crate::cpu::executor::operations::{arithmetic, logic};
@@ -396,11 +395,11 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                     match destination.1 {
                         OperandSize::Byte => {
                             let value = io_controller.borrow().read_byte(port)?;
-                            byte::set_operand_value(cpu, destination, value);
+                            byte::set_operand_value(cpu, destination, value)?;
                         }
                         OperandSize::Word => {
                             let value = io_controller.borrow().read_word(port)?;
-                            word::set_operand_value(cpu, destination, value);
+                            word::set_operand_value(cpu, destination, value)?;
                         }
                     };
                 }
@@ -826,14 +825,14 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                         OperandSize::Word => word::get_operand_value(cpu, port)?,
                     };
 
-                    let value = match value.1 {
+                    match value.1 {
                         OperandSize::Byte => io_controller
                             .borrow_mut()
                             .write_byte(port, byte::get_operand_value(cpu, value)?),
                         OperandSize::Word => io_controller
                             .borrow_mut()
                             .write_word(port, word::get_operand_value(cpu, value)?),
-                    };
+                    }?;
                 }
             }
 
@@ -878,7 +877,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                     }
                     _ => unreachable!(),
                 };
-                word::set_operand_type_value(cpu, destination, result);
+                word::set_operand_type_value(cpu, destination, result)?;
             }
             _ => {}
         },

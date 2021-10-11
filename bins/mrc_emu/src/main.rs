@@ -8,7 +8,7 @@ use clap::{App, Arg};
 use glutin::event_loop::ControlFlow;
 
 use mrc_display::Monitor;
-use mrc_emulator::{BusInterface, Emulator, segment_and_offset};
+use mrc_emulator::Emulator;
 use mrc_emulator::ram::RandomAccessMemory;
 use mrc_emulator::rom::ReadOnlyMemory;
 
@@ -16,7 +16,7 @@ mod cpu;
 mod memory;
 mod video;
 
-fn load_bios<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
+fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
     let file_size = metadata.len();
 
@@ -42,7 +42,7 @@ fn install_memory(emulator: &Emulator) {
 fn install_bios(emulator: &Emulator, path: &str) {
     log::info!("Loading BIOS from: {}", path);
 
-    let data = match load_bios(path) {
+    let data = match load_rom(path) {
         Ok(r) => r,
         Err(err) => {
             log::error!("Could not read BIOS file. ({}) ({})", &path, err);
@@ -77,7 +77,7 @@ fn main() {
         .arg(
             Arg::with_name("bios")
                 .help("Specify a file to use as the BIOS")
-                .required(true),
+                .required(false),
         )
         .get_matches();
 
@@ -86,24 +86,73 @@ fn main() {
     install_memory(&emulator);
 
     // Basic ROM just below BIOS.
-    let basic_rom = Rc::new(RefCell::new(ReadOnlyMemory::from_vec(vec!(0; 0x8000))));
-    emulator.bus().borrow_mut().map(0xF6000, 0x8000, basic_rom);
+    [
+        (
+            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF6.ROM"#,
+            0xF6000,
+        ),
+        (
+            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF8.ROM"#,
+            0xF8000,
+        ),
+        (
+            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFA.ROM"#,
+            0xFA000,
+        ),
+        (
+            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFC.ROM"#,
+            0xFC000,
+        ),
+    ]
+        .map(|(path, address)| {
+            let data = load_rom(path).unwrap();
+            let data_len = data.len() as u32;
+            let rom = ReadOnlyMemory::from_vec(data);
+            emulator
+                .bus()
+                .borrow_mut()
+                .map(address, data_len, Rc::new(RefCell::new(rom)));
+            log::info!(
+            "Loading ROM \"{}\" to [{:05X}..{:05X}]",
+            path,
+            address,
+            address + data_len
+        );
+        });
 
     if let Some(path) = matches.value_of("bios") {
         install_bios(&emulator, path);
-        emulator.set_reset_vector(0xF000, 0xFFF0);
+    } else {
+        let data = include_bytes!("../ext/mrc_bios/bios.bin");
+        println!("size: {}", data.len());
+        let data = Vec::from(*data);
+        let data_size = data.len() as u32;
+        let bios_start_addr = 0x100000 - data_size;
+
+        emulator.bus().borrow_mut().map(
+            bios_start_addr,
+            data_size,
+            Rc::new(RefCell::new(ReadOnlyMemory::from_vec(data))),
+        );
     }
 
-    let mut event_loop = glutin::event_loop::EventLoop::new();
+    emulator.set_reset_vector(0xF000, 0xFFF0);
 
-    let mut monitor = Rc::new(RefCell::new(Monitor::new(&event_loop)));
+    let event_loop = glutin::event_loop::EventLoop::new();
+
+    let monitor = Rc::new(RefCell::new(Monitor::new(&event_loop)));
     emulator
         .bus()
         .borrow_mut()
         .map(0xB8000, 0x4000, monitor.clone());
-    emulator.interrupt_controller().borrow_mut().map(0x10, monitor.clone());
+    emulator
+        .interrupt_controller()
+        .borrow_mut()
+        .map(0x10, monitor.clone());
 
     let last_monitor_update = Instant::now();
+
+    let mut cpu_stopped = false;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -119,8 +168,15 @@ fn main() {
             monitor.borrow_mut().tick();
         }
 
-        for _ in 0..10 {
-            emulator.tick();
+        if !cpu_stopped {
+            for _ in 0..10 {
+                if !emulator.tick() {
+                    cpu_stopped = true;
+                    return;
+                    // *control_flow = ControlFlow::Exit;
+                    // return;
+                }
+            }
         }
     });
 }
