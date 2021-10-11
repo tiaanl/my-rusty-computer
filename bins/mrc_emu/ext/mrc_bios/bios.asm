@@ -30,7 +30,7 @@ boot:
 	stosb
 	hlt	; the stack does not work :(
 
-.stack_works
+.stack_works:
 
 	; Set cursor position to (0, 0)
 	mov	ah, 0x02
@@ -38,6 +38,13 @@ boot:
 	xor	dx, dx
 	int	0x10
 
+%include "cpu_test.asm"
+	jnc	.continue_1
+	mov	si, msg_cpu_test_failed
+	call	print_message
+	hlt
+
+.continue_1
 	mov	si, msg_welcome_string
 	call	print_message
 
@@ -58,6 +65,7 @@ print_message:
 	ret
 
 msg_stack_not_working	db	"Stack not working!",0
+msg_cpu_test_failed	db	"CPU test failed!",0
 msg_welcome_string	db	"Ok!",0
 
 	; pad the file so that the reset_vector starts at F000:E000
