@@ -5,6 +5,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use clap::{App, Arg};
+use glutin::event_loop::ControlFlow;
 
 use mrc_display::Monitor;
 use mrc_emulator::{BusInterface, Emulator, segment_and_offset};
@@ -84,6 +85,10 @@ fn main() {
 
     install_memory(&emulator);
 
+    // Basic ROM just below BIOS.
+    let basic_rom = Rc::new(RefCell::new(ReadOnlyMemory::from_vec(vec!(0; 0x8000))));
+    emulator.bus().borrow_mut().map(0xF6000, 0x8000, basic_rom);
+
     if let Some(path) = matches.value_of("bios") {
         install_bios(&emulator, path);
         emulator.set_reset_vector(0xF000, 0xFFF0);
@@ -101,18 +106,11 @@ fn main() {
     let last_monitor_update = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
-        match event {
-            glutin::event::Event::NewEvents(cause) => match cause {
-                glutin::event::StartCause::ResumeTimeReached { .. } => (),
-                glutin::event::StartCause::Init => (),
-                _ => return,
-            },
-            _ => {
-                if let Some(cf) = monitor.borrow().handle_events(&event) {
-                    *control_flow = cf;
-                    return;
-                }
-            }
+        *control_flow = ControlFlow::Poll;
+
+        if let Some(cf) = monitor.borrow().handle_events(&event) {
+            *control_flow = cf;
+            return;
         }
 
         let now = Instant::now();
@@ -121,10 +119,7 @@ fn main() {
             monitor.borrow_mut().tick();
         }
 
-        let next_frame_time = now + std::time::Duration::from_nanos(0);
-        *control_flow = glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
-
-        for _ in 0..1000 {
+        for _ in 0..10 {
             emulator.tick();
         }
     });

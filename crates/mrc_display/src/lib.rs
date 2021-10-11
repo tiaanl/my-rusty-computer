@@ -174,10 +174,28 @@ struct Character {
 
 struct TextMode {
     cursor_position: (u8, u8),
+    buffer: Vec<Character>,
+}
+
+impl TextMode {
+    pub fn teletype_output(&mut self, character: u8) {
+        let index = Self::index_for(self.cursor_position);
+        if let Some(c) = self.buffer.get_mut(index) {
+            c.letter = character as u32;
+            self.cursor_position.0 += 1;
+            if self.cursor_position.0 >= 40 {
+                self.cursor_position.0 = 0;
+                self.cursor_position.1 += 1;
+            }
+        }
+    }
+
+    fn index_for(position: (u8, u8)) -> usize {
+        position.1 as usize * 40 + position.0 as usize
+    }
 }
 
 pub struct Monitor {
-    buffer: Vec<Character>,
     display: Display,
     program: Program,
     vertex_buffer: VertexBuffer<Character>,
@@ -211,13 +229,13 @@ impl Monitor {
         let texture = create_texture(&display);
 
         Self {
-            buffer,
             display,
             program,
             vertex_buffer,
             texture,
             text_mode: TextMode {
                 cursor_position: (0, 0),
+                buffer,
             },
         }
     }
@@ -392,9 +410,7 @@ impl Monitor {
     pub fn handle_events(&self, event: &Event<()>) -> Option<event_loop::ControlFlow> {
         match event {
             event::Event::WindowEvent { event, .. } => match event {
-                event::WindowEvent::CloseRequested => {
-                    Some(event_loop::ControlFlow::Exit)
-                }
+                event::WindowEvent::CloseRequested => Some(event_loop::ControlFlow::Exit),
                 _ => None,
             },
             _ => None,
@@ -404,7 +420,7 @@ impl Monitor {
     pub fn tick(&mut self) {
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
-        self.vertex_buffer.write(self.buffer.as_slice());
+        self.vertex_buffer.write(self.text_mode.buffer.as_slice());
 
         let mut target = self.display.draw();
         target.clear_color(0.0, 0.0, 1.0, 1.0);
@@ -415,9 +431,9 @@ impl Monitor {
             ..Default::default()
         };
         let uniforms = uniform! {
-                matrix: orthogonal_projection(0.0, 320.0, 0.0, 200.0, 1.0, -1.0),
-                texture: glium::uniforms::Sampler(&self.texture, behavior),
-            };
+            matrix: orthogonal_projection(0.0, 320.0, 0.0, 200.0, 1.0, -1.0),
+            texture: glium::uniforms::Sampler(&self.texture, behavior),
+        };
 
         target
             .draw(
@@ -437,9 +453,9 @@ impl BusInterface for Monitor {
     fn read(&self, address: mrc_emulator::Address) -> mrc_emulator::error::Result<u8> {
         let index = address as usize / 2;
         let value = if address % 2 == 0 {
-            self.buffer[index].letter as u8
+            self.text_mode.buffer[index].letter as u8
         } else {
-            self.buffer[index].color as u8
+            self.text_mode.buffer[index].color as u8
         };
 
         // log::info!("Read \"{:02X}\" from VGA memory at [{:05X}]", value, address);
@@ -447,12 +463,16 @@ impl BusInterface for Monitor {
         Ok(value)
     }
 
-    fn write(&mut self, address: mrc_emulator::Address, value: u8) -> mrc_emulator::error::Result<()> {
+    fn write(
+        &mut self,
+        address: mrc_emulator::Address,
+        value: u8,
+    ) -> mrc_emulator::error::Result<()> {
         let index = address as usize / 2;
         if address % 2 == 0 {
-            self.buffer[index].letter = value as u32;
+            self.text_mode.buffer[index].letter = value as u32;
         } else {
-            self.buffer[index].color = value as u32;
+            self.text_mode.buffer[index].color = value as u32;
         }
 
         // log::info!("Wrote \"{:02X}\" to VGA memory at [{:05X}] ", value, address);
@@ -464,35 +484,121 @@ impl BusInterface for Monitor {
 impl InterruptHandler for Monitor {
     fn handle(&mut self, cpu: &CPU) {
         let ah = cpu.get_byte_register_value(Register::AhSp);
-        if ah == 0x02 {
-            // BH = page number
-            // DH = row
-            // DL = column
-            let page_number = cpu.get_byte_register_value(Register::BhDi);
-            let row = cpu.get_byte_register_value(Register::DhSi);
-            let column = cpu.get_byte_register_value(Register::DlDx);
+        match ah {
+            0x00 => {
+                // AL = video mode
 
-            // log::info!("Set cursor position. | page_number: {:02X} | row: {:02X} | column: {:02X}", page_number, row, column);
+                let video_mode = cpu.get_byte_register_value(Register::AlAx);
 
-            self.text_mode.cursor_position = (column, row);
-        } else if ah == 0x09 {
-            // AL = character
-            // BH = page number
-            // BL = color
-            // CX = number of times to print character
-            let character = cpu.get_byte_register_value(Register::AlAx);
-            let page_number = cpu.get_byte_register_value(Register::BhDi);
-            let color = cpu.get_byte_register_value(Register::BlBx);
-            let count = cpu.get_word_register_value(Register::ClCx);
-
-            // log::info!("Write character and attribute at cursor position. | character: {:02X} \"{}\" | page_number: {:02X} | color: {:02X} | count: {:04X}",
-            //     character, character as char, page_number, color, count);
-
-            let index = self.text_mode.cursor_position.1 * 40 + self.text_mode.cursor_position.0;
-
-            if let Some(c) = self.buffer.get_mut(index as usize) {
-                c.letter = character as u32;
+                // log::info!("Setting video mode. | video_mode: {:02X}", video_mode);
             }
+
+            0x01 => {
+                // Set text mode cursor shape.
+                // CH = scan row start
+                // CL = scan row end
+
+                let scan_line_start = cpu.get_byte_register_value(Register::ChBp);
+                let scan_line_end = cpu.get_byte_register_value(Register::ClCx);
+
+                // log::info!(
+                //     "Setting cursor shape: {:02X}..{:02X}",
+                //     scan_line_start,
+                //     scan_line_end
+                // );
+            }
+
+            0x02 => {
+                // BH = page number
+                // DH = row
+                // DL = column
+                let page_number = cpu.get_byte_register_value(Register::BhDi);
+                let row = cpu.get_byte_register_value(Register::DhSi);
+                let column = cpu.get_byte_register_value(Register::DlDx);
+
+                // log::info!("Set cursor position. | page_number: {:02X} | row: {:02X} | column: {:02X}", page_number, row, column);
+
+                self.text_mode.cursor_position = (column, row);
+            }
+
+            0x05 => {
+                // Select active display page
+                // AL = page number
+
+                let page_number = cpu.get_byte_register_value(Register::AlAx);
+
+                // log::info!(
+                //     "Select active display page. | page_number: {:02X}",
+                //     page_number
+                // );
+            }
+
+            0x06 => {
+                // Scroll up window.
+                // AL = lines to scroll (0 = clear, CH, CL, DH, Dl are used)
+                // BH = background color and foreground color
+                // CH = upper row number
+                // CL = left column number
+                // DH = lower row number
+                // DL = right column number
+
+                let lines_to_scroll = cpu.get_byte_register_value(Register::AlAx);
+                let color = cpu.get_byte_register_value(Register::BhDi);
+                let upper_row_number = cpu.get_byte_register_value(Register::ChBp);
+                let left_column_number = cpu.get_byte_register_value(Register::ClCx);
+                let lower_row_number = cpu.get_byte_register_value(Register::DhSi);
+                let right_column_number = cpu.get_byte_register_value(Register::DlDx);
+
+                // log::info!("Scroll up window. | lines_to_scroll: {:02X} | color: {:02X} | upper_row_number: {:02X} | left_column_number: {:02X} | lower_row_number: {:02X} | right_column_number: {:02X}", lines_to_scroll, color, upper_row_number, left_column_number, lower_row_number, right_column_number);
+            }
+
+            0x09 => {
+                // AL = character
+                // BH = page number
+                // BL = color
+                // CX = number of times to print character
+                let character = cpu.get_byte_register_value(Register::AlAx);
+                let page_number = cpu.get_byte_register_value(Register::BhDi);
+                let color = cpu.get_byte_register_value(Register::BlBx);
+                let count = cpu.get_word_register_value(Register::ClCx);
+
+                // log::info!("Write character and attribute at cursor position. | character: {:02X} \"{}\" | page_number: {:02X} | color: {:02X} | count: {:04X}",
+                //     character, character as char, page_number, color, count);
+
+                let index =
+                    self.text_mode.cursor_position.1 * 40 + self.text_mode.cursor_position.0;
+
+                if let Some(c) = self.text_mode.buffer.get_mut(index as usize) {
+                    c.letter = character as u32;
+                }
+            }
+
+            0x0E => {
+                // Teletype output
+                // AL = character
+                // BH = page_number
+                // BL = color (only in graphic mode)
+
+                let character = cpu.get_byte_register_value(Register::AlAx);
+                let page_number = cpu.get_byte_register_value(Register::BhDi);
+                let color = cpu.get_byte_register_value(Register::BlBx);
+
+                // log::info!(
+                //     "Teletype output. | character: {:02X} | page_number: {:02X} | color: {:02X}",
+                //     character,
+                //     page_number,
+                //     color
+                // );
+
+                self.text_mode.teletype_output(character);
+            }
+
+            0x12 => {
+                // Some undocumented function??
+                // log::info!("Undocumented int 0x10 function.");
+            }
+
+            _ => panic!("Invalid function number: {:02X}", ah),
         }
     }
 }
