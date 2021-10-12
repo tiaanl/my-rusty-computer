@@ -426,7 +426,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Int => match &instruction.operands {
             OperandSet::Destination(Operand(OperandType::Immediate(value), OperandSize::Byte)) => {
                 if let Some(interrupt_controller) = &cpu.interrupt_controller {
-                    interrupt_controller.borrow_mut().handle(*value as u8, cpu);
+                    interrupt_controller.borrow().handle(*value as u8, cpu);
                 }
 
                 // if *value == 0x10 {
@@ -523,7 +523,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::ZERO)
                     || cpu.state.flags.contains(Flags::SIGN)
-                        != cpu.state.flags.contains(Flags::OVERFLOW)
+                    != cpu.state.flags.contains(Flags::OVERFLOW)
                 {
                     displace_ip(cpu, displacement)?;
                 }

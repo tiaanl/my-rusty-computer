@@ -7,7 +7,7 @@ use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
 use mrc_x86::{Register, Segment};
 
-use crate::bus::{segment_and_offset, BusInterface};
+use crate::bus::{BusInterface, segment_and_offset};
 pub use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::{Error, Result};
 use crate::io::IOController;
@@ -127,7 +127,7 @@ impl CPU {
     }
 
     pub fn tick(&mut self) -> Result<ExecuteResult> {
-        println!("state: {}", self.state);
+        // println!("state: {}", self.state);
         // print_bus_bytes(self);
 
         let _start_cs = self.state.segments[Segment::Cs as usize];
@@ -142,7 +142,7 @@ impl CPU {
         };
 
         // Print instruction.
-        println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);
+        // println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);
 
         execute(self, &instruction)
     }
