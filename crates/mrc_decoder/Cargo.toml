@@ -1,7 +1,7 @@
 [package]
 name = "mrc_decoder"
 version = "0.0.1"
-edition = "2021"
+edition = "2018"
 
 [dependencies]
 mrc_x86 = { path = "../mrc_x86" }
