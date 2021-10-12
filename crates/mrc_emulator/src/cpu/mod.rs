@@ -312,11 +312,3 @@ fn _print_bus_bytes(cpu: &CPU) {
     }
     println!();
 }
-
-fn _registers(ax: u16, bx: u16, cx: u16, dx: u16, sp: u16, bp: u16, si: u16, di: u16) -> [u16; 8] {
-    [ax, cx, dx, bx, sp, bp, si, di]
-}
-
-fn _segments(es: u16, cs: u16, ss: u16, ds: u16) -> [u16; 4] {
-    [es, cs, ss, ds]
-}

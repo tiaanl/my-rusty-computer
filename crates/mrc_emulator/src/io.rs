@@ -10,13 +10,8 @@ fn _port_name(port: u16) -> Option<&'static str> {
     }
 }
 
+#[derive(Default)]
 pub struct IOController {}
-
-impl Default for IOController {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 impl IOController {
     pub fn read_byte(&self, port: u16) -> Result<u8> {

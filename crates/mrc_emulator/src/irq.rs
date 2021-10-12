@@ -8,14 +8,7 @@ pub trait InterruptHandler {
     fn handle(&mut self, state: &CPU);
 }
 
-impl Default for InterruptController {
-    fn default() -> Self {
-        Self {
-            handlers: HashMap::new(),
-        }
-    }
-}
-
+#[derive(Default)]
 pub struct InterruptController {
     handlers: HashMap<u8, Rc<RefCell<dyn InterruptHandler>>>,
 }

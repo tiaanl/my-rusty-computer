@@ -7,14 +7,10 @@ use std::time::Instant;
 use clap::{App, Arg};
 use glutin::event_loop::ControlFlow;
 
-use mrc_display::Monitor;
 use mrc_emulator::Emulator;
 use mrc_emulator::ram::RandomAccessMemory;
 use mrc_emulator::rom::ReadOnlyMemory;
-
-mod cpu;
-mod memory;
-mod video;
+use mrc_screen::Screen;
 
 fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
@@ -81,7 +77,7 @@ fn main() {
         )
         .get_matches();
 
-    let mut emulator = Emulator::new();
+    let mut emulator = Emulator::default();
 
     install_memory(&emulator);
 
@@ -140,15 +136,15 @@ fn main() {
 
     let event_loop = glutin::event_loop::EventLoop::new();
 
-    let monitor = Rc::new(RefCell::new(Monitor::new(&event_loop)));
+    let screen = Rc::new(RefCell::new(Screen::new(&event_loop)));
     emulator
         .bus()
         .borrow_mut()
-        .map(0xB8000, 0x4000, monitor.clone());
+        .map(0xB8000, 0x4000, screen.clone());
     emulator
         .interrupt_controller()
         .borrow_mut()
-        .map(0x10, monitor.clone());
+        .map(0x10, screen.clone());
 
     let last_monitor_update = Instant::now();
 
@@ -157,7 +153,7 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
-        if let Some(cf) = monitor.borrow().handle_events(&event) {
+        if let Some(cf) = screen.borrow().handle_events(&event) {
             *control_flow = cf;
             return;
         }
@@ -165,7 +161,7 @@ fn main() {
         let now = Instant::now();
 
         if now >= last_monitor_update + std::time::Duration::from_nanos(16_666_667) {
-            monitor.borrow_mut().tick();
+            screen.borrow_mut().tick();
         }
 
         if !cpu_stopped {

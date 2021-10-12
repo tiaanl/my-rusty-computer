@@ -426,7 +426,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Int => match &instruction.operands {
             OperandSet::Destination(Operand(OperandType::Immediate(value), OperandSize::Byte)) => {
                 if let Some(interrupt_controller) = &cpu.interrupt_controller {
-                    interrupt_controller.borrow_mut().handle(*value as u8, &cpu);
+                    interrupt_controller.borrow_mut().handle(*value as u8, cpu);
                 }
 
                 // if *value == 0x10 {
@@ -814,7 +814,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 }
             }
 
-            _ => illegal_operands(&instruction),
+            _ => illegal_operands(instruction),
         }
 
         Operation::Out => match instruction.operands {
@@ -861,25 +861,22 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         }
 
         // Shift left/right has a special case there a word value can be shifted by cl, which is a byte.
-        Operation::Shl | Operation::Shr => match instruction.operands {
-            OperandSet::DestinationAndSource(
-                Operand(ref destination, OperandSize::Word),
-                Operand(OperandType::Register(Register::ClCx), OperandSize::Byte),
-            ) => {
-                let d = word::get_operand_type_value(cpu, destination)?;
-                let s = cpu.get_byte_register_value(Register::ClCx) as u16;
-                let result = match instruction.operation {
-                    Operation::Shl => {
-                        operations::logic::shift_left_word(d, s, &mut cpu.state.flags).unwrap()
-                    }
-                    Operation::Shr => {
-                        operations::logic::shift_right_word(d, s, &mut cpu.state.flags).unwrap()
-                    }
-                    _ => unreachable!(),
-                };
-                word::set_operand_type_value(cpu, destination, result)?;
-            }
-            _ => {}
+        Operation::Shl | Operation::Shr => if let OperandSet::DestinationAndSource(
+            Operand(ref destination, OperandSize::Word),
+            Operand(OperandType::Register(Register::ClCx), OperandSize::Byte),
+        ) = instruction.operands {
+            let d = word::get_operand_type_value(cpu, destination)?;
+            let s = cpu.get_byte_register_value(Register::ClCx) as u16;
+            let result = match instruction.operation {
+                Operation::Shl => {
+                    operations::logic::shift_left_word(d, s, &mut cpu.state.flags).unwrap()
+                }
+                Operation::Shr => {
+                    operations::logic::shift_right_word(d, s, &mut cpu.state.flags).unwrap()
+                }
+                _ => unreachable!(),
+            };
+            word::set_operand_type_value(cpu, destination, result)?;
         },
 
         Operation::Sahf => {

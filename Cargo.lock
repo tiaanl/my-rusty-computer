@@ -396,13 +396,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd0c93bb4b0c6d9b77f4435b0ae98c24d17f1c45b2ff844c6151a07256ca923b"
 
 [[package]]
-name = "display"
-version = "0.0.1"
-dependencies = [
- "mrc_display",
-]
-
-[[package]]
 name = "dlib"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -782,9 +775,9 @@ dependencies = [
  "glutin",
  "log",
  "mrc_decoder",
- "mrc_display",
  "mrc_dos",
  "mrc_emulator",
+ "mrc_screen",
  "mrc_x86",
  "pretty_env_logger",
 ]
@@ -793,16 +786,6 @@ dependencies = [
 name = "mrc_decoder"
 version = "0.0.1"
 dependencies = [
- "mrc_x86",
-]
-
-[[package]]
-name = "mrc_display"
-version = "0.0.1"
-dependencies = [
- "glium",
- "log",
- "mrc_emulator",
  "mrc_x86",
 ]
 
@@ -817,6 +800,16 @@ dependencies = [
  "bitflags",
  "log",
  "mrc_decoder",
+ "mrc_x86",
+]
+
+[[package]]
+name = "mrc_screen"
+version = "0.0.1"
+dependencies = [
+ "glium",
+ "log",
+ "mrc_emulator",
  "mrc_x86",
 ]
 

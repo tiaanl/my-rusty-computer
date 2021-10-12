@@ -33,8 +33,8 @@ pub struct Emulator {
     cpu: CPU,
 }
 
-impl Emulator {
-    pub fn new() -> Self {
+impl Default for Emulator {
+    fn default() -> Self {
         let bus = Rc::new(RefCell::new(Bus::default()));
         let io_controller = Rc::new(RefCell::new(IOController::default()));
         let interrupt_controller = Rc::new(RefCell::new(InterruptController::default()));
@@ -46,7 +46,9 @@ impl Emulator {
             cpu: CPU::new(bus, Some(io_controller), Some(interrupt_controller)),
         }
     }
+}
 
+impl Emulator {
     pub fn set_reset_vector(&mut self, segment: u16, offset: u16) {
         self.cpu.set_segment_value(Segment::Cs, segment);
         self.cpu.state.ip = offset;

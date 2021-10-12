@@ -190,7 +190,7 @@ impl TextMode {
     }
 }
 
-pub struct Monitor {
+pub struct Screen {
     display: Display,
     program: Program,
     vertex_buffer: VertexBuffer<Character>,
@@ -199,7 +199,7 @@ pub struct Monitor {
     text_mode: TextMode,
 }
 
-impl Monitor {
+impl Screen {
     pub fn new(event_loop: &EventLoop<()>) -> Self {
         let c = Character {
             letter: 0x00,
@@ -209,7 +209,7 @@ impl Monitor {
 
         let wb = window::WindowBuilder::new().with_title("My Rusty Computer - Emulator");
         let cb = ContextBuilder::new().with_vsync(false);
-        let display = Display::new(wb, cb, &event_loop).unwrap();
+        let display = Display::new(wb, cb, event_loop).unwrap();
 
         let program = glium::Program::from_source(
             &display,
@@ -375,7 +375,7 @@ fn create_texture(display: &Display) -> glium::Texture2d {
 
     let mut set_pixel = |x, y, color| {
         let idx = y * stride + x * bytes_per_pixel;
-        converted[idx + 0] = color;
+        converted[idx] = color;
         converted[idx + 1] = color;
         converted[idx + 2] = color;
         converted[idx + 3] = 255;
@@ -401,13 +401,14 @@ fn create_texture(display: &Display) -> glium::Texture2d {
     glium::Texture2d::new(display, image).unwrap()
 }
 
-impl Monitor {
+impl Screen {
     pub fn handle_events(&self, event: &Event<()>) -> Option<event_loop::ControlFlow> {
         match event {
-            event::Event::WindowEvent { event, .. } => match event {
-                event::WindowEvent::CloseRequested => Some(event_loop::ControlFlow::Exit),
-                _ => None,
-            },
+            event::Event::WindowEvent {
+                event: event::WindowEvent::CloseRequested,
+                ..
+            } => Some(event_loop::ControlFlow::Exit),
+
             _ => None,
         }
     }
@@ -444,7 +445,7 @@ impl Monitor {
     }
 }
 
-impl BusInterface for Monitor {
+impl BusInterface for Screen {
     fn read(&self, address: mrc_emulator::Address) -> mrc_emulator::error::Result<u8> {
         let index = address as usize / 2;
         let value = if address % 2 == 0 {
@@ -476,7 +477,7 @@ impl BusInterface for Monitor {
     }
 }
 
-impl InterruptHandler for Monitor {
+impl InterruptHandler for Screen {
     fn handle(&mut self, cpu: &CPU) {
         let ah = cpu.get_byte_register_value(Register::AhSp);
         match ah {

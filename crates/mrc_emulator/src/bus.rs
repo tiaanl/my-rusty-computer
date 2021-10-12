@@ -29,16 +29,9 @@ impl InterfaceContainer {
 
 /// A bus where a CPU can read or write data to/from. Other components can map their address space
 /// to the bus.
+#[derive(Default)]
 pub struct Bus {
     interfaces: Vec<InterfaceContainer>,
-}
-
-impl Default for Bus {
-    fn default() -> Self {
-        Self {
-            interfaces: vec!(),
-        }
-    }
 }
 
 impl Bus {

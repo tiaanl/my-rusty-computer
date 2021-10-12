@@ -1,5 +1,5 @@
 [package]
-name = "mrc_display"
+name = "mrc_screen"
 version = "0.0.1"
 edition = "2021"
 
