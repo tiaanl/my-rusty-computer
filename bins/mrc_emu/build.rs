@@ -16,7 +16,8 @@ fn main() {
             "ext/mrc_bios/bios.asm",
         ])
         .status()
-        .unwrap().success();
+        .unwrap()
+        .success();
 
     if !success {
         std::process::exit(1);

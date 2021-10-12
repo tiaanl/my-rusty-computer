@@ -8,7 +8,7 @@ pub struct RandomAccessMemory {
 impl RandomAccessMemory {
     pub fn with_capacity(capacity: u32) -> Self {
         Self {
-            data: vec!(0; capacity as usize),
+            data: vec![0; capacity as usize],
         }
     }
 }

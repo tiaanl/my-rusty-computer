@@ -35,7 +35,12 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn map(&mut self, start_address: Address, size: u32, interface: Rc<RefCell<dyn BusInterface>>) {
+    pub fn map(
+        &mut self,
+        start_address: Address,
+        size: u32,
+        interface: Rc<RefCell<dyn BusInterface>>,
+    ) {
         // TODO: Check for overlapping ranges.
         self.interfaces.push(InterfaceContainer {
             start_address,
@@ -43,14 +48,25 @@ impl Bus {
             interface,
         });
 
-        self.interfaces.sort_by(|left, right| left.start_address.partial_cmp(&right.start_address).unwrap());
+        self.interfaces.sort_by(|left, right| {
+            left.start_address
+                .partial_cmp(&right.start_address)
+                .unwrap()
+        });
     }
 }
 
 impl BusInterface for Bus {
     fn read(&self, address: Address) -> Result<u8> {
-        if let Some(container) = self.interfaces.iter().find(|interface| interface.contains(address)) {
-            container.interface.borrow().read(address - container.start_address)
+        if let Some(container) = self
+            .interfaces
+            .iter()
+            .find(|interface| interface.contains(address))
+        {
+            container
+                .interface
+                .borrow()
+                .read(address - container.start_address)
         } else {
             // Err(Error::AddressNotMapped(address))
             log::warn!("Reading from unmapped memory: [{:05X}]", address);
@@ -59,11 +75,22 @@ impl BusInterface for Bus {
     }
 
     fn write(&mut self, address: Address, value: u8) -> Result<()> {
-        if let Some(container) = self.interfaces.iter().find(|interface| interface.contains(address)) {
-            container.interface.borrow_mut().write(address - container.start_address, value)
+        if let Some(container) = self
+            .interfaces
+            .iter()
+            .find(|interface| interface.contains(address))
+        {
+            container
+                .interface
+                .borrow_mut()
+                .write(address - container.start_address, value)
         } else {
             // Err(Error::AddressNotMapped(address))
-            log::warn!("Writing to unmapped memory: {:02X} -> [{:05X}]", value, address);
+            log::warn!(
+                "Writing to unmapped memory: {:02X} -> [{:05X}]",
+                value,
+                address
+            );
             Ok(())
         }
     }

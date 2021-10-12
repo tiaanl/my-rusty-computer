@@ -184,8 +184,8 @@ pub fn exclusive_or_word(destination: u16, source: u16, flags: &mut Flags) -> Op
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use super::super::test_flags;
+    use super::*;
 
     #[test]
     fn test_shift_left_byte() {

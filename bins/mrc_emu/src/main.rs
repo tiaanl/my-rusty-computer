@@ -7,9 +7,9 @@ use std::time::Instant;
 use clap::{App, Arg};
 use glutin::event_loop::ControlFlow;
 
-use mrc_emulator::Emulator;
 use mrc_emulator::ram::RandomAccessMemory;
 use mrc_emulator::rom::ReadOnlyMemory;
+use mrc_emulator::Emulator;
 use mrc_screen::Screen;
 
 fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
@@ -100,21 +100,21 @@ fn main() {
             0xFC000,
         ),
     ]
-        .map(|(path, address)| {
-            let data = load_rom(path).unwrap();
-            let data_len = data.len() as u32;
-            let rom = ReadOnlyMemory::from_vec(data);
-            emulator
-                .bus()
-                .borrow_mut()
-                .map(address, data_len, Rc::new(RefCell::new(rom)));
-            log::info!(
+    .map(|(path, address)| {
+        let data = load_rom(path).unwrap();
+        let data_len = data.len() as u32;
+        let rom = ReadOnlyMemory::from_vec(data);
+        emulator
+            .bus()
+            .borrow_mut()
+            .map(address, data_len, Rc::new(RefCell::new(rom)));
+        log::info!(
             "Loading ROM \"{}\" to [{:05X}..{:05X}]",
             path,
             address,
             address + data_len
         );
-        });
+    });
 
     if let Some(path) = matches.value_of("bios") {
         install_bios(&emulator, path);

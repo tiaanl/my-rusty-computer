@@ -7,7 +7,7 @@ use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
 use mrc_x86::{Register, Segment};
 
-use crate::bus::{BusInterface, segment_and_offset};
+use crate::bus::{segment_and_offset, BusInterface};
 pub use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::{Error, Result};
 use crate::io::IOController;
@@ -113,9 +113,10 @@ pub struct CPU {
 }
 
 impl CPU {
-    pub fn new(bus: Rc<RefCell<dyn BusInterface>>,
-               io_controller: Option<Rc<RefCell<IOController>>>,
-               interrupt_controller: Option<Rc<RefCell<InterruptController>>>,
+    pub fn new(
+        bus: Rc<RefCell<dyn BusInterface>>,
+        io_controller: Option<Rc<RefCell<IOController>>>,
+        interrupt_controller: Option<Rc<RefCell<InterruptController>>>,
     ) -> Self {
         Self {
             state: Default::default(),
@@ -133,9 +134,7 @@ impl CPU {
         let _start_ip = self.state.ip;
 
         let instruction = match decode_instruction(self) {
-            Ok(instruction) => {
-                instruction
-            }
+            Ok(instruction) => instruction,
             Err(err) => {
                 log::error!("CPU Error: {}", err);
                 return Err(Error::DecodeError(err));

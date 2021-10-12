@@ -3,7 +3,6 @@ use crate::cpu::Flags;
 pub mod arithmetic;
 pub mod logic;
 
-
 pub trait SignificantBit {
     fn least_significant_bit(&self) -> bool;
     fn most_significant_bit(&self) -> bool;

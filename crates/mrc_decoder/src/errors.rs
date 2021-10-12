@@ -25,15 +25,23 @@ impl fmt::Display for Error {
                 write!(f, "invalid modR/M encoding: {:#04X}", mod_rm_byte)
             }
             Error::CouldNotCreateOperandFromModRmEncoding(ref register_or_memory) => {
-                write!(f, "Could not create operand from mod reg r/m encoding. ({:?})", register_or_memory)
+                write!(
+                    f,
+                    "Could not create operand from mod reg r/m encoding. ({:?})",
+                    register_or_memory
+                )
             }
             Error::CouldNotReadExtraBytes => {
                 write!(f, "Could not fetch extra bytes from bus.")
             }
             Error::InvalidDataSizeEncoding(byte) => {
-                write!(f, "Could not determine data size from encoding ({:02x})", byte)
+                write!(
+                    f,
+                    "Could not determine data size from encoding ({:02x})",
+                    byte
+                )
             }
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }

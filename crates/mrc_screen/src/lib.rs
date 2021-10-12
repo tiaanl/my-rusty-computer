@@ -1,11 +1,11 @@
-use glium::{Display, implement_vertex, Program, Surface, uniform, VertexBuffer};
-use glium::glutin::{ContextBuilder, event, event_loop, window};
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::EventLoop;
+use glium::glutin::{event, event_loop, window, ContextBuilder};
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
+use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
-use mrc_emulator::{BusInterface, InterruptHandler};
 use mrc_emulator::cpu::CPU;
+use mrc_emulator::{BusInterface, InterruptHandler};
 use mrc_x86::Register;
 
 // const VGA_FONT: [u8; 1 * 8] = [
@@ -217,7 +217,7 @@ impl Screen {
             FRAGMENT_SHADER_SRC,
             Some(GEOMETRY_SHADER_SRC),
         )
-            .unwrap();
+        .unwrap();
 
         let vertex_buffer = VertexBuffer::new(&display, buffer.as_slice()).unwrap();
 

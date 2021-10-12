@@ -1,14 +1,14 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+pub use bus::segment_and_offset;
 pub use bus::Address;
 pub use bus::BusInterface;
-pub use bus::segment_and_offset;
 pub use irq::InterruptHandler;
 use mrc_x86::Segment;
 
 use crate::bus::Bus;
-use crate::cpu::{CPU, ExecuteResult};
+use crate::cpu::{ExecuteResult, CPU};
 use crate::error::Result;
 use crate::io::IOController;
 use crate::irq::InterruptController;
