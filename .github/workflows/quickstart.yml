@@ -1,6 +1,6 @@
 name: my-rusty-computer
 
-on: [push]
+on: [ push ]
 
 jobs:
   build:
@@ -10,4 +10,4 @@ jobs:
       - uses: actions/checkout@v1
       - uses: icepuma/rust-action@master
         with:
-          args: cargo fmt -- --check && cargo clippy -- -Dwarnings && cargo test
+          args: rustup install nightly && cargo fmt -- --check && cargo clippy -- -Dwarnings && cargo test
