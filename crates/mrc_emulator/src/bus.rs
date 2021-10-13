@@ -69,7 +69,7 @@ impl BusInterface for Bus {
                 .read(address - container.start_address)
         } else {
             // Err(Error::AddressNotMapped(address))
-            log::warn!("Reading from unmapped memory: [{:05X}]", address);
+            // log::warn!("Reading from unmapped memory: [{:05X}]", address);
             Ok(0)
         }
     }
@@ -86,11 +86,11 @@ impl BusInterface for Bus {
                 .write(address - container.start_address, value)
         } else {
             // Err(Error::AddressNotMapped(address))
-            log::warn!(
-                "Writing to unmapped memory: {:02X} -> [{:05X}]",
-                value,
-                address
-            );
+            // log::warn!(
+            //     "Writing to unmapped memory: {:02X} -> [{:05X}]",
+            //     value,
+            //     address
+            // );
             Ok(())
         }
     }

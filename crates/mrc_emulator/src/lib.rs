@@ -20,6 +20,7 @@ mod io;
 mod irq;
 pub mod ram;
 pub mod rom;
+pub mod timer;
 
 trait Installable {
     fn install(bus: &mut Bus) -> Result<()>;
@@ -28,7 +29,7 @@ trait Installable {
 /// An emulator with some basic components.
 pub struct Emulator {
     bus: Rc<RefCell<Bus>>,
-    _io_controller: Rc<RefCell<IOController>>,
+    io_controller: Rc<RefCell<IOController>>,
     interrupt_controller: Rc<RefCell<InterruptController>>,
     cpu: CPU,
 }
@@ -40,7 +41,7 @@ impl Default for Emulator {
         let interrupt_controller = Rc::new(RefCell::new(InterruptController::default()));
         Self {
             bus: Rc::clone(&bus),
-            _io_controller: io_controller.clone(),
+            io_controller: io_controller.clone(),
             interrupt_controller: interrupt_controller.clone(),
 
             cpu: CPU::new(bus, Some(io_controller), Some(interrupt_controller)),
@@ -56,6 +57,10 @@ impl Emulator {
 
     pub fn bus(&self) -> Rc<RefCell<Bus>> {
         self.bus.clone()
+    }
+
+    pub fn io_controller(&self) -> Rc<RefCell<IOController>> {
+        self.io_controller.clone()
     }
 
     pub fn interrupt_controller(&self) -> Rc<RefCell<InterruptController>> {

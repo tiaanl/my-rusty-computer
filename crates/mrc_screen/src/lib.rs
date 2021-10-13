@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
+use glium::{Display, implement_vertex, Program, Surface, uniform, VertexBuffer};
+use glium::glutin::{ContextBuilder, event, event_loop, window};
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::EventLoop;
-use glium::glutin::{event, event_loop, window, ContextBuilder};
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
-use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
-use mrc_emulator::cpu::CPU;
 use mrc_emulator::{BusInterface, InterruptHandler};
+use mrc_emulator::cpu::CPU;
 use mrc_x86::Register;
 
 // const VGA_FONT: [u8; 1 * 8] = [
@@ -252,7 +252,7 @@ impl Screen {
             FRAGMENT_SHADER_SRC,
             Some(GEOMETRY_SHADER_SRC),
         )
-        .unwrap();
+            .unwrap();
 
         let texture = create_texture(&display);
 
@@ -447,12 +447,12 @@ impl Screen {
     pub fn tick(&mut self) {
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
-        let mut screen_size = (0i32, 0i32);
+        let mut _screen_size = (0i32, 0i32);
 
         {
             let text_mode = self.text_mode.lock().unwrap();
 
-            screen_size = (text_mode.size.0 as i32, text_mode.size.1 as i32);
+            _screen_size = (text_mode.size.0 as i32, text_mode.size.1 as i32);
 
             match self.vertex_buffer {
                 Some(ref vertex_buffer) => vertex_buffer.write(text_mode.buffer.as_slice()),
@@ -472,8 +472,8 @@ impl Screen {
         };
         let uniforms = uniform! {
             matrix: orthogonal_projection(0.0, 320.0, 0.0, 200.0, 1.0, -1.0),
-            u_screen_width: screen_size.0,
-            u_screen_height: screen_size.1,
+            u_screen_width: _screen_size.0,
+            u_screen_height: _screen_size.1,
             u_texture: glium::uniforms::Sampler(&self.texture, behavior),
         };
 

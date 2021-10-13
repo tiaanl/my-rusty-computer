@@ -11,6 +11,7 @@ use glutin::event_loop::ControlFlow;
 use mrc_emulator::Emulator;
 use mrc_emulator::ram::RandomAccessMemory;
 use mrc_emulator::rom::ReadOnlyMemory;
+use mrc_emulator::timer::ProgrammableIntervalTimer8253;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
 
 fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
@@ -85,6 +86,12 @@ fn main() {
 
     std::thread::spawn(move || {
         let mut emulator = Emulator::default();
+
+        let timer_8253 = Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default()));
+        emulator
+            .io_controller()
+            .borrow_mut()
+            .map_range(&[0x40, 0x41, 0x42, 0x43], timer_8253.clone());
 
         install_memory(&emulator);
 
