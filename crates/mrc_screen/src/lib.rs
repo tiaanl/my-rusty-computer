@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
-use glium::{Display, implement_vertex, Program, Surface, uniform, VertexBuffer};
-use glium::glutin::{ContextBuilder, event, event_loop, window};
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::EventLoop;
+use glium::glutin::{event, event_loop, window, ContextBuilder};
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
+use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
-use mrc_emulator::{BusInterface, InterruptHandler};
 use mrc_emulator::cpu::CPU;
+use mrc_emulator::{BusInterface, InterruptHandler};
 use mrc_x86::Register;
 
 // const VGA_FONT: [u8; 1 * 8] = [
@@ -31,6 +31,27 @@ use mrc_x86::Register;
 //     0x3c,  // ..1111..
 //     0x00,  // ........
 // ];
+
+// Video modes:
+//
+// Mode     Type        Resolution      Adapter(s)     Colors            Address
+// 00h    Text        40 x 25           All but MDA    16 gray           B8000
+// 01h    Text        40 x 25           All but MDA    16 fore/8 back    B8000
+// 02h    Text        80 x 25           All but MDA    16 gray           B8000
+// 03h    Text        80 x 25           All but MDA    16 fore/8 back    B8000
+// 04h    Graphics    320 x 200         All but MDA    4                 B8000
+// 05h    Graphics    320 x 200         All but MDA    4 gray            B8000
+// 06h    Graphics    640 x 200         All but MDA    2                 B8000
+// 07h    Text        80 x 25           MDA            EGA               B0000 (b/w)
+// 08h    Graphics    160 x 200         PCjr           16                B0000
+// 09h    Graphics    320 x 200         PCjr           16                B0000
+// 0Ah    Graphics    640 x 200         PCjr           4                 B0000
+// 0Bh    Reserved    (EGA internal)
+// 0Ch    Reserved    (EGA internal)
+// 0Dh    Graphics    320 x 200         EGA            16                A0000
+// 0Eh    Graphics    640 x 200         EGA            16                A0000
+// 0Fh    Graphics    640 x 350         EGA            b/w               A0000
+// 10h    Graphics    640 x 350         EGA            16                A0000
 
 const VGA_FONT: [u8; 128 * 8] = [
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, //   0  00  NUL
@@ -169,7 +190,10 @@ struct Character {
     color: u32,
 }
 
+const TEXT_MODE_BUFFER_MAX_SIZE: usize = 80 * 25;
+
 pub struct TextMode {
+    size: (u8, u8),
     cursor_position: (u8, u8),
     buffer: Vec<Character>,
 }
@@ -177,34 +201,36 @@ pub struct TextMode {
 impl Default for TextMode {
     fn default() -> Self {
         Self {
+            size: (80, 25),
             cursor_position: (0, 0),
-            buffer: vec![Character::default(); 40 * 25],
+            buffer: vec![Character::default(); TEXT_MODE_BUFFER_MAX_SIZE],
         }
     }
 }
 
 impl TextMode {
     pub fn teletype_output(&mut self, character: u8) {
-        let index = Self::index_for(self.cursor_position);
+        let index = self.index_for(self.cursor_position);
         if let Some(c) = self.buffer.get_mut(index) {
             c.letter = character as u32;
             self.cursor_position.0 += 1;
-            if self.cursor_position.0 >= 40 {
+            if self.cursor_position.0 >= self.size.0 {
                 self.cursor_position.0 = 0;
                 self.cursor_position.1 += 1;
+                // TODO: Scroll if we go off the bottom of the screen.
             }
         }
     }
 
-    fn index_for(position: (u8, u8)) -> usize {
-        position.1 as usize * 40 + position.0 as usize
+    fn index_for(&self, position: (u8, u8)) -> usize {
+        position.1 as usize * self.size.1 as usize + position.0 as usize
     }
 }
 
 pub struct Screen {
     display: Display,
     program: Program,
-    vertex_buffer: VertexBuffer<Character>,
+    vertex_buffer: Option<VertexBuffer<Character>>,
     texture: glium::Texture2d,
 
     text_mode: Arc<Mutex<TextMode>>,
@@ -212,11 +238,13 @@ pub struct Screen {
 
 impl Screen {
     pub fn new(event_loop: &EventLoop<()>, text_mode: Arc<Mutex<TextMode>>) -> Self {
-        let buffer: Vec<Character> = vec![Character::default(); 40 * 25];
-
         let wb = window::WindowBuilder::new().with_title("My Rusty Computer - Emulator");
-        let cb = ContextBuilder::new().with_vsync(false);
+        let cb = ContextBuilder::new().with_vsync(true);
         let display = Display::new(wb, cb, event_loop).unwrap();
+
+        println!("OpenGL version: {}", display.get_opengl_version_string());
+        println!("OpenGL renderer: {}", display.get_opengl_renderer_string());
+        println!("OpenGL profile: {:?}", display.get_opengl_profile());
 
         let program = glium::Program::from_source(
             &display,
@@ -224,16 +252,14 @@ impl Screen {
             FRAGMENT_SHADER_SRC,
             Some(GEOMETRY_SHADER_SRC),
         )
-            .unwrap();
-
-        let vertex_buffer = VertexBuffer::new(&display, buffer.as_slice()).unwrap();
+        .unwrap();
 
         let texture = create_texture(&display);
 
         Self {
             display,
             program,
-            vertex_buffer,
+            vertex_buffer: None,
             texture,
             text_mode,
         }
@@ -254,14 +280,17 @@ const VERTEX_SHADER_SRC: &str = r#"
         ivec2 screen_pos;
     } vs_out;
 
+    uniform int u_screen_width;
+    uniform int u_screen_height;
+
     void main() {
-        float x = gl_VertexID % 80;
-        float y = gl_VertexID / 80;
+        float x = gl_VertexID % u_screen_width;
+        float y = gl_VertexID / u_screen_width;
         gl_Position = vec4(x * 5.0, y * 8.0, 0.0, 1.0);
 
         vs_out.letter = letter;
         vs_out.color = color;
-        vs_out.screen_pos = ivec2(gl_VertexID % 80, gl_VertexID / 80);
+        vs_out.screen_pos = ivec2(gl_VertexID % u_screen_width, gl_VertexID / 80);
     }
     "#;
 
@@ -315,7 +344,6 @@ const GEOMETRY_SHADER_SRC: &str = r#"
         uint idx = (gs_in[0].color % 16u) * 4u;
         back_color = vec4(COLORS[idx + 0u], COLORS[idx + 1u], COLORS[idx + 2u], COLORS[idx + 3u]);
 
-
         emit(gl_in[0].gl_Position, matrix, gs_in[0].letter, vec2(0.0, 0.0));
         emit(gl_in[0].gl_Position, matrix, gs_in[0].letter, vec2(1.0, 0.0));
         emit(gl_in[0].gl_Position, matrix, gs_in[0].letter, vec2(0.0, 1.0));
@@ -331,13 +359,12 @@ const FRAGMENT_SHADER_SRC: &str = r#"
     in vec2 tex_coord;
     in vec4 back_color;
 
-    uniform sampler2D texture;
+    uniform sampler2D u_texture;
 
     out vec4 color;
 
     void main() {
-        // color = vec4(1.0, 0.0, 0.0, 1.0);
-        color = texture2D(texture, tex_coord);
+        color = texture(u_texture, tex_coord);
         // color = back_color;
     }
     "#;
@@ -420,9 +447,19 @@ impl Screen {
     pub fn tick(&mut self) {
         let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
+        let mut screen_size = (0i32, 0i32);
+
         {
             let text_mode = self.text_mode.lock().unwrap();
-            self.vertex_buffer.write(text_mode.buffer.as_slice());
+
+            screen_size = (text_mode.size.0 as i32, text_mode.size.1 as i32);
+
+            match self.vertex_buffer {
+                Some(ref vertex_buffer) => vertex_buffer.write(text_mode.buffer.as_slice()),
+                None => {
+                    self.vertex_buffer = Some(VertexBuffer::new(&self.display, text_mode.buffer.as_slice()).unwrap());
+                }
+            }
         }
 
         let mut target = self.display.draw();
@@ -435,12 +472,14 @@ impl Screen {
         };
         let uniforms = uniform! {
             matrix: orthogonal_projection(0.0, 320.0, 0.0, 200.0, 1.0, -1.0),
-            texture: glium::uniforms::Sampler(&self.texture, behavior),
+            u_screen_width: screen_size.0,
+            u_screen_height: screen_size.1,
+            u_texture: glium::uniforms::Sampler(&self.texture, behavior),
         };
 
         target
             .draw(
-                &self.vertex_buffer,
+                self.vertex_buffer.as_ref().unwrap(),
                 &indices,
                 &self.program,
                 &uniforms,
@@ -458,9 +497,7 @@ pub struct TextModeInterface {
 
 impl TextModeInterface {
     pub fn new(text_mode: Arc<Mutex<TextMode>>) -> Self {
-        Self {
-            text_mode,
-        }
+        Self { text_mode }
     }
 }
 
@@ -587,8 +624,7 @@ impl InterruptHandler for TextModeInterface {
                 {
                     let mut text_mode = self.text_mode.lock().unwrap();
 
-                    let index =
-                        text_mode.cursor_position.1 * 40 + text_mode.cursor_position.0;
+                    let index = text_mode.cursor_position.1 * text_mode.size.0 + text_mode.cursor_position.0;
 
                     if let Some(c) = text_mode.buffer.get_mut(index as usize) {
                         c.letter = character as u32;

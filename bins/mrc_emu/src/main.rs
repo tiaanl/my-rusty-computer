@@ -88,6 +88,7 @@ fn main() {
 
         install_memory(&emulator);
 
+        /*
         // Basic ROM just below BIOS.
         [
             (
@@ -122,12 +123,12 @@ fn main() {
                 address + data_len
             );
             });
+        */
 
         if let Some(path) = matches.value_of("bios") {
             install_bios(&emulator, path);
         } else {
             let data = include_bytes!("../ext/mrc_bios/bios.bin");
-            println!("size: {}", data.len());
             let data = Vec::from(*data);
             let data_size = data.len() as u32;
             let bios_start_addr = 0x100000 - data_size;
