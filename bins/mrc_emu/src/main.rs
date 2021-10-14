@@ -87,11 +87,29 @@ fn main() {
     std::thread::spawn(move || {
         let mut emulator = Emulator::default();
 
+        // Install 2 programmable interrupt controllers.
+        let pit_1 = Rc::new(RefCell::new(
+            mrc_emulator::pit::ProgrammableInterruptController8259::new(0x20),
+        ));
+        emulator
+            .io_controller()
+            .borrow_mut()
+            .map_range(0xA0, 0x0F, pit_1);
+
+        let pit_2 = Rc::new(RefCell::new(
+            mrc_emulator::pit::ProgrammableInterruptController8259::new(0xA0),
+        ));
+        emulator
+            .io_controller()
+            .borrow_mut()
+            .map_range(0xA0, 0x0F, pit_2);
+
+
         let timer_8253 = Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default()));
         emulator
             .io_controller()
             .borrow_mut()
-            .map_range(&[0x40, 0x41, 0x42, 0x43], timer_8253.clone());
+            .map_range(0x40, 0x04, timer_8253.clone());
 
         install_memory(&emulator);
 

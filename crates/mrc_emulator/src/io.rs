@@ -56,7 +56,13 @@ impl IOController {
         self.interfaces.insert(port, interface);
     }
 
-    pub fn map_range(&mut self, ports: &[u16], interface: Rc<RefCell<dyn IOInterface>>) {
+    pub fn map_range(&mut self, first_port: u16, count: u16, interface: Rc<RefCell<dyn IOInterface>>) {
+        for port in first_port..(first_port + count) {
+            self.map(port, interface.clone());
+        }
+    }
+
+    pub fn map_set(&mut self, ports: &[u16], interface: Rc<RefCell<dyn IOInterface>>) {
         for port in ports {
             self.map(*port, interface.clone());
         }

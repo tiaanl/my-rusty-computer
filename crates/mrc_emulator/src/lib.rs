@@ -21,6 +21,7 @@ mod irq;
 pub mod ram;
 pub mod rom;
 pub mod timer;
+pub mod pit;
 
 trait Installable {
     fn install(bus: &mut Bus) -> Result<()>;
