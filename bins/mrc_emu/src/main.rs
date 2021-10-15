@@ -31,10 +31,7 @@ fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
 fn install_memory(emulator: &Emulator) {
     // 640KiB RAM
     let ram = RandomAccessMemory::with_capacity(0xA0000);
-    emulator
-        .bus()
-        .borrow_mut()
-        .map(0x00000, 0xA0000, Rc::new(RefCell::new(ram)));
+    emulator.bus().borrow_mut().map(0x00000, 0xA0000, Rc::new(RefCell::new(ram)));
 }
 
 fn install_bios(emulator: &Emulator, path: &str) {
@@ -70,14 +67,9 @@ fn install_bios(emulator: &Emulator, path: &str) {
 fn main() {
     pretty_env_logger::init();
 
-    let matches = App::new("mrc-emu")
-        .version("0.0.1")
-        .arg(
-            Arg::with_name("bios")
-                .help("Specify a file to use as the BIOS")
-                .required(false),
-        )
-        .get_matches();
+    let matches = App::new("mrc-emu").version("0.0.1").arg(
+        Arg::with_name("bios").help("Specify a file to use as the BIOS").required(false),
+    ).get_matches();
 
     let event_loop = glutin::event_loop::EventLoop::new();
 
@@ -89,27 +81,17 @@ fn main() {
 
         // Install 2 programmable interrupt controllers.
         let pit_1 = Rc::new(RefCell::new(
-            mrc_emulator::pit::ProgrammableInterruptController8259::new(0x20),
+            mrc_emulator::pic::ProgrammableInterruptController8259::default(),
         ));
-        emulator
-            .io_controller()
-            .borrow_mut()
-            .map_range(0xA0, 0x0F, pit_1);
+        emulator.io_controller().borrow_mut().map_range(0x20, 0x0F, pit_1);
 
         let pit_2 = Rc::new(RefCell::new(
-            mrc_emulator::pit::ProgrammableInterruptController8259::new(0xA0),
+            mrc_emulator::pic::ProgrammableInterruptController8259::default(),
         ));
-        emulator
-            .io_controller()
-            .borrow_mut()
-            .map_range(0xA0, 0x0F, pit_2);
-
+        emulator.io_controller().borrow_mut().map_range(0xA0, 0x0F, pit_2);
 
         let timer_8253 = Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default()));
-        emulator
-            .io_controller()
-            .borrow_mut()
-            .map_range(0x40, 0x04, timer_8253.clone());
+        emulator.io_controller().borrow_mut().map_range(0x40, 0x04, timer_8253.clone());
 
         install_memory(&emulator);
 
@@ -166,14 +148,8 @@ fn main() {
         }
 
         let text_mode_interface = Rc::new(RefCell::new(TextModeInterface::new(text_mode.clone())));
-        emulator
-            .bus()
-            .borrow_mut()
-            .map(0xB8000, 0x4000, text_mode_interface.clone());
-        emulator
-            .interrupt_controller()
-            .borrow_mut()
-            .map(0x10, text_mode_interface);
+        emulator.bus().borrow_mut().map(0xB8000, 0x4000, text_mode_interface.clone());
+        emulator.interrupt_controller().borrow_mut().map(0x10, text_mode_interface);
 
         emulator.set_reset_vector(0xF000, 0xFFF0);
 
