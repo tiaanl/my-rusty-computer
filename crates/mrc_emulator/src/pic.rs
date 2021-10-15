@@ -27,15 +27,15 @@ pub struct ProgrammableInterruptController8259 {
     icw_step: u8,
     icw: [u8; 5],
     ocw: [u8; 5],
-    interrupt_vector_offset: u8,
+    _interrupt_vector_offset: u8,
     /// Which IRQ has the highest priority
-    priority: u8,
-    auto_eoi: u8,
+    _priority: u8,
+    _auto_eoi: u8,
     /// Remember what to return when reading from OCW3
     read_mode: u8,
-    vector: u8,
-    last_interrupt: u8,
-    enabled: u8,
+    _vector: u8,
+    _last_interrupt: u8,
+    _enabled: u8,
 }
 
 impl Default for ProgrammableInterruptController8259 {
@@ -47,13 +47,13 @@ impl Default for ProgrammableInterruptController8259 {
             icw_step: 0,
             icw: [0; 5],
             ocw: [0; 5],
-            interrupt_vector_offset: 8,
-            priority: 0,
-            auto_eoi: 0,
+            _interrupt_vector_offset: 8,
+            _priority: 0,
+            _auto_eoi: 0,
             read_mode: 0,
-            vector: 0,
-            last_interrupt: 0,
-            enabled: 0,
+            _vector: 0,
+            _last_interrupt: 0,
+            _enabled: 0,
         }
     }
 }
@@ -156,13 +156,13 @@ impl ProgrammableInterruptController8259 {
         Ok(())
     }
 
-    fn write_data(&mut self, value: u8) -> Result<()> {
+    fn write_data(&mut self, _value: u8) -> Result<()> {
         Ok(())
     }
 }
 
 impl IOInterface for ProgrammableInterruptController8259 {
-    fn read(&self, port: u16) -> Result<u8> {
+    fn read(&self, _port: u16) -> Result<u8> {
         todo!()
     }
 
