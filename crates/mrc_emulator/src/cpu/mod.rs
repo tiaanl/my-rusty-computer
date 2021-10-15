@@ -7,7 +7,7 @@ use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
 use mrc_x86::{Register, Segment};
 
-use crate::bus::{BusInterface, segment_and_offset};
+use crate::bus::{segment_and_offset, BusInterface};
 pub use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::{Error, Result};
 use crate::io::IOController;

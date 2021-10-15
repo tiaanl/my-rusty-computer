@@ -524,7 +524,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::ZERO)
                     || cpu.state.flags.contains(Flags::SIGN)
-                    != cpu.state.flags.contains(Flags::OVERFLOW)
+                        != cpu.state.flags.contains(Flags::OVERFLOW)
                 {
                     displace_ip(cpu, displacement)?;
                 }

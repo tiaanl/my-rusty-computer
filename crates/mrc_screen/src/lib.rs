@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex};
 
-use glium::{Display, implement_vertex, Program, Surface, uniform, VertexBuffer};
-use glium::glutin::{ContextBuilder, event, event_loop, window};
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::EventLoop;
+use glium::glutin::{event, event_loop, window, ContextBuilder};
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
+use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
-use mrc_emulator::{BusInterface, InterruptHandler};
 use mrc_emulator::cpu::CPU;
+use mrc_emulator::{BusInterface, InterruptHandler};
 use mrc_x86::Register;
 
 // const VGA_FONT: [u8; 1 * 8] = [
@@ -252,7 +252,7 @@ impl Screen {
             FRAGMENT_SHADER_SRC,
             Some(GEOMETRY_SHADER_SRC),
         )
-            .unwrap();
+        .unwrap();
 
         let texture = create_texture(&display);
 
@@ -457,7 +457,9 @@ impl Screen {
             match self.vertex_buffer {
                 Some(ref vertex_buffer) => vertex_buffer.write(text_mode.buffer.as_slice()),
                 None => {
-                    self.vertex_buffer = Some(VertexBuffer::new(&self.display, text_mode.buffer.as_slice()).unwrap());
+                    self.vertex_buffer = Some(
+                        VertexBuffer::new(&self.display, text_mode.buffer.as_slice()).unwrap(),
+                    );
                 }
             }
         }
@@ -624,7 +626,8 @@ impl InterruptHandler for TextModeInterface {
                 {
                     let mut text_mode = self.text_mode.lock().unwrap();
 
-                    let index = text_mode.cursor_position.1 * text_mode.size.0 + text_mode.cursor_position.0;
+                    let index = text_mode.cursor_position.1 * text_mode.size.0
+                        + text_mode.cursor_position.0;
 
                     if let Some(c) = text_mode.buffer.get_mut(index as usize) {
                         c.letter = character as u32;
