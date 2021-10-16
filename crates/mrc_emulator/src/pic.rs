@@ -1,65 +1,73 @@
-// 00A0-00AF ----	PIC 2	(Programmable Interrupt Controller 8259)
-//
-// 00A0	r/w	NMI mask register (XT)
-//
-// 00A0	r/w	PIC 2  same as 0020 for PIC 1
-// 00A1	r/w	PIC 2  same as 0021 for PIC 1 except for OCW1:
-// bit 7 = 0  reserved
-// bit 6 = 0  enable fixed disk interrupt
-// bit 5 = 0  enable coprocessor exception interrupt
-// bit 4 = 0  enable mouse interrupt
-// bit 3 = 0  reserved
-// bit 2 = 0  reserved
-// bit 1 = 0  enable redirect cascade
-// bit 0 = 0  enable real-time clock interrupt
-
 use crate::error::Result;
 use crate::io::IOInterface;
 
+/// Emulates a 8259A programmable interrupt controller.
+///
+/// Code assumes it is 2 8259A's running in master/slave mode.
 pub struct ProgrammableInterruptController8259 {
-    // imr
+    /// Specifies which ICW is expected next.  When the chip starts, it is set to 0 which means ICW1
+    /// is expected.
+    icw_index: u8,
+
+    /// Used to filter out interrupts. If bit 1 is set to 0, interrupt 1 will not trigger.
     mask_register: u8,
-    // irr
+
+    /// When a bit is set, the corresponding interrupt has made a request.
     request_register: u8,
-    // isr
-    service_register: u8,
-    /// Which ICW we are at.
-    icw_step: u8,
-    icw: [u8; 5],
-    ocw: [u8; 5],
-    _interrupt_vector_offset: u8,
-    /// Which IRQ has the highest priority
-    _priority: u8,
-    _auto_eoi: u8,
-    /// Remember what to return when reading from OCW3
-    read_mode: u8,
-    _vector: u8,
-    _last_interrupt: u8,
-    _enabled: u8,
+
+    /// When a bit is set, the corresponding interrupt is being run.
+    in_service_register: u8,
+    // mask_register: u8,
+    // request_register: u8,
+    // service_register: u8,
+    // /// Which ICW we are at.
+    // icw_step: u8,
+    // icw: [u8; 5],
+    // ocw: [u8; 5],
+    // _interrupt_vector_offset: u8,
+    // /// Which IRQ has the highest priority
+    // _priority: u8,
+    // _auto_eoi: u8,
+    // /// Remember what to return when reading from OCW3
+    // read_mode: u8,
+    // _vector: u8,
+    // _last_interrupt: u8,
+    // _enabled: u8,
 }
 
 impl Default for ProgrammableInterruptController8259 {
     fn default() -> Self {
         Self {
+            icw_index: 0,
             mask_register: 0,
             request_register: 0,
-            service_register: 0,
-            icw_step: 0,
-            icw: [0; 5],
-            ocw: [0; 5],
-            _interrupt_vector_offset: 8,
-            _priority: 0,
-            _auto_eoi: 0,
-            read_mode: 0,
-            _vector: 0,
-            _last_interrupt: 0,
-            _enabled: 0,
+            in_service_register: 0,
         }
     }
 }
 
 impl ProgrammableInterruptController8259 {
-    fn write_command(&mut self, value: u8) -> Result<()> {
+    fn write_icw1(&mut self, value: u8) -> Result<()> {
+        assert_ne!(value & (1 << 4), 0);
+
+        self.mask_register = 0x00;
+        // TODO: Assign highest priority to IRQ0 and lowest to IRQ7.
+        // TODO: Set slave identification number to 7.
+        // TODO: Clear special mode and sets the status read to request_register.
+
+        // Increase the icw_index so that we expect ICW2 next.
+        self.icw_index += 1;
+
+        Ok(())
+    }
+
+    fn write_icw2(&mut self, value: u8) -> Result<()> {
+        Ok(())
+    }
+
+    fn write_icw(&mut self, value: u8) -> Result<()> {
+        Ok(())
+        /*
         {
             // bit 7-5  = 0  only used in 80/85 mode
             // bit 4    = 1  ICW1 is being issued
@@ -154,6 +162,7 @@ impl ProgrammableInterruptController8259 {
         }
 
         Ok(())
+        */
     }
 
     fn write_data(&mut self, _value: u8) -> Result<()> {
@@ -167,18 +176,41 @@ impl IOInterface for ProgrammableInterruptController8259 {
     }
 
     fn write(&mut self, port: u16, value: u8) -> Result<()> {
-        if port & 1 == 0 {
-            self.write_command(value)
+        // TODO: These conditions are not 100% accurate.
+        if port & 1 == 0 && value & (1 << 4) != 0 && self.icw_index == 0 {
+            self.write_icw1(value)
+        } else if port & 1 != 0 && self.icw_index == 1 {
+            self.write_icw2(value)
         } else {
-            self.write_data(value)
+            todo!()
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::io::IOInterface;
     use crate::pic::ProgrammableInterruptController8259;
 
     #[test]
-    fn test() {}
+    fn initialize() {
+        env_logger::init();
+
+        let mut pic = ProgrammableInterruptController8259::default();
+
+        // PIC is waiting for ICW1
+
+        // Write ICW1
+        assert!(pic.write(0x0020, 0x13).is_ok());
+        assert_eq!(1, pic.icw_index);
+        assert_eq!(0x00, pic.mask_register);
+        assert_eq!(0x00, pic.request_register);
+        assert_eq!(0x00, pic.in_service_register);
+
+        assert!(pic.write(0x0021, 0x08).is_ok());
+
+        assert!(pic.write(0x0021, 0x09).is_ok());
+
+        assert!(pic.write(0x0021, 0xFF).is_ok());
+    }
 }
