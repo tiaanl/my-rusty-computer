@@ -21,6 +21,7 @@ mod irq;
 pub mod pic;
 pub mod ram;
 pub mod rom;
+pub mod shared;
 pub mod timer;
 
 trait Installable {
@@ -52,7 +53,7 @@ impl Default for Emulator {
 
 impl Emulator {
     pub fn set_reset_vector(&mut self, segment: u16, offset: u16) {
-        self.cpu.set_segment_value(Segment::Cs, segment);
+        self.cpu.state.set_segment_value(Segment::Cs, segment);
         self.cpu.state.ip = offset;
     }
 

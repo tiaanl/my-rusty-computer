@@ -32,21 +32,167 @@ bitflags! {
     }
 }
 
+#[derive(Copy, Clone, Default, PartialEq)]
+struct WordRegisters {
+    ax: u16,
+    cx: u16,
+    dx: u16,
+    bx: u16,
+
+    sp: u16,
+    bp: u16,
+    si: u16,
+    di: u16,
+}
+
+#[derive(Copy, Clone, PartialEq)]
+struct ByteRegisters {
+    al: u8,
+    ah: u8,
+    cl: u8,
+    ch: u8,
+    dl: u8,
+    dh: u8,
+    bl: u8,
+    bh: u8,
+}
+
+#[derive(Copy, Clone)]
+union Registers {
+    byte: ByteRegisters,
+    word: WordRegisters,
+}
+
+impl Default for Registers {
+    fn default() -> Self {
+        Self {
+            word: WordRegisters::default(),
+        }
+    }
+}
+
+impl PartialEq for Registers {
+    fn eq(&self, other: &Self) -> bool {
+        unsafe { self.word == other.word }
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        unsafe { self.word != other.word }
+    }
+}
+
+#[derive(Copy, Clone, Default, PartialEq)]
+struct Segments {
+    es: u16,
+    cs: u16,
+    ss: u16,
+    ds: u16,
+}
+
 #[derive(Copy, Clone, PartialEq)]
 pub struct State {
-    registers: [u16; 8],
-    segments: [u16; 4],
+    registers: Registers,
+    segments: Segments,
+
     // TODO: Do not have this public.  Right now it is required to set the reset vector. Maybe set
     //       with a builder config?
     pub ip: u16,
     flags: Flags,
 }
 
+impl State {
+    pub fn get_byte_register_value(&self, register: Register) -> u8 {
+        use Register::*;
+
+        unsafe {
+            match register {
+                AlAx => self.registers.byte.al,
+                AhSp => self.registers.byte.ah,
+                ClCx => self.registers.byte.cl,
+                ChBp => self.registers.byte.ch,
+                DlDx => self.registers.byte.dl,
+                DhSi => self.registers.byte.dh,
+                BlBx => self.registers.byte.bl,
+                BhDi => self.registers.byte.bh,
+            }
+        }
+    }
+
+    pub fn get_word_register_value(&self, register: Register) -> u16 {
+        use Register::*;
+
+        unsafe {
+            match register {
+                AlAx => self.registers.word.ax,
+                ClCx => self.registers.word.cx,
+                DlDx => self.registers.word.dx,
+                BlBx => self.registers.word.bx,
+                AhSp => self.registers.word.sp,
+                ChBp => self.registers.word.bp,
+                DhSi => self.registers.word.si,
+                BhDi => self.registers.word.di,
+            }
+        }
+    }
+
+    pub fn set_byte_register_value(&mut self, register: Register, value: u8) {
+        use Register::*;
+
+        match register {
+            AlAx => self.registers.byte.al = value,
+            AhSp => self.registers.byte.ah = value,
+            ClCx => self.registers.byte.cl = value,
+            ChBp => self.registers.byte.ch = value,
+            DlDx => self.registers.byte.dl = value,
+            DhSi => self.registers.byte.dh = value,
+            BlBx => self.registers.byte.bl = value,
+            BhDi => self.registers.byte.bh = value,
+        };
+    }
+
+    pub fn set_word_register_value(&mut self, register: Register, value: u16) {
+        use Register::*;
+
+        match register {
+            AlAx => self.registers.word.ax = value,
+            AhSp => self.registers.word.sp = value,
+            ClCx => self.registers.word.cx = value,
+            ChBp => self.registers.word.bp = value,
+            DlDx => self.registers.word.dx = value,
+            DhSi => self.registers.word.si = value,
+            BlBx => self.registers.word.bx = value,
+            BhDi => self.registers.word.di = value,
+        }
+    }
+
+    pub fn get_segment_value(&self, segment: Segment) -> u16 {
+        use Segment::*;
+
+        match segment {
+            Es => self.segments.es,
+            Cs => self.segments.cs,
+            Ss => self.segments.ss,
+            Ds => self.segments.ds,
+        }
+    }
+
+    pub fn set_segment_value(&mut self, segment: Segment, value: u16) {
+        use Segment::*;
+
+        match segment {
+            Es => self.segments.es = value,
+            Cs => self.segments.cs = value,
+            Ss => self.segments.ss = value,
+            Ds => self.segments.ds = value,
+        }
+    }
+}
+
 impl Default for State {
     fn default() -> Self {
         Self {
-            registers: [0; 8],
-            segments: [0; 4],
+            registers: Registers::default(),
+            segments: Segments::default(),
             ip: 0,
             // By default when the CPU starts, we enable interrupts.
             flags: Flags::INTERRUPT,
@@ -56,23 +202,22 @@ impl Default for State {
 
 impl Display for State {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        use mrc_x86::Register::*;
-        use mrc_x86::Segment::*;
+        unsafe {
+            write!(f, "AX: {:04X} ", self.registers.word.ax)?;
+            write!(f, "BX: {:04X} ", self.registers.word.bx)?;
+            write!(f, "CX: {:04X} ", self.registers.word.cx)?;
+            write!(f, "DX: {:04X} ", self.registers.word.dx)?;
 
-        write!(f, "AX: {:04X} ", self.registers[AlAx as usize])?;
-        write!(f, "BX: {:04X} ", self.registers[BlBx as usize])?;
-        write!(f, "CX: {:04X} ", self.registers[ClCx as usize])?;
-        write!(f, "DX: {:04X} ", self.registers[DlDx as usize])?;
+            write!(f, "SP: {:04X} ", self.registers.word.sp)?;
+            write!(f, "BP: {:04X} ", self.registers.word.bp)?;
+            write!(f, "SI: {:04X} ", self.registers.word.si)?;
+            write!(f, "DI: {:04X} ", self.registers.word.di)?;
+        }
 
-        write!(f, "SP: {:04X} ", self.registers[AhSp as usize])?;
-        write!(f, "BP: {:04X} ", self.registers[ChBp as usize])?;
-        write!(f, "SI: {:04X} ", self.registers[DhSi as usize])?;
-        write!(f, "DI: {:04X} ", self.registers[BhDi as usize])?;
-
-        write!(f, "ES: {:04X} ", self.segments[Es as usize])?;
-        write!(f, "CS: {:04X} ", self.segments[Cs as usize])?;
-        write!(f, "SS: {:04X} ", self.segments[Ss as usize])?;
-        write!(f, "DS: {:04X} ", self.segments[Ds as usize])?;
+        write!(f, "ES: {:04X} ", self.segments.es)?;
+        write!(f, "CS: {:04X} ", self.segments.cs)?;
+        write!(f, "SS: {:04X} ", self.segments.ss)?;
+        write!(f, "DS: {:04X} ", self.segments.ds)?;
 
         write!(f, "IP: {:04X} ", self.ip)?;
 
@@ -130,7 +275,7 @@ impl CPU {
         // println!("state: {}", self.state);
         // print_bus_bytes(self);
 
-        let _start_cs = self.state.segments[Segment::Cs as usize];
+        let _start_cs = self.state.segments.cs;
         let _start_ip = self.state.ip;
 
         let instruction = match decode_instruction(self) {
@@ -158,121 +303,6 @@ impl CPU {
 
         Ok(())
     }
-
-    pub fn get_byte_register_value(&self, register: Register) -> u8 {
-        use Register::*;
-
-        let byte: u8 = match register {
-            AlAx => self.state.registers[AlAx as usize].to_le_bytes()[0],
-            ClCx => self.state.registers[ClCx as usize].to_le_bytes()[0],
-            DlDx => self.state.registers[DlDx as usize].to_le_bytes()[0],
-            BlBx => self.state.registers[BlBx as usize].to_le_bytes()[0],
-            AhSp => self.state.registers[AlAx as usize].to_le_bytes()[1],
-            ChBp => self.state.registers[ClCx as usize].to_le_bytes()[1],
-            DhSi => self.state.registers[DlDx as usize].to_le_bytes()[1],
-            BhDi => self.state.registers[BlBx as usize].to_le_bytes()[1],
-        } as u8;
-        byte
-    }
-
-    pub fn get_word_register_value(&self, register: Register) -> u16 {
-        use Register::*;
-
-        match register {
-            AlAx => self.state.registers[Register::AlAx as usize],
-            ClCx => self.state.registers[Register::ClCx as usize],
-            DlDx => self.state.registers[Register::DlDx as usize],
-            BlBx => self.state.registers[Register::BlBx as usize],
-            AhSp => self.state.registers[Register::AhSp as usize],
-            ChBp => self.state.registers[Register::ChBp as usize],
-            DhSi => self.state.registers[Register::DhSi as usize],
-            BhDi => self.state.registers[Register::BhDi as usize],
-        }
-    }
-
-    pub fn set_byte_register_value(&mut self, register: Register, value: u8) {
-        use Register::*;
-
-        match register {
-            AlAx => {
-                let mut bytes = self.state.registers[Register::AlAx as usize].to_le_bytes();
-                bytes[0] = value;
-                self.state.registers[Register::AlAx as usize] = u16::from_le_bytes(bytes);
-            }
-            ClCx => {
-                let mut bytes = self.state.registers[Register::ClCx as usize].to_le_bytes();
-                bytes[0] = value;
-                self.state.registers[Register::ClCx as usize] = u16::from_le_bytes(bytes);
-            }
-            DlDx => {
-                let mut bytes = self.state.registers[Register::DlDx as usize].to_le_bytes();
-                bytes[0] = value;
-                self.state.registers[Register::DlDx as usize] = u16::from_le_bytes(bytes);
-            }
-            BlBx => {
-                let mut bytes = self.state.registers[Register::BlBx as usize].to_le_bytes();
-                bytes[0] = value;
-                self.state.registers[Register::BlBx as usize] = u16::from_le_bytes(bytes);
-            }
-            AhSp => {
-                let mut bytes = self.state.registers[Register::AlAx as usize].to_le_bytes();
-                bytes[1] = value;
-                self.state.registers[Register::AlAx as usize] = u16::from_le_bytes(bytes);
-            }
-            ChBp => {
-                let mut bytes = self.state.registers[Register::ClCx as usize].to_le_bytes();
-                bytes[1] = value;
-                self.state.registers[Register::ClCx as usize] = u16::from_le_bytes(bytes);
-            }
-            DhSi => {
-                let mut bytes = self.state.registers[Register::DlDx as usize].to_le_bytes();
-                bytes[1] = value;
-                self.state.registers[Register::DlDx as usize] = u16::from_le_bytes(bytes);
-            }
-            BhDi => {
-                let mut bytes = self.state.registers[Register::BlBx as usize].to_le_bytes();
-                bytes[1] = value;
-                self.state.registers[Register::BlBx as usize] = u16::from_le_bytes(bytes);
-            }
-        };
-    }
-
-    pub fn set_word_register_value(&mut self, register: Register, value: u16) {
-        use Register::*;
-
-        match register {
-            AlAx => self.state.registers[Register::AlAx as usize] = value,
-            ClCx => self.state.registers[Register::ClCx as usize] = value,
-            DlDx => self.state.registers[Register::DlDx as usize] = value,
-            BlBx => self.state.registers[Register::BlBx as usize] = value,
-            AhSp => self.state.registers[Register::AhSp as usize] = value,
-            ChBp => self.state.registers[Register::ChBp as usize] = value,
-            DhSi => self.state.registers[Register::DhSi as usize] = value,
-            BhDi => self.state.registers[Register::BhDi as usize] = value,
-        }
-    }
-
-    pub fn get_segment_value(&self, segment: Segment) -> u16 {
-        use Segment::*;
-
-        match segment {
-            Es => self.state.segments[segment as usize],
-            Cs => self.state.segments[segment as usize],
-            Ss => self.state.segments[segment as usize],
-            Ds => self.state.segments[segment as usize],
-        }
-    }
-
-    pub fn set_segment_value(&mut self, segment: Segment, value: u16) {
-        use Segment::*;
-
-        match segment {
-            Es => self.state.segments[segment as usize] = value,
-            Cs => self.state.segments[segment as usize] = value,
-            Ss => self.state.segments[segment as usize] = value,
-            Ds => self.state.segments[segment as usize] = value,
-        }
-    }
 }
 
 /// The decoder requires an iterator to fetch bytes.
@@ -280,7 +310,7 @@ impl Iterator for CPU {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let address = segment_and_offset(self.state.segments[Segment::Cs as usize], self.state.ip);
+        let address = segment_and_offset(self.state.segments.cs, self.state.ip);
         if let Ok(byte) = self.bus.borrow().read(address) {
             let (new_ip, overflow) = self.state.ip.overflowing_add(1);
             if overflow {
@@ -298,7 +328,7 @@ impl Iterator for CPU {
 
 fn _print_bus_bytes(cpu: &CPU) {
     print!("Bytes to decode: ");
-    let start = segment_and_offset(cpu.get_segment_value(Segment::Cs), cpu.state.ip);
+    let start = segment_and_offset(cpu.state.get_segment_value(Segment::Cs), cpu.state.ip);
     for i in 0..5 {
         let addr = start + i;
 

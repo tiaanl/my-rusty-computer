@@ -13,10 +13,10 @@ pub struct ProgrammableInterruptController8259 {
     mask_register: u8,
 
     /// When a bit is set, the corresponding interrupt has made a request.
-    request_register: u8,
+    _request_register: u8,
 
     /// When a bit is set, the corresponding interrupt is being run.
-    in_service_register: u8,
+    _in_service_register: u8,
     // mask_register: u8,
     // request_register: u8,
     // service_register: u8,
@@ -40,8 +40,8 @@ impl Default for ProgrammableInterruptController8259 {
         Self {
             icw_index: 0,
             mask_register: 0,
-            request_register: 0,
-            in_service_register: 0,
+            _request_register: 0,
+            _in_service_register: 0,
         }
     }
 }
@@ -61,11 +61,11 @@ impl ProgrammableInterruptController8259 {
         Ok(())
     }
 
-    fn write_icw2(&mut self, value: u8) -> Result<()> {
+    fn _write_icw2(&mut self, _value: u8) -> Result<()> {
         Ok(())
     }
 
-    fn write_icw(&mut self, value: u8) -> Result<()> {
+    fn _write_icw(&mut self, _value: u8) -> Result<()> {
         Ok(())
         /*
         {
@@ -165,6 +165,7 @@ impl ProgrammableInterruptController8259 {
         */
     }
 
+    #[allow(dead_code)]
     fn write_data(&mut self, _value: u8) -> Result<()> {
         Ok(())
     }
@@ -180,7 +181,7 @@ impl IOInterface for ProgrammableInterruptController8259 {
         if port & 1 == 0 && value & (1 << 4) != 0 && self.icw_index == 0 {
             self.write_icw1(value)
         } else if port & 1 != 0 && self.icw_index == 1 {
-            self.write_icw2(value)
+            self._write_icw2(value)
         } else {
             todo!()
         }

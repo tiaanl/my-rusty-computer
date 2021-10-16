@@ -30,43 +30,43 @@ fn indirect_address_for(
     addressing_mode: &AddressingMode,
     displacement: &Displacement,
 ) -> Address {
-    let seg = cpu.get_segment_value(segment);
+    let seg = cpu.state.get_segment_value(segment);
 
     let mut addr = match addressing_mode {
         AddressingMode::BxSi => {
-            let bx = cpu.get_word_register_value(Register::BlBx);
-            let si = cpu.get_word_register_value(Register::DhSi);
+            let bx = cpu.state.get_word_register_value(Register::BlBx);
+            let si = cpu.state.get_word_register_value(Register::DhSi);
             segment_and_offset(seg, bx + si)
         }
         AddressingMode::BxDi => {
-            let bx = cpu.get_word_register_value(Register::BlBx);
-            let di = cpu.get_word_register_value(Register::BhDi);
+            let bx = cpu.state.get_word_register_value(Register::BlBx);
+            let di = cpu.state.get_word_register_value(Register::BhDi);
             segment_and_offset(seg, bx + di)
         }
         AddressingMode::BpSi => {
-            let bp = cpu.get_word_register_value(Register::ChBp);
-            let si = cpu.get_word_register_value(Register::DhSi);
+            let bp = cpu.state.get_word_register_value(Register::ChBp);
+            let si = cpu.state.get_word_register_value(Register::DhSi);
             segment_and_offset(seg, bp + si)
         }
         AddressingMode::BpDi => {
-            let bp = cpu.get_word_register_value(Register::ChBp);
-            let di = cpu.get_word_register_value(Register::BhDi);
+            let bp = cpu.state.get_word_register_value(Register::ChBp);
+            let di = cpu.state.get_word_register_value(Register::BhDi);
             segment_and_offset(seg, bp + di)
         }
         AddressingMode::Si => {
-            let si = cpu.get_word_register_value(Register::DhSi);
+            let si = cpu.state.get_word_register_value(Register::DhSi);
             segment_and_offset(seg, si)
         }
         AddressingMode::Di => {
-            let di = cpu.get_word_register_value(Register::BhDi);
+            let di = cpu.state.get_word_register_value(Register::BhDi);
             segment_and_offset(seg, di)
         }
         AddressingMode::Bp => {
-            let bp = cpu.get_word_register_value(Register::ChBp);
+            let bp = cpu.state.get_word_register_value(Register::ChBp);
             segment_and_offset(seg, bp)
         }
         AddressingMode::Bx => {
-            let bx = cpu.get_word_register_value(Register::BlBx);
+            let bx = cpu.state.get_word_register_value(Register::BlBx);
             segment_and_offset(seg, bx)
         }
     } as i64;
@@ -95,7 +95,7 @@ mod byte {
         match operand_type {
             OperandType::Direct(segment, offset) => {
                 // TODO: Handle segment override.
-                let ds = cpu.get_segment_value(*segment);
+                let ds = cpu.state.get_segment_value(*segment);
                 let address = segment_and_offset(ds, *offset);
                 byte::bus_read(cpu, address)
             }
@@ -105,7 +105,7 @@ mod byte {
                 byte::bus_read(cpu, address)
             }
 
-            OperandType::Register(register) => Ok(cpu.get_byte_register_value(*register)),
+            OperandType::Register(register) => Ok(cpu.state.get_byte_register_value(*register)),
 
             OperandType::Segment(_) => Err(Error::IllegalDataAccess),
 
@@ -126,7 +126,7 @@ mod byte {
         match operand_type {
             OperandType::Direct(segment, offset) => {
                 // TODO: Handle segment override.
-                let seg = cpu.get_segment_value(*segment);
+                let seg = cpu.state.get_segment_value(*segment);
                 byte::bus_write(cpu, segment_and_offset(seg, *offset), value)
             }
             OperandType::Indirect(segment, addressing_mode, displacement) => {
@@ -134,7 +134,7 @@ mod byte {
                 byte::bus_write(cpu, addr, value)
             }
             OperandType::Register(register) => {
-                cpu.set_byte_register_value(*register, value);
+                cpu.state.set_byte_register_value(*register, value);
                 Ok(())
             }
             _ => Err(Error::IllegalDataAccess),
@@ -171,7 +171,7 @@ mod word {
         match operand_type {
             OperandType::Direct(segment, offset) => {
                 // TODO: Handle segment override.
-                let seg = cpu.get_segment_value(*segment);
+                let seg = cpu.state.get_segment_value(*segment);
                 word::bus_write(cpu, segment_and_offset(seg, *offset), value)
             }
             OperandType::Indirect(segment, addressing_mode, displacement) => {
@@ -179,11 +179,11 @@ mod word {
                 word::bus_write(cpu, addr, value)
             }
             OperandType::Register(register) => {
-                cpu.set_word_register_value(*register, value);
+                cpu.state.set_word_register_value(*register, value);
                 Ok(())
             }
             OperandType::Segment(segment) => {
-                cpu.set_segment_value(*segment, value);
+                cpu.state.set_segment_value(*segment, value);
                 Ok(())
             }
             _ => Err(Error::IllegalDataAccess),
@@ -199,7 +199,7 @@ mod word {
         match operand_type {
             OperandType::Direct(segment, offset) => {
                 // Get a single byte from DS:offset
-                let seg = cpu.get_segment_value(*segment);
+                let seg = cpu.state.get_segment_value(*segment);
                 let addr = segment_and_offset(seg, *offset);
 
                 word::bus_read(cpu, addr)
@@ -210,8 +210,8 @@ mod word {
                 indirect_address_for(cpu, *segment, addressing_mode, displacement),
             ),
 
-            OperandType::Register(register) => Ok(cpu.get_word_register_value(*register)),
-            OperandType::Segment(segment) => Ok(cpu.get_segment_value(*segment)),
+            OperandType::Register(register) => Ok(cpu.state.get_word_register_value(*register)),
+            OperandType::Segment(segment) => Ok(cpu.state.get_segment_value(*segment)),
             OperandType::Immediate(value) => Ok(*value),
         }
     }
@@ -224,11 +224,11 @@ mod word {
 }
 
 fn push(cpu: &mut CPU, value: u16) -> Result<()> {
-    let ss = cpu.get_segment_value(Segment::Ss);
-    let mut sp = cpu.get_word_register_value(Register::AhSp);
+    let ss = cpu.state.get_segment_value(Segment::Ss);
+    let mut sp = cpu.state.get_word_register_value(Register::AhSp);
 
     sp = sp.wrapping_sub(2);
-    cpu.set_word_register_value(Register::AhSp, sp);
+    cpu.state.set_word_register_value(Register::AhSp, sp);
 
     // log::info!("Push {:04X} to [{:04X}:{:04X}]", value, ss, sp,);
 
@@ -236,15 +236,15 @@ fn push(cpu: &mut CPU, value: u16) -> Result<()> {
 }
 
 fn pop(cpu: &mut CPU) -> Result<u16> {
-    let ss = cpu.get_segment_value(Segment::Ss);
-    let mut sp = cpu.get_word_register_value(Register::AhSp);
+    let ss = cpu.state.get_segment_value(Segment::Ss);
+    let mut sp = cpu.state.get_word_register_value(Register::AhSp);
 
     let value = word::bus_read(cpu, segment_and_offset(ss, sp))?;
 
     // log::info!("Pop {:04X} from [{:04X}:{:04X}]", value, ss, sp,);
 
     sp = sp.wrapping_add(2);
-    cpu.set_word_register_value(Register::AhSp, sp);
+    cpu.state.set_word_register_value(Register::AhSp, sp);
 
     Ok(value)
 }
@@ -342,11 +342,11 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         },
 
         Operation::Cbw => {
-            let al = cpu.get_byte_register_value(Register::AlAx);
+            let al = cpu.state.get_byte_register_value(Register::AlAx);
             if al & 0b10000000 != 0 {
-                cpu.set_byte_register_value(Register::AhSp, 0b11111111);
+                cpu.state.set_byte_register_value(Register::AhSp, 0b11111111);
             } else {
-                cpu.set_byte_register_value(Register::AhSp, 0b00000000);
+                cpu.state.set_byte_register_value(Register::AhSp, 0b00000000);
             }
         }
 
@@ -433,7 +433,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 // if *value == 0x10 {
                 // } else if *value == 0x21 {
                 //     // DOS
-                //     match cpu.get_word_register_value(Register::AlAx).to_le_bytes() {
+                //     match cpu.state.get_word_register_value(Register::AlAx).to_le_bytes() {
                 //         [0x4C, return_code] => {
                 //             println!("INT 21h: DOS exit with return code ({})", return_code);
                 //             return Ok(ExecuteResult::Stop);
@@ -455,7 +455,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
                 cpu.state.ip = pop(cpu)?;
                 let cs = pop(cpu)?;
-                cpu.set_segment_value(Segment::Cs, cs);
+                cpu.state.set_segment_value(Segment::Cs, cs);
                 cpu.state.flags.bits = pop(cpu)?;
             }
 
@@ -482,7 +482,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Jcxz => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
-                if cpu.get_word_register_value(Register::ClCx) == 0 {
+                if cpu.state.get_word_register_value(Register::ClCx) == 0 {
                     displace_ip(cpu, displacement)?;
                 }
             }
@@ -537,7 +537,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 displace_ip(cpu, displacement)?;
             }
             OperandSet::SegmentAndOffset(segment, offset) => {
-                cpu.set_segment_value(Segment::Cs, *segment);
+                cpu.state.set_segment_value(Segment::Cs, *segment);
                 cpu.state.ip = *offset;
             }
             _ => illegal_operands(instruction),
@@ -628,7 +628,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Lahf => {
             // Use the low byte of the flags register.
             let bytes = cpu.state.flags.bits.to_le_bytes();
-            cpu.set_byte_register_value(Register::AhSp, bytes[0]);
+            cpu.state.set_byte_register_value(Register::AhSp, bytes[0]);
         }
 
         Operation::Lea => match instruction.operands {
@@ -640,16 +640,16 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 ),
             ) => {
                 let addr = indirect_address_for(cpu, segment, addressing_mode, displacement);
-                cpu.set_word_register_value(register, addr as u16);
+                cpu.state.set_word_register_value(register, addr as u16);
             }
             _ => illegal_operands(instruction),
         },
 
         Operation::Loop => match instruction.operands {
             OperandSet::Displacement(ref displacement) => {
-                let cx = cpu.get_word_register_value(Register::ClCx);
+                let cx = cpu.state.get_word_register_value(Register::ClCx);
                 let cx = cx.wrapping_sub(1);
-                cpu.set_word_register_value(Register::ClCx, cx);
+                cpu.state.set_word_register_value(Register::ClCx, cx);
 
                 if cx > 0 {
                     displace_ip(cpu, displacement)?;
@@ -690,17 +690,17 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 _ => unreachable!(),
             };
 
-            let ds = cpu.get_segment_value(Segment::Ds);
-            let mut si = cpu.get_word_register_value(Register::DhSi);
+            let ds = cpu.state.get_segment_value(Segment::Ds);
+            let mut si = cpu.state.get_word_register_value(Register::DhSi);
 
-            let es = cpu.get_segment_value(Segment::Es);
-            let mut di = cpu.get_word_register_value(Register::BhDi);
+            let es = cpu.state.get_segment_value(Segment::Es);
+            let mut di = cpu.state.get_word_register_value(Register::BhDi);
 
             let mut count = match instruction.repeat {
                 None => 1,
                 Some(ref repeat) => match repeat {
-                    Repeat::Equal => cpu.get_word_register_value(Register::ClCx),
-                    Repeat::NotEqual => cpu.get_word_register_value(Register::ClCx),
+                    Repeat::Equal => cpu.state.get_word_register_value(Register::ClCx),
+                    Repeat::NotEqual => cpu.state.get_word_register_value(Register::ClCx),
                 },
             };
 
@@ -710,12 +710,12 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 match instruction.operation {
                     Operation::Lodsb => {
                         let value = byte::bus_read(cpu, segment_and_offset(ds, si))?;
-                        cpu.set_byte_register_value(Register::AlAx, value);
+                        cpu.state.set_byte_register_value(Register::AlAx, value);
                     }
 
                     Operation::Lodsw => {
                         let value = word::bus_read(cpu, segment_and_offset(ds, si))?;
-                        cpu.set_word_register_value(Register::AlAx, value);
+                        cpu.state.set_word_register_value(Register::AlAx, value);
                     }
 
                     Operation::Movsb => {
@@ -729,12 +729,12 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                     }
 
                     Operation::Stosb => {
-                        let value = cpu.get_byte_register_value(Register::AlAx);
+                        let value = cpu.state.get_byte_register_value(Register::AlAx);
                         byte::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
                     Operation::Stosw => {
-                        let value = cpu.get_word_register_value(Register::AlAx);
+                        let value = cpu.state.get_word_register_value(Register::AlAx);
                         word::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
@@ -791,11 +791,11 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 }
             }
 
-            cpu.set_word_register_value(Register::DhSi, si);
-            cpu.set_word_register_value(Register::BhDi, di);
+            cpu.state.set_word_register_value(Register::DhSi, si);
+            cpu.state.set_word_register_value(Register::BhDi, di);
 
             if instruction.repeat.is_some() {
-                cpu.set_word_register_value(Register::ClCx, count);
+                cpu.state.set_word_register_value(Register::ClCx, count);
             }
         }
 
@@ -867,7 +867,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             ) = instruction.operands
             {
                 let d = word::get_operand_type_value(cpu, destination)?;
-                let s = cpu.get_byte_register_value(Register::ClCx) as u16;
+                let s = cpu.state.get_byte_register_value(Register::ClCx) as u16;
                 let result = match instruction.operation {
                     Operation::Shl => {
                         operations::logic::shift_left_word(d, s, &mut cpu.state.flags).unwrap()
@@ -882,7 +882,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         }
 
         Operation::Sahf => {
-            let ah = cpu.get_byte_register_value(Register::AhSp);
+            let ah = cpu.state.get_byte_register_value(Register::AhSp);
             cpu.state.flags.bits = u16::from_le_bytes([ah, 0]);
         }
 

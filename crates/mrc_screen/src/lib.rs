@@ -209,6 +209,10 @@ impl Default for TextMode {
 }
 
 impl TextMode {
+    pub fn set_cursor_position(&mut self, x: u8, y: u8) {
+        self.cursor_position = (x, y);
+    }
+
     pub fn teletype_output(&mut self, character: u8) {
         let index = self.index_for(self.cursor_position);
         if let Some(c) = self.buffer.get_mut(index) {
@@ -541,12 +545,12 @@ impl BusInterface for TextModeInterface {
 
 impl InterruptHandler for TextModeInterface {
     fn handle(&mut self, cpu: &CPU) {
-        let ah = cpu.get_byte_register_value(Register::AhSp);
+        let ah = cpu.state.get_byte_register_value(Register::AhSp);
         match ah {
             0x00 => {
                 // AL = video mode
 
-                let _video_mode = cpu.get_byte_register_value(Register::AlAx);
+                let _video_mode = cpu.state.get_byte_register_value(Register::AlAx);
 
                 // log::info!("Setting video mode. | video_mode: {:02X}", video_mode);
             }
@@ -556,8 +560,8 @@ impl InterruptHandler for TextModeInterface {
                 // CH = scan row start
                 // CL = scan row end
 
-                let _scan_line_start = cpu.get_byte_register_value(Register::ChBp);
-                let _scan_line_end = cpu.get_byte_register_value(Register::ClCx);
+                let _scan_line_start = cpu.state.get_byte_register_value(Register::ChBp);
+                let _scan_line_end = cpu.state.get_byte_register_value(Register::ClCx);
 
                 // log::info!(
                 //     "Setting cursor shape: {:02X}..{:02X}",
@@ -570,9 +574,9 @@ impl InterruptHandler for TextModeInterface {
                 // BH = page number
                 // DH = row
                 // DL = column
-                let _page_number = cpu.get_byte_register_value(Register::BhDi);
-                let row = cpu.get_byte_register_value(Register::DhSi);
-                let column = cpu.get_byte_register_value(Register::DlDx);
+                let _page_number = cpu.state.get_byte_register_value(Register::BhDi);
+                let row = cpu.state.get_byte_register_value(Register::DhSi);
+                let column = cpu.state.get_byte_register_value(Register::DlDx);
 
                 // log::info!("Set cursor position. | page_number: {:02X} | row: {:02X} | column: {:02X}", page_number, row, column);
 
@@ -583,7 +587,7 @@ impl InterruptHandler for TextModeInterface {
                 // Select active display page
                 // AL = page number
 
-                let _page_number = cpu.get_byte_register_value(Register::AlAx);
+                let _page_number = cpu.state.get_byte_register_value(Register::AlAx);
 
                 // log::info!(
                 //     "Select active display page. | page_number: {:02X}",
@@ -600,12 +604,12 @@ impl InterruptHandler for TextModeInterface {
                 // DH = lower row number
                 // DL = right column number
 
-                let _lines_to_scroll = cpu.get_byte_register_value(Register::AlAx);
-                let _color = cpu.get_byte_register_value(Register::BhDi);
-                let _upper_row_number = cpu.get_byte_register_value(Register::ChBp);
-                let _left_column_number = cpu.get_byte_register_value(Register::ClCx);
-                let _lower_row_number = cpu.get_byte_register_value(Register::DhSi);
-                let _right_column_number = cpu.get_byte_register_value(Register::DlDx);
+                let _lines_to_scroll = cpu.state.get_byte_register_value(Register::AlAx);
+                let _color = cpu.state.get_byte_register_value(Register::BhDi);
+                let _upper_row_number = cpu.state.get_byte_register_value(Register::ChBp);
+                let _left_column_number = cpu.state.get_byte_register_value(Register::ClCx);
+                let _lower_row_number = cpu.state.get_byte_register_value(Register::DhSi);
+                let _right_column_number = cpu.state.get_byte_register_value(Register::DlDx);
 
                 // log::info!("Scroll up window. | lines_to_scroll: {:02X} | color: {:02X} | upper_row_number: {:02X} | left_column_number: {:02X} | lower_row_number: {:02X} | right_column_number: {:02X}", lines_to_scroll, color, upper_row_number, left_column_number, lower_row_number, right_column_number);
             }
@@ -615,10 +619,10 @@ impl InterruptHandler for TextModeInterface {
                 // BH = page number
                 // BL = color
                 // CX = number of times to print character
-                let character = cpu.get_byte_register_value(Register::AlAx);
-                let _page_number = cpu.get_byte_register_value(Register::BhDi);
-                let _color = cpu.get_byte_register_value(Register::BlBx);
-                let _count = cpu.get_word_register_value(Register::ClCx);
+                let character = cpu.state.get_byte_register_value(Register::AlAx);
+                let _page_number = cpu.state.get_byte_register_value(Register::BhDi);
+                let _color = cpu.state.get_byte_register_value(Register::BlBx);
+                let _count = cpu.state.get_word_register_value(Register::ClCx);
 
                 // log::info!("Write character and attribute at cursor position. | character: {:02X} \"{}\" | page_number: {:02X} | color: {:02X} | count: {:04X}",
                 //     character, character as char, page_number, color, count);
@@ -641,9 +645,9 @@ impl InterruptHandler for TextModeInterface {
                 // BH = page_number
                 // BL = color (only in graphic mode)
 
-                let character = cpu.get_byte_register_value(Register::AlAx);
-                let _page_number = cpu.get_byte_register_value(Register::BhDi);
-                let _color = cpu.get_byte_register_value(Register::BlBx);
+                let character = cpu.state.get_byte_register_value(Register::AlAx);
+                let _page_number = cpu.state.get_byte_register_value(Register::BhDi);
+                let _color = cpu.state.get_byte_register_value(Register::BlBx);
 
                 // log::info!(
                 //     "Teletype output. | character: {:02X} | page_number: {:02X} | color: {:02X}",
