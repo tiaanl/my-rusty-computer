@@ -4,11 +4,6 @@ use mrc_x86::{
     Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
 };
 
-pub mod arithmetic;
-pub mod logic;
-pub mod processor_control;
-pub mod string_manipulation;
-
 // x x x x x x d w | mod reg r/m
 pub(crate) fn register_memory_and_register_to_either<It: Iterator<Item = u8>>(
     operation: Operation,
