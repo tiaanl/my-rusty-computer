@@ -344,9 +344,11 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Cbw => {
             let al = cpu.state.get_byte_register_value(Register::AlAx);
             if al & 0b10000000 != 0 {
-                cpu.state.set_byte_register_value(Register::AhSp, 0b11111111);
+                cpu.state
+                    .set_byte_register_value(Register::AhSp, 0b11111111);
             } else {
-                cpu.state.set_byte_register_value(Register::AhSp, 0b00000000);
+                cpu.state
+                    .set_byte_register_value(Register::AhSp, 0b00000000);
             }
         }
 

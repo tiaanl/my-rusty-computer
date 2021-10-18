@@ -13,7 +13,7 @@ use crate::error::Result;
 use crate::io::IOController;
 use crate::irq::InterruptController;
 
-mod bus;
+pub mod bus;
 pub mod cpu;
 pub mod error;
 mod io;

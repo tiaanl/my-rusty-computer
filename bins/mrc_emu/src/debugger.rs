@@ -1,9 +1,12 @@
-use glium::backend::glutin::glutin::event::{ScanCode, VirtualKeyCode, WindowEvent};
+use glium::backend::glutin::glutin::event::{VirtualKeyCode, WindowEvent};
 use glium::glutin::event::{ElementState, Event};
-use glium::glutin::event_loop::{ControlFlow, EventLoop};
+use glium::glutin::event_loop::EventLoop;
+use mrc_decoder::decode_instruction;
+use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::cpu::State;
+use mrc_emulator::{BusInterface, Emulator};
 use mrc_screen::{Screen, TextMode};
-use mrc_x86::{Register, Segment};
+use mrc_x86::{Instruction, Register, Segment};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -11,10 +14,36 @@ pub enum DebuggerAction {
     Step,
 }
 
+struct TempIterator {
+    bus: Rc<RefCell<dyn BusInterface>>,
+    position: u32,
+}
+
+impl TempIterator {
+    fn new(bus: Rc<RefCell<dyn BusInterface>>, position: u32) -> Self {
+        Self { bus, position }
+    }
+}
+
+impl Iterator for TempIterator {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.bus.borrow().read(self.position) {
+            Ok(byte) => {
+                self.position += 1;
+                Some(byte)
+            }
+            Err(_) => None,
+        }
+    }
+}
+
 pub struct Debugger {
     text_mode: Rc<RefCell<TextMode>>,
     screen: Screen,
     state: State,
+    instructions: Vec<Instruction>,
 }
 
 impl Debugger {
@@ -24,11 +53,27 @@ impl Debugger {
             text_mode: text_mode.clone(),
             screen: Screen::new(event_loop, text_mode),
             state: State::default(),
+            instructions: Vec::new(),
         }
     }
 
-    pub fn update(&mut self, state: &State) {
-        self.state = *state;
+    pub fn update(&mut self, emulator: &Emulator) {
+        self.state = emulator.cpu.state;
+
+        let mut it = TempIterator::new(
+            emulator.bus(),
+            segment_and_offset(
+                emulator.cpu.state.get_segment_value(Segment::Cs),
+                emulator.cpu.state.ip,
+            ),
+        );
+
+        self.instructions.clear();
+        for _ in 0..5 {
+            if let Ok(instruction) = decode_instruction(&mut it) {
+                self.instructions.push(instruction);
+            }
+        }
     }
 
     pub fn handle_events(&self, event: &Event<()>) -> Option<DebuggerAction> {
@@ -135,6 +180,11 @@ impl Debugger {
             self.print_register(&mut text_mode, "IP", self.state.ip);
 
             self.print_string(&mut text_mode, "test".to_owned());
+
+            for (i, instruction) in self.instructions.iter().enumerate() {
+                text_mode.set_cursor_position(0, (3 + i) as u8);
+                self.print_string(&mut text_mode, format!("{}", instruction));
+            }
         }
 
         self.screen.tick();
