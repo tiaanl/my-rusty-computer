@@ -33,7 +33,7 @@ pub struct Emulator {
     bus: Rc<RefCell<Bus>>,
     io_controller: Rc<RefCell<IOController>>,
     interrupt_controller: Rc<RefCell<InterruptController>>,
-    cpu: CPU,
+    pub cpu: CPU,
 }
 
 impl Default for Emulator {

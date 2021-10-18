@@ -173,7 +173,8 @@ impl ProgrammableInterruptController8259 {
 
 impl IOInterface for ProgrammableInterruptController8259 {
     fn read(&self, _port: u16) -> Result<u8> {
-        todo!()
+        //todo!()
+        Ok(0)
     }
 
     fn write(&mut self, port: u16, value: u8) -> Result<()> {
@@ -183,7 +184,8 @@ impl IOInterface for ProgrammableInterruptController8259 {
         } else if port & 1 != 0 && self.icw_index == 1 {
             self._write_icw2(value)
         } else {
-            todo!()
+            Ok(())
+            //todo!()
         }
     }
 }

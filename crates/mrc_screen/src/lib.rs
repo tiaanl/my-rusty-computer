@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::EventLoop;
@@ -216,18 +217,32 @@ impl TextMode {
     pub fn teletype_output(&mut self, character: u8) {
         let index = self.index_for(self.cursor_position);
         if let Some(c) = self.buffer.get_mut(index) {
-            c.letter = character as u32;
-            self.cursor_position.0 += 1;
-            if self.cursor_position.0 >= self.size.0 {
-                self.cursor_position.0 = 0;
-                self.cursor_position.1 += 1;
-                // TODO: Scroll if we go off the bottom of the screen.
+            match character {
+                0x0D => {
+                    // Carriage return
+                    self.cursor_position.0 = 0;
+                }
+
+                0x0A => {
+                    // Line feed
+                    self.cursor_position.1 += 1;
+                }
+
+                _ => {
+                    c.letter = character as u32;
+                    self.cursor_position.0 += 1;
+                    if self.cursor_position.0 >= self.size.0 {
+                        self.cursor_position.0 = 0;
+                        self.cursor_position.1 += 1;
+                        // TODO: Scroll if we go off the bottom of the screen.
+                    }
+                }
             }
         }
     }
 
     fn index_for(&self, position: (u8, u8)) -> usize {
-        position.1 as usize * self.size.1 as usize + position.0 as usize
+        position.1 as usize * 80usize + position.0 as usize
     }
 }
 
@@ -237,11 +252,11 @@ pub struct Screen {
     vertex_buffer: Option<VertexBuffer<Character>>,
     texture: glium::Texture2d,
 
-    text_mode: Arc<Mutex<TextMode>>,
+    text_mode: Rc<RefCell<TextMode>>,
 }
 
 impl Screen {
-    pub fn new(event_loop: &EventLoop<()>, text_mode: Arc<Mutex<TextMode>>) -> Self {
+    pub fn new(event_loop: &EventLoop<()>, text_mode: Rc<RefCell<TextMode>>) -> Self {
         let wb = window::WindowBuilder::new().with_title("My Rusty Computer - Emulator");
         let cb = ContextBuilder::new().with_vsync(true);
         let display = Display::new(wb, cb, event_loop).unwrap();
@@ -454,7 +469,7 @@ impl Screen {
         let mut _screen_size = (0i32, 0i32);
 
         {
-            let text_mode = self.text_mode.lock().unwrap();
+            let text_mode = self.text_mode.borrow();
 
             _screen_size = (text_mode.size.0 as i32, text_mode.size.1 as i32);
 
@@ -498,18 +513,18 @@ impl Screen {
 }
 
 pub struct TextModeInterface {
-    text_mode: Arc<Mutex<TextMode>>,
+    text_mode: Rc<RefCell<TextMode>>,
 }
 
 impl TextModeInterface {
-    pub fn new(text_mode: Arc<Mutex<TextMode>>) -> Self {
+    pub fn new(text_mode: Rc<RefCell<TextMode>>) -> Self {
         Self { text_mode }
     }
 }
 
 impl BusInterface for TextModeInterface {
     fn read(&self, address: mrc_emulator::Address) -> mrc_emulator::error::Result<u8> {
-        let text_mode = self.text_mode.lock().unwrap();
+        let text_mode = self.text_mode.borrow();
 
         let index = address as usize / 2;
         let value = if address % 2 == 0 {
@@ -528,7 +543,7 @@ impl BusInterface for TextModeInterface {
         address: mrc_emulator::Address,
         value: u8,
     ) -> mrc_emulator::error::Result<()> {
-        let mut text_mode = self.text_mode.lock().unwrap();
+        let mut text_mode = self.text_mode.borrow_mut();
 
         let index = address as usize / 2;
         if address % 2 == 0 {
@@ -580,7 +595,7 @@ impl InterruptHandler for TextModeInterface {
 
                 // log::info!("Set cursor position. | page_number: {:02X} | row: {:02X} | column: {:02X}", page_number, row, column);
 
-                self.text_mode.lock().unwrap().cursor_position = (column, row);
+                self.text_mode.borrow_mut().cursor_position = (column, row);
             }
 
             0x05 => {
@@ -628,7 +643,7 @@ impl InterruptHandler for TextModeInterface {
                 //     character, character as char, page_number, color, count);
 
                 {
-                    let mut text_mode = self.text_mode.lock().unwrap();
+                    let mut text_mode = self.text_mode.borrow_mut();
 
                     let index = text_mode.cursor_position.1 * text_mode.size.0
                         + text_mode.cursor_position.0;
@@ -656,7 +671,7 @@ impl InterruptHandler for TextModeInterface {
                 //     color
                 // );
 
-                self.text_mode.lock().unwrap().teletype_output(character);
+                self.text_mode.borrow_mut().teletype_output(character);
             }
 
             0x12 => {

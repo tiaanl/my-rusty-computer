@@ -1,11 +1,13 @@
+mod debugger;
+
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io::Read;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgMatches};
+use debugger::Debugger;
 use glutin::event_loop::ControlFlow;
 
 use mrc_emulator::ram::RandomAccessMemory;
@@ -13,6 +15,7 @@ use mrc_emulator::rom::ReadOnlyMemory;
 use mrc_emulator::timer::ProgrammableIntervalTimer8253;
 use mrc_emulator::Emulator;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
+use crate::debugger::DebuggerAction;
 
 fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
@@ -67,6 +70,86 @@ fn install_bios(emulator: &Emulator, path: &str) {
     );
 }
 
+fn create_emulator(matches: &ArgMatches, text_mode: Rc<RefCell<TextMode>>) -> Emulator {
+    let mut emulator = Emulator::default();
+
+    // Install 2 programmable interrupt controllers.
+    let pit_1 = Rc::new(RefCell::new(
+        mrc_emulator::pic::ProgrammableInterruptController8259::default(),
+    ));
+    emulator.io_controller().borrow_mut().map_range(0x20, 0x0F, pit_1);
+
+    let pit_2 = Rc::new(RefCell::new(
+        mrc_emulator::pic::ProgrammableInterruptController8259::default(),
+    ));
+    emulator.io_controller().borrow_mut().map_range(0xA0, 0x0F, pit_2);
+
+    let timer_8253 = Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default()));
+    emulator.io_controller().borrow_mut().map_range(0x40, 0x04, timer_8253.clone());
+
+    install_memory(&emulator);
+
+    /*
+    // Basic ROM just below BIOS.
+    [
+        (
+            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF6.ROM"#,
+            0xF6000,
+        ),
+        (
+            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF8.ROM"#,
+            0xF8000,
+        ),
+        (
+            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFA.ROM"#,
+            0xFA000,
+        ),
+        (
+            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFC.ROM"#,
+            0xFC000,
+        ),
+    ]
+        .map(|(path, address)| {
+            let data = load_rom(path).unwrap();
+            let data_len = data.len() as u32;
+            let rom = ReadOnlyMemory::from_vec(data);
+            emulator
+                .bus()
+                .borrow_mut()
+                .map(address, data_len, Rc::new(RefCell::new(rom)));
+            log::info!(
+            "Loading ROM \"{}\" to [{:05X}..{:05X}]",
+            path,
+            address,
+            address + data_len
+        );
+        });
+    */
+
+    if let Some(path) = matches.value_of("bios") {
+        install_bios(&emulator, path);
+    } else {
+        let data = include_bytes!("../ext/mrc_bios/bios.bin");
+        let data = Vec::from(*data);
+        let data_size = data.len() as u32;
+        let bios_start_addr = 0x100000 - data_size;
+
+        emulator.bus().borrow_mut().map(
+            bios_start_addr,
+            data_size,
+            Rc::new(RefCell::new(ReadOnlyMemory::from_vec(data))),
+        );
+    }
+
+    let text_mode_interface = Rc::new(RefCell::new(TextModeInterface::new(text_mode.clone())));
+    emulator.bus().borrow_mut().map(0xB8000, 0x4000, text_mode_interface.clone());
+    emulator.interrupt_controller().borrow_mut().map(0x10, text_mode_interface);
+
+    emulator.set_reset_vector(0xF000, 0xFFF0);
+
+    emulator
+}
+
 fn main() {
     pretty_env_logger::init();
 
@@ -81,103 +164,12 @@ fn main() {
 
     let event_loop = glutin::event_loop::EventLoop::new();
 
-    let text_mode = Arc::new(Mutex::new(TextMode::default()));
+    let mut debugger = Debugger::new(&event_loop);
+
+    let text_mode = Rc::new(RefCell::new(TextMode::default()));
     let screen = Rc::new(RefCell::new(Screen::new(&event_loop, text_mode.clone())));
 
-    std::thread::spawn(move || {
-        let mut emulator = Emulator::default();
-
-        // Install 2 programmable interrupt controllers.
-        let pit_1 = Rc::new(RefCell::new(
-            mrc_emulator::pic::ProgrammableInterruptController8259::default(),
-        ));
-        emulator
-            .io_controller()
-            .borrow_mut()
-            .map_range(0x20, 0x0F, pit_1);
-
-        let pit_2 = Rc::new(RefCell::new(
-            mrc_emulator::pic::ProgrammableInterruptController8259::default(),
-        ));
-        emulator
-            .io_controller()
-            .borrow_mut()
-            .map_range(0xA0, 0x0F, pit_2);
-
-        let timer_8253 = Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default()));
-        emulator
-            .io_controller()
-            .borrow_mut()
-            .map_range(0x40, 0x04, timer_8253.clone());
-
-        install_memory(&emulator);
-
-        /*
-        // Basic ROM just below BIOS.
-        [
-            (
-                r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF6.ROM"#,
-                0xF6000,
-            ),
-            (
-                r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF8.ROM"#,
-                0xF8000,
-            ),
-            (
-                r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFA.ROM"#,
-                0xFA000,
-            ),
-            (
-                r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFC.ROM"#,
-                0xFC000,
-            ),
-        ]
-            .map(|(path, address)| {
-                let data = load_rom(path).unwrap();
-                let data_len = data.len() as u32;
-                let rom = ReadOnlyMemory::from_vec(data);
-                emulator
-                    .bus()
-                    .borrow_mut()
-                    .map(address, data_len, Rc::new(RefCell::new(rom)));
-                log::info!(
-                "Loading ROM \"{}\" to [{:05X}..{:05X}]",
-                path,
-                address,
-                address + data_len
-            );
-            });
-        */
-
-        if let Some(path) = matches.value_of("bios") {
-            install_bios(&emulator, path);
-        } else {
-            let data = include_bytes!("../ext/mrc_bios/bios.bin");
-            let data = Vec::from(*data);
-            let data_size = data.len() as u32;
-            let bios_start_addr = 0x100000 - data_size;
-
-            emulator.bus().borrow_mut().map(
-                bios_start_addr,
-                data_size,
-                Rc::new(RefCell::new(ReadOnlyMemory::from_vec(data))),
-            );
-        }
-
-        let text_mode_interface = Rc::new(RefCell::new(TextModeInterface::new(text_mode.clone())));
-        emulator
-            .bus()
-            .borrow_mut()
-            .map(0xB8000, 0x4000, text_mode_interface.clone());
-        emulator
-            .interrupt_controller()
-            .borrow_mut()
-            .map(0x10, text_mode_interface);
-
-        emulator.set_reset_vector(0xF000, 0xFFF0);
-
-        while emulator.tick() {}
-    });
+    let mut emulator = create_emulator(&matches, text_mode.clone());
 
     let mut last_monitor_update = Instant::now();
 
@@ -189,12 +181,24 @@ fn main() {
             return;
         }
 
-        let now = Instant::now();
+        if let Some(debugger_action) = debugger.handle_events(&event) {
+            match debugger_action {
+                DebuggerAction::Step => {
+                    emulator.tick();
+                }
+            }
+            return;
+        }
+
+        // emulator.tick();
 
         // 60 fps
+        let now = Instant::now();
         if now >= last_monitor_update + std::time::Duration::from_nanos(16_666_667) {
             last_monitor_update = now;
             screen.borrow_mut().tick();
+            debugger.update(&emulator.cpu.state);
+            debugger.tick();
         }
     });
 }
