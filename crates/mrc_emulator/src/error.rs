@@ -1,8 +1,7 @@
 use std::fmt::{Display, Formatter};
 
-use mrc_decoder::Error as DecodeError;
-
 use crate::bus::Address;
+use mrc_decoder::Error as DecodeError;
 
 #[derive(Debug)]
 pub enum Error {

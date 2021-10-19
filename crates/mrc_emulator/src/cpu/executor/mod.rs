@@ -1,14 +1,13 @@
+use crate::bus::{segment_and_offset, Address};
 use mrc_x86::{
     AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
     Operation, Register, Repeat, Segment,
 };
 
-use crate::bus::Address;
 use crate::cpu::executor::operations::{arithmetic, logic};
 use crate::cpu::Flags;
 use crate::error::{Error, Result};
 use crate::io::IOInterface;
-use crate::segment_and_offset;
 
 use super::CPU;
 
@@ -389,24 +388,23 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::In => match instruction.operands {
             OperandSet::DestinationAndSource(ref destination, ref port) => {
-                if let Some(io_controller) = &cpu.io_controller {
-                    let port = match port.1 {
-                        OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
-                        OperandSize::Word => word::get_operand_value(cpu, port)?,
-                    };
+                let port = match port.1 {
+                    OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
+                    OperandSize::Word => word::get_operand_value(cpu, port)?,
+                };
 
-                    match destination.1 {
-                        OperandSize::Byte => {
-                            let value = io_controller.borrow_mut().read(port)?;
-                            byte::set_operand_value(cpu, destination, value)?;
-                        }
-                        OperandSize::Word => {
-                            let value = io_controller.borrow_mut().read(port)? as u16;
-                            word::set_operand_value(cpu, destination, value)?;
-                        }
-                    };
-                }
+                match destination.1 {
+                    OperandSize::Byte => {
+                        let value = cpu.io_controller.borrow_mut().read(port)?;
+                        byte::set_operand_value(cpu, destination, value)?;
+                    }
+                    OperandSize::Word => {
+                        let value = cpu.io_controller.borrow_mut().read(port)? as u16;
+                        word::set_operand_value(cpu, destination, value)?;
+                    }
+                };
             }
+
             _ => illegal_operands(instruction),
         },
 
@@ -428,23 +426,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Int => match &instruction.operands {
             OperandSet::Destination(Operand(OperandType::Immediate(value), OperandSize::Byte)) => {
-                if let Some(interrupt_controller) = &cpu.interrupt_controller {
-                    interrupt_controller.borrow().handle(*value as u8, cpu);
-                }
-
-                // if *value == 0x10 {
-                // } else if *value == 0x21 {
-                //     // DOS
-                //     match cpu.state.get_word_register_value(Register::AlAx).to_le_bytes() {
-                //         [0x4C, return_code] => {
-                //             println!("INT 21h: DOS exit with return code ({})", return_code);
-                //             return Ok(ExecuteResult::Stop);
-                //         }
-                //         _ => {
-                //             println!("INT {}", value);
-                //         }
-                //     }
-                // }
+                cpu.interrupt_controller.borrow().handle(*value as u8, cpu);
             }
 
             _ => illegal_operands(instruction),
@@ -822,18 +804,16 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Out => match instruction.operands {
             OperandSet::DestinationAndSource(ref port, Operand(ref value, OperandSize::Byte)) => {
-                if let Some(io_controller) = &cpu.io_controller {
-                    let port = match port.1 {
-                        OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
-                        OperandSize::Word => word::get_operand_value(cpu, port)?,
-                    };
+                let port = match port.1 {
+                    OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
+                    OperandSize::Word => word::get_operand_value(cpu, port)?,
+                };
 
-                    let value = byte::get_operand_type_value(cpu, value)?;
-                    io_controller.borrow_mut().write(port, value)?;
+                let value = byte::get_operand_type_value(cpu, value)?;
+                cpu.io_controller.borrow_mut().write(port, value)?;
 
-                    if port == 0x60 || port == 0x80 {
-                        log::info!("POST port out ({:04X}): {:02X}", port, value);
-                    }
+                if port == 0x60 || port == 0x80 {
+                    log::info!("POST port out ({:04X}): {:02X}", port, value);
                 }
             }
 

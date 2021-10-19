@@ -7,6 +7,7 @@ use glium::glutin::{event, event_loop, window, ContextBuilder};
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
+use mrc_emulator::bus::Address;
 use mrc_emulator::cpu::CPU;
 use mrc_emulator::{BusInterface, InterruptHandler};
 use mrc_x86::Register;
@@ -523,7 +524,7 @@ impl TextModeInterface {
 }
 
 impl BusInterface for TextModeInterface {
-    fn read(&self, address: mrc_emulator::Address) -> mrc_emulator::error::Result<u8> {
+    fn read(&self, address: Address) -> mrc_emulator::error::Result<u8> {
         let text_mode = self.text_mode.borrow();
 
         let index = address as usize / 2;
@@ -540,7 +541,7 @@ impl BusInterface for TextModeInterface {
 
     fn write(
         &mut self,
-        address: mrc_emulator::Address,
+        address: Address,
         value: u8,
     ) -> mrc_emulator::error::Result<()> {
         let mut text_mode = self.text_mode.borrow_mut();

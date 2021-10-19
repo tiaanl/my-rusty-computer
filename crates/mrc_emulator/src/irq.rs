@@ -14,6 +14,10 @@ pub struct InterruptController {
 }
 
 impl InterruptController {
+    pub fn with_handlers(handlers: HashMap<u8, Rc<RefCell<dyn InterruptHandler>>>) -> Self {
+        Self { handlers }
+    }
+
     pub fn map(&mut self, interrupt: u8, handler: Rc<RefCell<dyn InterruptHandler>>) {
         self.handlers.insert(interrupt, handler);
     }

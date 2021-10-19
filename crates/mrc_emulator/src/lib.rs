@@ -1,8 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub use bus::segment_and_offset;
-pub use bus::Address;
 pub use bus::BusInterface;
 pub use irq::InterruptHandler;
 use mrc_x86::Segment;
@@ -13,6 +11,7 @@ use crate::error::Result;
 use crate::io::IOController;
 use crate::irq::InterruptController;
 
+pub mod builder;
 pub mod bus;
 pub mod cpu;
 pub mod error;
@@ -46,7 +45,7 @@ impl Default for Emulator {
             io_controller: io_controller.clone(),
             interrupt_controller: interrupt_controller.clone(),
 
-            cpu: CPU::new(bus, Some(io_controller), Some(interrupt_controller)),
+            cpu: CPU::new(bus, io_controller, interrupt_controller),
         }
     }
 }

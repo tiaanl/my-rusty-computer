@@ -252,16 +252,16 @@ impl Display for State {
 pub struct CPU {
     // TODO: This is public because ip is public.
     pub state: State,
-    io_controller: Option<Rc<RefCell<IOController>>>,
-    interrupt_controller: Option<Rc<RefCell<InterruptController>>>,
+    io_controller: Rc<RefCell<IOController>>,
+    interrupt_controller: Rc<RefCell<InterruptController>>,
     bus: Rc<RefCell<dyn BusInterface>>,
 }
 
 impl CPU {
     pub fn new(
         bus: Rc<RefCell<dyn BusInterface>>,
-        io_controller: Option<Rc<RefCell<IOController>>>,
-        interrupt_controller: Option<Rc<RefCell<InterruptController>>>,
+        io_controller: Rc<RefCell<IOController>>,
+        interrupt_controller: Rc<RefCell<InterruptController>>,
     ) -> Self {
         Self {
             state: Default::default(),

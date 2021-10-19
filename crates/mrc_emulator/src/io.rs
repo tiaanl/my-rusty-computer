@@ -38,7 +38,7 @@ impl IOInterface for IOController {
     }
 
     fn write(&mut self, port: u16, value: u8) -> Result<()> {
-        if let Some(interface) = self.interfaces.get(&port) {
+        if let Some(interface) = self.interfaces.get_mut(&port) {
             log::info!("IO: Writing {:#02X} to port {:#04X}", value, port);
             interface.borrow_mut().write(port, value)
         } else {
@@ -49,6 +49,10 @@ impl IOInterface for IOController {
 }
 
 impl IOController {
+    pub fn with_interfaces(interfaces: HashMap<u16, Rc<RefCell<dyn IOInterface>>>) -> Self {
+        Self { interfaces }
+    }
+
     pub fn map(&mut self, port: u16, interface: Rc<RefCell<dyn IOInterface>>) {
         if self.interfaces.get(&port).is_some() {
             log::warn!("Overwriting port with new interface. ({:04X})", port);

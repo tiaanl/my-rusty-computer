@@ -179,24 +179,28 @@ impl Debugger {
             text_mode.teletype_output(' ' as u8);
             self.print_register(&mut text_mode, "IP", self.state.ip);
 
-            self.print_string(&mut text_mode, "test".to_owned());
+            self.print_string(&mut text_mode, &"test".to_string());
 
             for (i, instruction) in self.instructions.iter().enumerate() {
                 text_mode.set_cursor_position(0, (3 + i) as u8);
-                self.print_string(&mut text_mode, format!("{}", instruction));
+                let s = format!("{}", instruction);
+                self.print_string(&mut text_mode, &s);
+                for _ in 0..(40 - s.len()) {
+                    self.print_string(&mut text_mode, &" ".to_string());
+                }
             }
         }
 
         self.screen.tick();
     }
 
-    fn print_string(&self, text_mode: &mut TextMode, value: String) {
-        for c in value.into_bytes() {
-            text_mode.teletype_output(c as u8);
+    fn print_string(&self, text_mode: &mut TextMode, value: &String) {
+        for c in value.as_bytes() {
+            text_mode.teletype_output(*c);
         }
     }
 
     fn print_register(&self, text_mode: &mut TextMode, name: &str, value: u16) {
-        self.print_string(text_mode, format!("{}:{:04X}", name, value));
+        self.print_string(text_mode, &format!("{}:{:04X}", name, value));
     }
 }

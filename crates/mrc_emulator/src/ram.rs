@@ -6,6 +6,10 @@ pub struct RandomAccessMemory {
 }
 
 impl RandomAccessMemory {
+    pub fn from_vec(vec: Vec<u8>) -> Self {
+        Self { data: vec }
+    }
+
     pub fn with_capacity(capacity: u32) -> Self {
         Self {
             data: vec![0; capacity as usize],

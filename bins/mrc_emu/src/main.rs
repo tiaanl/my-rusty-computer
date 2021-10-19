@@ -4,17 +4,20 @@ use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io::Read;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use clap::{App, Arg, ArgMatches};
 use debugger::Debugger;
 use glutin::event_loop::ControlFlow;
+use mrc_emulator::builder::EmulatorBuilder;
+use mrc_emulator::pic::ProgrammableInterruptController8259;
 
 use crate::debugger::DebuggerAction;
 use mrc_emulator::ram::RandomAccessMemory;
 use mrc_emulator::rom::ReadOnlyMemory;
+use mrc_emulator::shared::Shared;
 use mrc_emulator::timer::ProgrammableIntervalTimer8253;
-use mrc_emulator::Emulator;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
 
 fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
@@ -31,16 +34,7 @@ fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     Ok(data)
 }
 
-fn install_memory(emulator: &Emulator) {
-    // 640KiB RAM
-    let ram = RandomAccessMemory::with_capacity(0xA0000);
-    emulator
-        .bus()
-        .borrow_mut()
-        .map(0x00000, 0xA0000, Rc::new(RefCell::new(ram)));
-}
-
-fn install_bios(emulator: &Emulator, path: &str) {
+fn install_bios(builder: &mut EmulatorBuilder, path: &str) {
     log::info!("Loading BIOS from: {}", path);
 
     let data = match load_rom(path) {
@@ -62,43 +56,27 @@ fn install_bios(emulator: &Emulator, path: &str) {
         data_size
     );
 
-    let rom = ReadOnlyMemory::from_vec(data);
-    emulator.bus().borrow_mut().map(
+    builder.map_address(
         bios_start_addr,
         data_size as u32,
-        Rc::new(RefCell::new(rom)),
+        ReadOnlyMemory::from_vec(data),
     );
 }
 
 fn create_emulator(
-    emulator: &mut Emulator,
+    builder: &mut EmulatorBuilder,
     matches: &ArgMatches,
     text_mode: Rc<RefCell<TextMode>>,
 ) {
+    // 640KiB RAM
+    builder.map_address(0x00000, 0xA0000, RandomAccessMemory::with_capacity(0xA0000));
+
     // Install 2 programmable interrupt controllers.
-    let pit_1 = Rc::new(RefCell::new(
-        mrc_emulator::pic::ProgrammableInterruptController8259::default(),
-    ));
-    emulator
-        .io_controller()
-        .borrow_mut()
-        .map_range(0x20, 0x0F, pit_1);
+    builder.map_io_range(0x20, 0x0F, ProgrammableInterruptController8259::default());
+    builder.map_io_range(0x0A, 0x0F, ProgrammableInterruptController8259::default());
 
-    let pit_2 = Rc::new(RefCell::new(
-        mrc_emulator::pic::ProgrammableInterruptController8259::default(),
-    ));
-    emulator
-        .io_controller()
-        .borrow_mut()
-        .map_range(0xA0, 0x0F, pit_2);
-
-    let timer_8253 = Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default()));
-    emulator
-        .io_controller()
-        .borrow_mut()
-        .map_range(0x40, 0x04, timer_8253.clone());
-
-    install_memory(&emulator);
+    // Programmable Interval Timer
+    builder.map_io_range(0x40, 0x04, ProgrammableIntervalTimer8253::default());
 
     /*
     // Basic ROM just below BIOS.
@@ -138,31 +116,20 @@ fn create_emulator(
     */
 
     if let Some(path) = matches.value_of("bios") {
-        install_bios(&emulator, path);
+        install_bios(builder, path);
     } else {
         let data = include_bytes!("../ext/mrc_bios/bios.bin");
         let data = Vec::from(*data);
         let data_size = data.len() as u32;
         let bios_start_addr = 0x100000 - data_size;
 
-        emulator.bus().borrow_mut().map(
-            bios_start_addr,
-            data_size,
-            Rc::new(RefCell::new(ReadOnlyMemory::from_vec(data))),
-        );
+        builder.map_address(bios_start_addr, data_size, ReadOnlyMemory::from_vec(data));
     }
 
-    let text_mode_interface = Rc::new(RefCell::new(TextModeInterface::new(text_mode.clone())));
-    emulator
-        .bus()
-        .borrow_mut()
-        .map(0xB8000, 0x4000, text_mode_interface.clone());
-    emulator
-        .interrupt_controller()
-        .borrow_mut()
-        .map(0x10, text_mode_interface);
+    builder.map_address(0xB8000, 0x4000, TextModeInterface::new(text_mode.clone()));
+    builder.map_interrupt(0x10, TextModeInterface::new(text_mode.clone()));
 
-    emulator.set_reset_vector(0xF000, 0xFFF0);
+    builder.reset_vector(0xF000, 0xFFF0);
 }
 
 fn main() {
@@ -184,10 +151,11 @@ fn main() {
     let text_mode = Rc::new(RefCell::new(TextMode::default()));
     let screen = Rc::new(RefCell::new(Screen::new(&event_loop, text_mode.clone())));
 
-    //let mut emulator = create_emulator(&matches, text_mode.clone());
+    let mut builder = EmulatorBuilder::new();
 
-    let mut emulator = Emulator::default();
-    create_emulator(&mut emulator, &matches, text_mode.clone());
+    create_emulator(&mut builder, &matches, text_mode.clone());
+
+    let emulator = Arc::new(Shared::new(builder.build()));
 
     let mut last_monitor_update = Instant::now();
 
@@ -202,20 +170,18 @@ fn main() {
         if let Some(debugger_action) = debugger.handle_events(&event) {
             match debugger_action {
                 DebuggerAction::Step => {
-                    emulator.tick();
+                    emulator.write().tick();
                 }
             }
             return;
         }
-
-        // emulator.tick();
 
         // 60 fps
         let now = Instant::now();
         if now >= last_monitor_update + std::time::Duration::from_nanos(16_666_667) {
             last_monitor_update = now;
             screen.borrow_mut().tick();
-            debugger.update(&emulator);
+            debugger.update(emulator.read());
             debugger.tick();
         }
     });
