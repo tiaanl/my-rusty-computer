@@ -21,6 +21,9 @@ pub struct Swmr<T> {
 unsafe impl<T> Send for Swmr<T> {}
 unsafe impl<T> Sync for Swmr<T> {}
 
+// TODO: Mutable references should be behind a lock guard.  Right now this thing is not multiple
+//       writer safe.
+
 impl<T> Swmr<T> {
     pub fn new(t: T) -> Self {
         Self {
