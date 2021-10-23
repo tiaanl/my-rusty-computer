@@ -1,22 +1,6 @@
 use std::cell::{Cell, UnsafeCell};
-use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::thread::ThreadId;
-
-#[derive(Debug)]
-pub enum Error {
-    AlreadyLocked(ThreadId),
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::AlreadyLocked(thread_id) => {
-                write!(f, "Value already locked to thread. ({:?})", thread_id)
-            }
-        }
-    }
-}
 
 #[derive(Copy, Clone)]
 enum State {
@@ -49,16 +33,16 @@ impl<T> Swmr<T> {
         SwmrRef { swmr: self }
     }
 
-    pub fn borrow_mut(&self) -> Result<SwmrRefMut<T>, Error> {
+    pub fn borrow_mut(&self) -> SwmrRefMut<T> {
         let thread_id = std::thread::current().id();
 
         match self.state.get() {
             State::Unlocked => {
                 self.state.set(State::Locked(thread_id));
-                Ok(SwmrRefMut { swmr: self })
+                SwmrRefMut { swmr: self }
             }
 
-            State::Locked(thread_id) => Err(Error::AlreadyLocked(thread_id)),
+            State::Locked(thread_id) => panic!("Already locked to thread {:?}.", thread_id),
         }
     }
 }

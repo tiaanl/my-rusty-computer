@@ -1,10 +1,8 @@
 mod config;
 mod debugger;
 
-use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io::Read;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -18,6 +16,7 @@ use crate::debugger::DebuggerAction;
 use mrc_emulator::ram::RandomAccessMemory;
 use mrc_emulator::rom::ReadOnlyMemory;
 use mrc_emulator::shared::Shared;
+use mrc_emulator::swmr::Swmr;
 use mrc_emulator::timer::ProgrammableIntervalTimer8253;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
 
@@ -67,7 +66,7 @@ fn install_bios(builder: &mut EmulatorBuilder, path: &str) {
 fn create_emulator(
     builder: &mut EmulatorBuilder,
     config: &Config,
-    text_mode: Rc<RefCell<TextMode>>,
+    screen_text_mode: Arc<Swmr<TextMode>>,
 ) {
     // 640KiB RAM
     builder.map_address(0x00000, 0xA0000, RandomAccessMemory::with_capacity(0xA0000));
@@ -127,8 +126,12 @@ fn create_emulator(
         builder.map_address(bios_start_addr, data_size, ReadOnlyMemory::from_vec(data));
     }
 
-    builder.map_address(0xB8000, 0x4000, TextModeInterface::new(text_mode.clone()));
-    builder.map_interrupt(0x10, TextModeInterface::new(text_mode.clone()));
+    builder.map_address(
+        0xB8000,
+        0x4000,
+        TextModeInterface::new(screen_text_mode.clone()),
+    );
+    builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode.clone()));
 
     builder.reset_vector(0xF000, 0xFFF0);
 }
@@ -142,12 +145,11 @@ fn main() {
 
     let mut debugger = Debugger::new(&event_loop);
 
-    let text_mode = Rc::new(RefCell::new(TextMode::default()));
-    let screen = Rc::new(RefCell::new(Screen::new(&event_loop, text_mode.clone())));
+    let mut screen = Screen::new(&event_loop);
 
     let mut builder = EmulatorBuilder::new();
 
-    create_emulator(&mut builder, &config, text_mode.clone());
+    create_emulator(&mut builder, &config, screen.text_mode());
 
     let emulator = Arc::new(Shared::new(builder.build()));
 
@@ -156,7 +158,7 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
-        if let Some(cf) = screen.borrow().handle_events(&event) {
+        if let Some(cf) = screen.handle_events(&event) {
             *control_flow = cf;
             return;
         }
@@ -174,7 +176,7 @@ fn main() {
         let now = Instant::now();
         if now >= last_monitor_update + std::time::Duration::from_nanos(16_666_667) {
             last_monitor_update = now;
-            screen.borrow_mut().tick();
+            screen.tick();
             debugger.update(emulator.read());
             debugger.tick();
         }

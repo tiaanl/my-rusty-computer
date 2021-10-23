@@ -1,5 +1,4 @@
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::EventLoop;
@@ -9,6 +8,7 @@ use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
 use mrc_emulator::bus::Address;
 use mrc_emulator::cpu::CPU;
+use mrc_emulator::swmr::Swmr;
 use mrc_emulator::{BusInterface, InterruptHandler};
 use mrc_x86::Register;
 
@@ -253,11 +253,11 @@ pub struct Screen {
     vertex_buffer: Option<VertexBuffer<Character>>,
     texture: glium::Texture2d,
 
-    text_mode: Rc<RefCell<TextMode>>,
+    text_mode: Arc<Swmr<TextMode>>,
 }
 
 impl Screen {
-    pub fn new(event_loop: &EventLoop<()>, text_mode: Rc<RefCell<TextMode>>) -> Self {
+    pub fn new(event_loop: &EventLoop<()>) -> Self {
         let wb = window::WindowBuilder::new().with_title("My Rusty Computer - Emulator");
         let cb = ContextBuilder::new().with_vsync(true);
         let display = Display::new(wb, cb, event_loop).unwrap();
@@ -281,8 +281,12 @@ impl Screen {
             program,
             vertex_buffer: None,
             texture,
-            text_mode,
+            text_mode: Arc::new(Swmr::new(TextMode::default())),
         }
+    }
+
+    pub fn text_mode(&self) -> Arc<Swmr<TextMode>> {
+        self.text_mode.clone()
     }
 }
 
@@ -514,11 +518,11 @@ impl Screen {
 }
 
 pub struct TextModeInterface {
-    text_mode: Rc<RefCell<TextMode>>,
+    text_mode: Arc<Swmr<TextMode>>,
 }
 
 impl TextModeInterface {
-    pub fn new(text_mode: Rc<RefCell<TextMode>>) -> Self {
+    pub fn new(text_mode: Arc<Swmr<TextMode>>) -> Self {
         Self { text_mode }
     }
 }
@@ -539,11 +543,7 @@ impl BusInterface for TextModeInterface {
         Ok(value)
     }
 
-    fn write(
-        &mut self,
-        address: Address,
-        value: u8,
-    ) -> mrc_emulator::error::Result<()> {
+    fn write(&mut self, address: Address, value: u8) -> mrc_emulator::error::Result<()> {
         let mut text_mode = self.text_mode.borrow_mut();
 
         let index = address as usize / 2;

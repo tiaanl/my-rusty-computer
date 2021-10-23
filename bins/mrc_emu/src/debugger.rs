@@ -4,11 +4,13 @@ use glium::glutin::event_loop::EventLoop;
 use mrc_decoder::decode_instruction;
 use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::cpu::State;
+use mrc_emulator::swmr::Swmr;
 use mrc_emulator::{BusInterface, Emulator};
 use mrc_screen::{Screen, TextMode};
 use mrc_x86::{Instruction, Register, Segment};
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub enum DebuggerAction {
     Step,
@@ -40,7 +42,7 @@ impl Iterator for TempIterator {
 }
 
 pub struct Debugger {
-    text_mode: Rc<RefCell<TextMode>>,
+    text_mode: Arc<Swmr<TextMode>>,
     screen: Screen,
     state: State,
     instructions: Vec<Instruction>,
@@ -48,10 +50,10 @@ pub struct Debugger {
 
 impl Debugger {
     pub fn new(event_loop: &EventLoop<()>) -> Self {
-        let text_mode = Rc::new(RefCell::new(TextMode::default()));
+        let screen = Screen::new(event_loop);
         Self {
-            text_mode: text_mode.clone(),
-            screen: Screen::new(event_loop, text_mode),
+            text_mode: screen.text_mode(),
+            screen,
             state: State::default(),
             instructions: Vec::new(),
         }
