@@ -1,3 +1,4 @@
+mod config;
 mod debugger;
 
 use std::cell::RefCell;
@@ -7,7 +8,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 
-use clap::{App, Arg, ArgMatches};
+use config::Config;
 use debugger::Debugger;
 use glutin::event_loop::ControlFlow;
 use mrc_emulator::builder::EmulatorBuilder;
@@ -65,7 +66,7 @@ fn install_bios(builder: &mut EmulatorBuilder, path: &str) {
 
 fn create_emulator(
     builder: &mut EmulatorBuilder,
-    matches: &ArgMatches,
+    config: &Config,
     text_mode: Rc<RefCell<TextMode>>,
 ) {
     // 640KiB RAM
@@ -115,8 +116,8 @@ fn create_emulator(
         });
     */
 
-    if let Some(path) = matches.value_of("bios") {
-        install_bios(builder, path);
+    if let Some(bios_path) = &config.bios_path {
+        install_bios(builder, bios_path);
     } else {
         let data = include_bytes!("../ext/mrc_bios/bios.bin");
         let data = Vec::from(*data);
@@ -135,14 +136,7 @@ fn create_emulator(
 fn main() {
     pretty_env_logger::init();
 
-    let matches = App::new("mrc-emu")
-        .version("0.0.1")
-        .arg(
-            Arg::with_name("bios")
-                .help("Specify a file to use as the BIOS")
-                .required(false),
-        )
-        .get_matches();
+    let config = Config::default();
 
     let event_loop = glutin::event_loop::EventLoop::new();
 
@@ -153,7 +147,7 @@ fn main() {
 
     let mut builder = EmulatorBuilder::new();
 
-    create_emulator(&mut builder, &matches, text_mode.clone());
+    create_emulator(&mut builder, &config, text_mode.clone());
 
     let emulator = Arc::new(Shared::new(builder.build()));
 

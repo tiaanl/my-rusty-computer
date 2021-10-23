@@ -22,6 +22,7 @@ pub mod ram;
 pub mod rom;
 pub mod shared;
 pub mod timer;
+pub mod swmr;
 
 trait Installable {
     fn install(bus: &mut Bus) -> Result<()>;
