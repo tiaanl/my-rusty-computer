@@ -73,7 +73,7 @@ fn create_emulator(
 
     // Install 2 programmable interrupt controllers.
     builder.map_io_range(0x20, 0x0F, ProgrammableInterruptController8259::default());
-    builder.map_io_range(0x0A, 0x0F, ProgrammableInterruptController8259::default());
+    builder.map_io_range(0xA0, 0x0F, ProgrammableInterruptController8259::default());
 
     // Programmable Interval Timer
     builder.map_io_range(0x40, 0x04, ProgrammableIntervalTimer8253::default());
