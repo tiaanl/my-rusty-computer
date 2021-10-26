@@ -858,6 +858,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrc_encoder"
+version = "0.0.1"
+dependencies = [
+ "mrc_x86",
+]
+
+[[package]]
 name = "mrc_screen"
 version = "0.0.1"
 dependencies = [
