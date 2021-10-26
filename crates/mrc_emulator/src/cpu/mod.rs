@@ -278,13 +278,10 @@ impl CPU {
         let _start_cs = self.state.segments.cs;
         let _start_ip = self.state.ip;
 
-        let instruction = match decode_instruction(self) {
-            Ok(instruction) => instruction,
-            Err(err) => {
-                log::error!("CPU Error: {}", err);
-                return Err(Error::DecodeError(err));
-            }
-        };
+        let instruction = decode_instruction(self).map_err(|err| {
+            log::error!("CPU Error: {}", err);
+            Error::DecodeError(err)
+        })?;
 
         // Print instruction.
         // println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);

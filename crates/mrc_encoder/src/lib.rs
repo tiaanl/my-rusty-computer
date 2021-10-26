@@ -25,8 +25,6 @@ pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, bool> {
             ) if destination_operand_size == source_operand_size => {
                 let op_code = set_op_code_size_bit(0b10000000, destination_operand_size);
 
-                Modrm
-
                 let mut bytes = vec![op_code];
                 match destination_operand_size {
                     OperandSize::Byte => encode_immediate_byte(&mut bytes, value as u8),
