@@ -1,7 +1,7 @@
 [package]
 name = "mrc_screen"
 version = "0.0.1"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 mrc_emulator = { path = "../mrc_emulator" }

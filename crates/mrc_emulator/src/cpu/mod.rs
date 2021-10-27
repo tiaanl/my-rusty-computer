@@ -9,7 +9,7 @@ use mrc_x86::{Register, Segment};
 
 use crate::bus::{segment_and_offset, BusInterface};
 pub use crate::cpu::executor::{execute, ExecuteResult};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::io::IOController;
 use crate::irq::InterruptController;
 
@@ -45,6 +45,7 @@ struct WordRegisters {
     di: u16,
 }
 
+#[cfg(target_endian = "little")]
 #[derive(Copy, Clone, PartialEq)]
 struct ByteRegisters {
     al: u8,
@@ -55,6 +56,19 @@ struct ByteRegisters {
     dh: u8,
     bl: u8,
     bh: u8,
+}
+
+#[cfg(target_endian = "big")]
+#[derive(Copy, Clone, PartialEq)]
+struct ByteRegisters {
+    ah: u8,
+    al: u8,
+    ch: u8,
+    cl: u8,
+    dh: u8,
+    dl: u8,
+    bh: u8,
+    bl: u8,
 }
 
 #[derive(Copy, Clone)]
@@ -278,10 +292,7 @@ impl CPU {
         let _start_cs = self.state.segments.cs;
         let _start_ip = self.state.ip;
 
-        let instruction = decode_instruction(self).map_err(|err| {
-            log::error!("CPU Error: {}", err);
-            Error::DecodeError(err)
-        })?;
+        let instruction = decode_instruction(self)?;
 
         // Print instruction.
         // println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);

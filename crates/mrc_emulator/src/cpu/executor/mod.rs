@@ -4,8 +4,8 @@ use mrc_x86::{
     Operation, Register, Repeat, Segment,
 };
 
-use crate::cpu::executor::operations::{arithmetic, logic};
-use crate::cpu::Flags;
+use crate::cpu::executor::operations::{arithmetic, logic, SignificantBit};
+use crate::cpu::{Flags, State};
 use crate::error::{Error, Result};
 use crate::io::IOInterface;
 
@@ -248,14 +248,14 @@ fn pop(cpu: &mut CPU) -> Result<u16> {
     Ok(value)
 }
 
-fn displace_ip(cpu: &mut CPU, displacement: &Displacement) -> Result<()> {
+fn displace_ip(state: &mut State, displacement: &Displacement) -> Result<()> {
     match displacement {
         Displacement::None => {}
         Displacement::Byte(offset) => {
-            cpu.state.ip = ((cpu.state.ip as i32) + (*offset as i32)) as u16;
+            state.ip = ((state.ip as i32) + (*offset as i32)) as u16;
         }
         Displacement::Word(offset) => {
-            cpu.state.ip = ((cpu.state.ip as i32) + (*offset as i32)) as u16;
+            state.ip = ((state.ip as i32) + (*offset as i32)) as u16;
         }
     }
 
@@ -263,6 +263,31 @@ fn displace_ip(cpu: &mut CPU, displacement: &Displacement) -> Result<()> {
 }
 
 pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult> {
+    macro_rules! destination_and_source_ops {
+        ($operation:expr,$d:expr,$s:expr,$size:ident) => {
+            match $operation {
+                Adc => Some(arithmetic::$size::add_with_carry(
+                    $d,
+                    $s,
+                    &mut cpu.state.flags,
+                )),
+                Add => Some(arithmetic::$size::add($d, $s, &mut cpu.state.flags)),
+                And => Some(logic::$size::and($d, $s, &mut cpu.state.flags)),
+                Cmp => Some(arithmetic::$size::compare($d, $s, &mut cpu.state.flags)),
+                Mul => Some(arithmetic::$size::multiply($d, $s, &mut cpu.state.flags)),
+                Or => Some(logic::$size::or($d, $s, &mut cpu.state.flags)),
+                Rol => Some(logic::$size::rotate_left($d, $s, &mut cpu.state.flags)),
+                Ror => Some(logic::$size::rotate_right($d, $s, &mut cpu.state.flags)),
+                Shl => Some(logic::$size::shift_left($d, $s, &mut cpu.state.flags)),
+                Shr => Some(logic::$size::shift_right($d, $s, &mut cpu.state.flags)),
+                Sub => Some(arithmetic::$size::subtract($d, $s, &mut cpu.state.flags)),
+                Test => Some(logic::$size::test($d, $s, &mut cpu.state.flags)),
+                Xor => Some(logic::$size::exclusive_or($d, $s, &mut cpu.state.flags)),
+                _ => None,
+            }
+        };
+    }
+
     match instruction.operands {
         OperandSet::DestinationAndSource(
             Operand(ref destination, OperandSize::Byte),
@@ -272,23 +297,8 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
             let d = byte::get_operand_type_value(cpu, destination)?;
             let s = byte::get_operand_type_value(cpu, source)?;
-            if let Some(did_operation) = match instruction.operation {
-                Adc => Some(arithmetic::add_with_carry_byte(d, s, &mut cpu.state.flags)),
-                Add => Some(arithmetic::add_byte(d, s, &mut cpu.state.flags)),
-                And => Some(logic::and_byte(d, s, &mut cpu.state.flags)),
-                Cmp => Some(arithmetic::compare_byte(d, s, &mut cpu.state.flags)),
-                Mul => Some(arithmetic::multiply_byte(d, s, &mut cpu.state.flags)),
-                Or => Some(logic::or_byte(d, s, &mut cpu.state.flags)),
-                Rol => Some(logic::rotate_left_byte(d, s, &mut cpu.state.flags)),
-                Ror => Some(logic::rotate_right_byte(d, s, &mut cpu.state.flags)),
-                Shl => Some(logic::shift_left_byte(d, s, &mut cpu.state.flags)),
-                Shr => Some(logic::shift_right_byte(d, s, &mut cpu.state.flags)),
-                Sub => Some(arithmetic::subtract_byte(d, s, &mut cpu.state.flags)),
-                Test => Some(logic::test_byte(d, s, &mut cpu.state.flags)),
-                Xor => Some(logic::exclusive_or_byte(d, s, &mut cpu.state.flags)),
-                _ => None,
-            } {
-                if let Some(result) = did_operation {
+            if let Some(result) = destination_and_source_ops!(instruction.operation, d, s, byte) {
+                if let Some(result) = result {
                     byte::set_operand_type_value(cpu, destination, result)?;
                 }
                 return Ok(ExecuteResult::Continue);
@@ -303,23 +313,8 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
             let d = word::get_operand_type_value(cpu, destination)?;
             let s = word::get_operand_type_value(cpu, source)?;
-            if let Some(did_operation) = match instruction.operation {
-                Adc => Some(arithmetic::add_with_carry_word(d, s, &mut cpu.state.flags)),
-                Add => Some(arithmetic::add_word(d, s, &mut cpu.state.flags)),
-                And => Some(logic::and_word(d, s, &mut cpu.state.flags)),
-                Cmp => Some(arithmetic::compare_word(d, s, &mut cpu.state.flags)),
-                Mul => Some(arithmetic::multiply_word(d, s, &mut cpu.state.flags)),
-                Or => Some(logic::or_word(d, s, &mut cpu.state.flags)),
-                Rol => Some(logic::rotate_left_word(d, s, &mut cpu.state.flags)),
-                Ror => Some(logic::rotate_right_word(d, s, &mut cpu.state.flags)),
-                Shl => Some(logic::shift_left_word(d, s, &mut cpu.state.flags)),
-                Shr => Some(logic::shift_right_word(d, s, &mut cpu.state.flags)),
-                Sub => Some(arithmetic::subtract_word(d, s, &mut cpu.state.flags)),
-                Test => Some(logic::test_word(d, s, &mut cpu.state.flags)),
-                Xor => Some(logic::exclusive_or_word(d, s, &mut cpu.state.flags)),
-                _ => None,
-            } {
-                if let Some(result) = did_operation {
+            if let Some(result) = destination_and_source_ops!(instruction.operation, d, s, word) {
+                if let Some(result) = result {
                     word::set_operand_type_value(cpu, destination, result)?;
                 }
                 return Ok(ExecuteResult::Continue);
@@ -335,14 +330,14 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 // Store the current IP (which is after this CALL) on the stack. So that RET
                 // can pop it.
                 push(cpu, cpu.state.ip)?;
-                displace_ip(cpu, displacement)?;
+                displace_ip(&mut cpu.state, displacement)?;
             }
             _ => todo!(),
         },
 
         Operation::Cbw => {
             let al = cpu.state.get_byte_register_value(Register::AlAx);
-            if al & 0b10000000 != 0 {
+            if al.most_significant_bit() {
                 cpu.state
                     .set_byte_register_value(Register::AhSp, 0b11111111);
             } else {
@@ -449,7 +444,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jb => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::CARRY) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -458,7 +453,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jbe => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::CARRY | Flags::ZERO) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -467,7 +462,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jcxz => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.get_word_register_value(Register::ClCx) == 0 {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -476,7 +471,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Je => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::ZERO) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -487,7 +482,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 if cpu.state.flags.contains(Flags::SIGN)
                     != cpu.state.flags.contains(Flags::OVERFLOW)
                 {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -498,7 +493,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 if cpu.state.flags.contains(Flags::SIGN)
                     == cpu.state.flags.contains(Flags::OVERFLOW)
                 {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -510,7 +505,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                     || cpu.state.flags.contains(Flags::SIGN)
                         != cpu.state.flags.contains(Flags::OVERFLOW)
                 {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -518,7 +513,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
 
         Operation::Jmp => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
-                displace_ip(cpu, displacement)?;
+                displace_ip(&mut cpu.state, displacement)?;
             }
             OperandSet::SegmentAndOffset(segment, offset) => {
                 cpu.state.set_segment_value(Segment::Cs, *segment);
@@ -530,7 +525,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jnb => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::CARRY) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -540,7 +535,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::CARRY) && !cpu.state.flags.contains(Flags::ZERO)
                 {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -549,7 +544,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jne => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::ZERO) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -558,7 +553,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jno => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::OVERFLOW) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -567,7 +562,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jnp => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::PARITY) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -576,7 +571,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jns => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::SIGN) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -585,7 +580,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jo => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::OVERFLOW) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -594,7 +589,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Jp => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::PARITY) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -603,7 +598,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Js => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::SIGN) {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -636,7 +631,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 cpu.state.set_word_register_value(Register::ClCx, cx);
 
                 if cx > 0 {
-                    displace_ip(cpu, displacement)?;
+                    displace_ip(&mut cpu.state, displacement)?;
                 }
             }
             _ => illegal_operands(instruction),
@@ -725,7 +720,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                     Operation::Scasb => {
                         let destination = byte::bus_read(cpu, segment_and_offset(ds, si))?;
                         let source = byte::bus_read(cpu, segment_and_offset(es, di))?;
-                        let _ = operations::arithmetic::compare_byte(
+                        let _ = operations::arithmetic::byte::compare(
                             destination,
                             source,
                             &mut cpu.state.flags,
@@ -735,7 +730,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                     Operation::Scasw => {
                         let destination = word::bus_read(cpu, segment_and_offset(ds, si))?;
                         let source = word::bus_read(cpu, segment_and_offset(es, di))?;
-                        let _ = operations::arithmetic::compare_word(
+                        let _ = operations::arithmetic::word::compare(
                             destination,
                             source,
                             &mut cpu.state.flags,
@@ -788,13 +783,13 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Not => match instruction.operands {
             OperandSet::Destination(Operand(ref destination, OperandSize::Byte)) => {
                 let value = byte::get_operand_type_value(cpu, destination)?;
-                if let Some(result) = logic::not_byte(value) {
+                if let Some(result) = logic::byte::not(value) {
                     byte::set_operand_type_value(cpu, destination, result)?;
                 }
             }
             OperandSet::Destination(Operand(ref destination, OperandSize::Word)) => {
                 let value = word::get_operand_type_value(cpu, destination)?;
-                if let Some(result) = logic::not_word(value) {
+                if let Some(result) = logic::word::not(value) {
                     word::set_operand_type_value(cpu, destination, result)?;
                 }
             }
@@ -852,10 +847,10 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 let s = cpu.state.get_byte_register_value(Register::ClCx) as u16;
                 let result = match instruction.operation {
                     Operation::Shl => {
-                        operations::logic::shift_left_word(d, s, &mut cpu.state.flags).unwrap()
+                        operations::logic::word::shift_left(d, s, &mut cpu.state.flags).unwrap()
                     }
                     Operation::Shr => {
-                        operations::logic::shift_right_word(d, s, &mut cpu.state.flags).unwrap()
+                        operations::logic::word::shift_right(d, s, &mut cpu.state.flags).unwrap()
                     }
                     _ => unreachable!(),
                 };

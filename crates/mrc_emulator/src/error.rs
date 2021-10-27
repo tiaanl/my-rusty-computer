@@ -35,3 +35,9 @@ impl Display for Error {
         }
     }
 }
+
+impl From<DecodeError> for Error {
+    fn from(err: DecodeError) -> Self {
+        Error::DecodeError(err)
+    }
+}
