@@ -10,21 +10,6 @@ use mrc_x86::{
 pub type DecodeFn<It> = fn(u8, &mut It) -> Result<Instruction>;
 pub type DecodeFnMap<It> = [Option<DecodeFn<It>>; 256];
 
-#[macro_export]
-macro_rules! decode_fn_map_operations {
-    () => {{
-        [mrc_decoder::operations::immediate_to_register_memory]
-    }};
-}
-
-#[macro_export]
-macro_rules! decode_fn_map {
-    ($iterator_type:tt,$name:ident) => {
-        const $name: mrc_decoder::DecodeFnMap<$iterator_type> =
-            mrc_decoder::decode_fn_map_operations!();
-    };
-}
-
 fn group1_operation(op_code: u8) -> Operation {
     match (op_code >> 3) & 0b111 {
         0b000 => Operation::Add,
@@ -187,13 +172,12 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
                 0b01 => Operation::Das,
                 0b10 => Operation::Aaa,
                 0b11 => Operation::Aas,
-                _ => return Err(Error::InvalidOpCode(op_code)),
+                _ => unreachable!(),
             },
             OperandSet::None,
         )),
 
-        0x40 | 0x41 | 0x42 | 0x43 | 0x44 | 0x45 | 0x46 | 0x47 | 0x48 | 0x49 | 0x4A | 0x4B
-        | 0x4C | 0x4D | 0x4E | 0x4F => {
+        0x40..=0x4F => {
             let register = Register::try_from_low_bits(op_code & 0b111)?;
 
             Ok(Instruction::new(
@@ -209,8 +193,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
 
-        0x50 | 0x51 | 0x52 | 0x53 | 0x54 | 0x55 | 0x56 | 0x57 | 0x58 | 0x59 | 0x5A | 0x5B
-        | 0x5C | 0x5D | 0x5E | 0x5F => Ok(Instruction::new(
+        0x50..=0x5F => Ok(Instruction::new(
             if (op_code >> 3) & 0b1 == 0 {
                 Operation::Push
             } else {
@@ -222,13 +205,12 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             )),
         )),
 
-        0x70 | 0x71 | 0x72 | 0x73 | 0x74 | 0x75 | 0x76 | 0x77 | 0x78 | 0x79 | 0x7A | 0x7B
-        | 0x7C | 0x7D | 0x7E | 0x7F => Ok(Instruction::new(
+        0x70..=0x7F => Ok(Instruction::new(
             jump_operation_from_low_bits(op_code & 0b1111),
             displacement_byte_from_it(it)?,
         )),
 
-        0x80 | 0x81 | 0x82 | 0x83 => {
+        0x80..=0x83 => {
             let s = (op_code >> 1) & 1 == 1;
             let w = OperandSize::try_from_low_bits(op_code & 0b1)?;
             let modrm_byte = match it.next() {
@@ -286,7 +268,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
 
-        0x88 | 0x89 | 0x8A | 0x8B => {
+        0x88..=0x8B => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
             let direction = op_code >> 1 & 0b1;
             let modrm = Modrm::try_from_iter(it)?;
@@ -356,7 +338,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0x90 => Ok(Instruction::new(Operation::Nop, OperandSet::None)),
 
-        0x91 | 0x92 | 0x93 | 0x94 | 0x95 | 0x96 | 0x97 => {
+        0x91..=0x97 => {
             let operand_size = OperandSize::Word;
             let destination = Operand(OperandType::Register(Register::AlAx), operand_size);
             let source = Operand(
@@ -392,7 +374,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0x9F => Ok(Instruction::new(Operation::Lahf, OperandSet::None)),
 
-        0xA0 | 0xA1 | 0xA2 | 0xA3 => {
+        0xA0..=0xA3 => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
             let direction = op_code >> 1 & 0b1;
 
@@ -463,8 +445,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
 
-        0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB6 | 0xB7 | 0xB8 | 0xB9 | 0xBA | 0xBB
-        | 0xBC | 0xBD | 0xBE | 0xBF => {
+        0xB0..=0xBF => {
             let operand_size = OperandSize::try_from_low_bits(op_code >> 3 & 0b1)?;
 
             let destination = Operand(
@@ -583,7 +564,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0xCF => Ok(Instruction::new(Operation::Iret, OperandSet::None)),
 
-        0xD0 | 0xD1 | 0xD2 | 0xD3 => {
+        0xD0..=0xD3 => {
             let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
             let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
@@ -616,13 +597,13 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0xD7 => Ok(Instruction::new(Operation::Xlat, OperandSet::None)),
 
-        0xD8 | 0xD9 | 0xDA | 0xDB | 0xDC | 0xDD | 0xDE | 0xDF => {
+        0xD8..=0xDF => {
             // For now, just consume the byte.
             let _ = Modrm::try_from_iter(it)?;
             Ok(Instruction::new(Operation::Esc, OperandSet::None))
         }
 
-        0xE0 | 0xE1 | 0xE2 | 0xE3 => Ok(Instruction::new(
+        0xE0..=0xE3 => Ok(Instruction::new(
             match op_code {
                 0xE0 => Operation::Loopnz,
                 0xE1 => Operation::Loopz,
