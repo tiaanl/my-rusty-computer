@@ -836,7 +836,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             cpu.state.ip = pop(cpu)?;
         }
 
-        // Shift left/right has a special case there a word value can be shifted by cl, which is a byte.
+        // Shift left/right has a special case where a word value can be shifted by cl, which is a byte.
         Operation::Shl | Operation::Shr => {
             if let OperandSet::DestinationAndSource(
                 Operand(ref destination, OperandSize::Word),
