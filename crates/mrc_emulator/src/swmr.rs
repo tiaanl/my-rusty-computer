@@ -89,6 +89,7 @@ impl<'a, T> Drop for SwmrRefMut<'a, T> {
     }
 }
 
+/*
 #[cfg(test)]
 mod test {
     use super::*;
@@ -134,3 +135,4 @@ mod test {
         handle.join().unwrap();
     }
 }
+*/
