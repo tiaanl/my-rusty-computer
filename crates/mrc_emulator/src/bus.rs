@@ -1,5 +1,6 @@
 use crate::error::Result;
 use std::cell::RefCell;
+use std::ops::Range;
 use std::rc::Rc;
 
 pub type Address = u32;
@@ -15,14 +16,13 @@ pub trait BusInterface {
 }
 
 pub struct InterfaceContainer {
-    pub start_address: Address,
-    pub size: u32,
+    pub range: Range<Address>,
     pub interface: Box<dyn BusInterface>,
 }
 
 impl InterfaceContainer {
     fn contains(&self, address: Address) -> bool {
-        address >= self.start_address && address < self.start_address + self.size
+        self.range.contains(&address)
     }
 }
 
@@ -38,19 +38,11 @@ impl Bus {
         Self { interfaces }
     }
 
-    pub fn map(&mut self, start_address: Address, size: u32, interface: Box<dyn BusInterface>) {
-        // TODO: Check for overlapping ranges.
+    pub fn map(&mut self, range: Range<Address>, interface: impl BusInterface + 'static) {
         self.interfaces.push(InterfaceContainer {
-            start_address,
-            size,
-            interface,
-        });
-
-        self.interfaces.sort_by(|left, right| {
-            left.start_address
-                .partial_cmp(&right.start_address)
-                .unwrap()
-        });
+            range,
+            interface: Box::new(interface),
+        })
     }
 }
 
@@ -61,7 +53,7 @@ impl BusInterface for Bus {
             .iter()
             .find(|interface| interface.contains(address))
         {
-            container.interface.read(address - container.start_address)
+            container.interface.read(address - container.range.start)
         } else {
             // Err(Error::AddressNotMapped(address))
             // log::warn!("Reading from unmapped memory: [{:05X}]", address);
@@ -78,7 +70,7 @@ impl BusInterface for Bus {
             container
                 .interface
                 .as_mut()
-                .write(address - container.start_address, value)
+                .write(address - container.range.start, value)
         } else {
             // Err(Error::AddressNotMapped(address))
             // log::warn!(
@@ -116,59 +108,56 @@ mod test {
     use super::super::error::Result;
     use super::*;
     use crate::ram::RandomAccessMemory;
-    use std::cell::Cell;
 
     #[test]
     fn can_read_write_through_bus() {
+        #[derive(Default)]
+        struct TestState {
+            reads: isize,
+            writes: isize,
+        }
+
         struct TestInterface {
-            reads: Cell<isize>,
-            writes: Cell<isize>,
+            state: Rc<RefCell<TestState>>,
         }
 
         impl TestInterface {
-            pub fn new() -> Self {
-                Self {
-                    reads: Cell::new(0),
-                    writes: Cell::new(0),
-                }
+            pub fn new(state: Rc<RefCell<TestState>>) -> Self {
+                Self { state }
             }
         }
 
         impl BusInterface for TestInterface {
             fn read(&self, _address: Address) -> Result<u8> {
-                self.reads.set(self.reads.get() + 1);
+                self.state.borrow_mut().reads += 1;
                 Ok(0)
             }
 
             fn write(&mut self, _address: Address, _value: u8) -> Result<()> {
-                self.writes.set(self.writes.get() + 1);
+                self.state.borrow_mut().writes += 1;
                 Ok(())
             }
         }
 
-        let test_interface = Rc::new(RefCell::new(TestInterface::new()));
-
         let mut bus = Bus::default();
-        bus.map(
-            0x00000,
-            0xFF,
-            Box::new(WrappingBusInterface::new(test_interface.clone())),
-        );
+
+        let state = Rc::new(RefCell::new(TestState::default()));
+        let test_interface = TestInterface::new(state.clone());
+        bus.map(0x00..0xFF, test_interface);
 
         bus.read(0x0).unwrap();
         bus.write(0x0, 0x0).unwrap();
         bus.read(0x1000).unwrap();
         bus.write(0x1000, 0x0).unwrap();
 
-        assert_eq!(1, test_interface.borrow().reads.get());
-        assert_eq!(1, test_interface.borrow().writes.get());
+        assert_eq!(1, state.borrow().reads);
+        assert_eq!(1, state.borrow().writes);
     }
 
     #[test]
     fn with_interfaces() {
         let interfaces = vec![InterfaceContainer {
-            start_address: 0x0,
-            size: 0x1,
+            range: 0x0..0x1,
             interface: Box::new(RandomAccessMemory::from_vec(vec![0x01])),
         }];
         let bus = Bus::with_interfaces(interfaces);

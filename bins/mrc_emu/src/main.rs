@@ -57,8 +57,7 @@ fn install_bios(builder: &mut EmulatorBuilder, path: &str) {
     );
 
     builder.map_address(
-        bios_start_addr,
-        data_size as u32,
+        bios_start_addr..bios_start_addr + (data_size as u32),
         ReadOnlyMemory::from_vec(data),
     );
 }
@@ -69,7 +68,7 @@ fn create_emulator(
     screen_text_mode: Arc<Swmr<TextMode>>,
 ) {
     // 640KiB RAM
-    builder.map_address(0x00000, 0xA0000, RandomAccessMemory::with_capacity(0xA0000));
+    builder.map_address(0x00000..0xA0000, RandomAccessMemory::with_capacity(0xA0000));
 
     // Install 2 programmable interrupt controllers.
     builder.map_io_range(0x20, 0x0F, ProgrammableInterruptController8259::default());
@@ -123,12 +122,14 @@ fn create_emulator(
         let data_size = data.len() as u32;
         let bios_start_addr = 0x100000 - data_size;
 
-        builder.map_address(bios_start_addr, data_size, ReadOnlyMemory::from_vec(data));
+        builder.map_address(
+            bios_start_addr..bios_start_addr + data_size,
+            ReadOnlyMemory::from_vec(data),
+        );
     }
 
     builder.map_address(
-        0xB8000,
-        0x4000,
+        0xB8000..0xBC000,
         TextModeInterface::new(screen_text_mode.clone()),
     );
     builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode.clone()));

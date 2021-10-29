@@ -1,5 +1,5 @@
-pub mod arithmetic;
-pub mod logic;
+mod arithmetic;
+mod logic;
 
 pub trait SignificantBit {
     fn least_significant_bit(&self) -> bool;
@@ -69,6 +69,11 @@ pub mod byte {
         flags.set(Flags::SIGN, result.most_significant_bit());
         flags.set(Flags::PARITY, super::parity_for(result));
     }
+
+    pub use super::arithmetic::byte::{add, add_with_carry, compare, multiply, subtract};
+    pub use super::logic::byte::{
+        and, exclusive_or, not, or, rotate_left, rotate_right, shift_left, shift_right, test,
+    };
 }
 
 pub mod word {
@@ -80,4 +85,9 @@ pub mod word {
         flags.set(Flags::SIGN, result.most_significant_bit());
         flags.set(Flags::PARITY, super::parity_for(result as u8));
     }
+
+    pub use super::arithmetic::word::{add, add_with_carry, compare, multiply, subtract};
+    pub use super::logic::word::{
+        and, exclusive_or, not, or, rotate_left, rotate_right, shift_left, shift_right, test,
+    };
 }

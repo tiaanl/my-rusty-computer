@@ -4,7 +4,7 @@ use mrc_x86::{
     Operation, Register, Repeat, Segment,
 };
 
-use crate::cpu::executor::operations::{arithmetic, logic, SignificantBit};
+use crate::cpu::executor::operations::SignificantBit;
 use crate::cpu::{Flags, State};
 use crate::error::{Error, Result};
 use crate::io::IOInterface;
@@ -266,23 +266,31 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
     macro_rules! destination_and_source_ops {
         ($operation:expr,$d:expr,$s:expr,$size:ident) => {
             match $operation {
-                Adc => Some(arithmetic::$size::add_with_carry(
+                Adc => Some(operations::$size::add_with_carry(
                     $d,
                     $s,
                     &mut cpu.state.flags,
                 )),
-                Add => Some(arithmetic::$size::add($d, $s, &mut cpu.state.flags)),
-                And => Some(logic::$size::and($d, $s, &mut cpu.state.flags)),
-                Cmp => Some(arithmetic::$size::compare($d, $s, &mut cpu.state.flags)),
-                Mul => Some(arithmetic::$size::multiply($d, $s, &mut cpu.state.flags)),
-                Or => Some(logic::$size::or($d, $s, &mut cpu.state.flags)),
-                Rol => Some(logic::$size::rotate_left($d, $s, &mut cpu.state.flags)),
-                Ror => Some(logic::$size::rotate_right($d, $s, &mut cpu.state.flags)),
-                Shl => Some(logic::$size::shift_left($d, $s, &mut cpu.state.flags)),
-                Shr => Some(logic::$size::shift_right($d, $s, &mut cpu.state.flags)),
-                Sub => Some(arithmetic::$size::subtract($d, $s, &mut cpu.state.flags)),
-                Test => Some(logic::$size::test($d, $s, &mut cpu.state.flags)),
-                Xor => Some(logic::$size::exclusive_or($d, $s, &mut cpu.state.flags)),
+                Add => Some(operations::$size::add($d, $s, &mut cpu.state.flags)),
+                And => Some(operations::$size::and($d, $s, &mut cpu.state.flags)),
+                Cmp => Some(operations::$size::compare($d, $s, &mut cpu.state.flags)),
+                Mul => Some(operations::$size::multiply($d, $s, &mut cpu.state.flags)),
+                Or => Some(operations::$size::or($d, $s, &mut cpu.state.flags)),
+                Rol => Some(operations::$size::rotate_left($d, $s, &mut cpu.state.flags)),
+                Ror => Some(operations::$size::rotate_right(
+                    $d,
+                    $s,
+                    &mut cpu.state.flags,
+                )),
+                Shl => Some(operations::$size::shift_left($d, $s, &mut cpu.state.flags)),
+                Shr => Some(operations::$size::shift_right($d, $s, &mut cpu.state.flags)),
+                Sub => Some(operations::$size::subtract($d, $s, &mut cpu.state.flags)),
+                Test => Some(operations::$size::test($d, $s, &mut cpu.state.flags)),
+                Xor => Some(operations::$size::exclusive_or(
+                    $d,
+                    $s,
+                    &mut cpu.state.flags,
+                )),
                 _ => None,
             }
         };
@@ -720,21 +728,15 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                     Operation::Scasb => {
                         let destination = byte::bus_read(cpu, segment_and_offset(ds, si))?;
                         let source = byte::bus_read(cpu, segment_and_offset(es, di))?;
-                        let _ = operations::arithmetic::byte::compare(
-                            destination,
-                            source,
-                            &mut cpu.state.flags,
-                        );
+                        let _ =
+                            operations::byte::compare(destination, source, &mut cpu.state.flags);
                     }
 
                     Operation::Scasw => {
                         let destination = word::bus_read(cpu, segment_and_offset(ds, si))?;
                         let source = word::bus_read(cpu, segment_and_offset(es, di))?;
-                        let _ = operations::arithmetic::word::compare(
-                            destination,
-                            source,
-                            &mut cpu.state.flags,
-                        );
+                        let _ =
+                            operations::word::compare(destination, source, &mut cpu.state.flags);
                     }
 
                     _ => unreachable!(),
@@ -783,13 +785,13 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         Operation::Not => match instruction.operands {
             OperandSet::Destination(Operand(ref destination, OperandSize::Byte)) => {
                 let value = byte::get_operand_type_value(cpu, destination)?;
-                if let Some(result) = logic::byte::not(value) {
+                if let Some(result) = operations::byte::not(value) {
                     byte::set_operand_type_value(cpu, destination, result)?;
                 }
             }
             OperandSet::Destination(Operand(ref destination, OperandSize::Word)) => {
                 let value = word::get_operand_type_value(cpu, destination)?;
-                if let Some(result) = logic::word::not(value) {
+                if let Some(result) = operations::word::not(value) {
                     word::set_operand_type_value(cpu, destination, result)?;
                 }
             }
@@ -847,10 +849,10 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
                 let s = cpu.state.get_byte_register_value(Register::ClCx) as u16;
                 let result = match instruction.operation {
                     Operation::Shl => {
-                        operations::logic::word::shift_left(d, s, &mut cpu.state.flags).unwrap()
+                        operations::word::shift_left(d, s, &mut cpu.state.flags).unwrap()
                     }
                     Operation::Shr => {
-                        operations::logic::word::shift_right(d, s, &mut cpu.state.flags).unwrap()
+                        operations::word::shift_right(d, s, &mut cpu.state.flags).unwrap()
                     }
                     _ => unreachable!(),
                 };

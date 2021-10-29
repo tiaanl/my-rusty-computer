@@ -6,6 +6,7 @@ use crate::{BusInterface, Emulator, InterruptHandler};
 use mrc_x86::Segment;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::Range;
 use std::rc::Rc;
 
 pub struct EmulatorBuilder {
@@ -32,13 +33,11 @@ impl EmulatorBuilder {
 
     pub fn map_address(
         &mut self,
-        start_address: Address,
-        size: u32,
+        range: Range<Address>,
         interface: impl BusInterface + 'static,
     ) -> &mut Self {
         self.bus_interfaces.push(InterfaceContainer {
-            start_address,
-            size,
+            range,
             interface: Box::new(interface),
         });
         self
