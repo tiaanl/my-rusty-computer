@@ -224,7 +224,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
                 // Sign extended byte into word.
                 Operand(
                     OperandType::Immediate(it_read_byte(it)? as u16),
-                    OperandSize::Word,
+                    OperandSize::Byte,
                 )
             } else {
                 Operand(

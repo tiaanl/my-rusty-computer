@@ -1,6 +1,6 @@
 use clap::{App, Arg};
 
-const BIOS_ARG: &'static str = "bios";
+const BIOS_ARG: &str = "bios";
 
 pub struct Config {
     pub bios_path: Option<String>,

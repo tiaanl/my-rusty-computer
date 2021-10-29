@@ -80,27 +80,26 @@ impl Debugger {
 
     pub fn handle_events(&self, event: &Event<()>) -> Option<DebuggerAction> {
         match event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::KeyboardInput { input, .. } => {
-                    if input.state == ElementState::Pressed {
-                        match input.virtual_keycode {
-                            None => None,
-                            Some(code) => match code {
-                                VirtualKeyCode::F10 => Some(DebuggerAction::Step),
-                                _ => None,
-                            },
-                        }
-                    } else {
-                        None
+            Event::WindowEvent {
+                event: WindowEvent::KeyboardInput { input, .. },
+                ..
+            } => {
+                if input.state == ElementState::Pressed {
+                    match input.virtual_keycode {
+                        Some(code) if code == VirtualKeyCode::F10 => Some(DebuggerAction::Step),
+                        _ => None,
                     }
+                } else {
+                    None
                 }
-                _ => None,
-            },
+            }
             _ => None,
         }
     }
 
     pub fn tick(&mut self) {
+        #![allow(clippy::char_lit_as_u8)]
+
         {
             let mut text_mode = self.text_mode.borrow_mut();
             text_mode.set_cursor_position(0, 0);
@@ -196,7 +195,7 @@ impl Debugger {
         self.screen.tick();
     }
 
-    fn print_string(&self, text_mode: &mut TextMode, value: &String) {
+    fn print_string(&self, text_mode: &mut TextMode, value: &str) {
         for c in value.as_bytes() {
             text_mode.teletype_output(*c);
         }

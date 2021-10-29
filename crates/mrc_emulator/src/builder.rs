@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
+#[derive(Default)]
 pub struct EmulatorBuilder {
     reset_vector: Option<(u16, u16)>,
     bus_interfaces: Vec<InterfaceContainer>,
@@ -17,15 +18,6 @@ pub struct EmulatorBuilder {
 }
 
 impl EmulatorBuilder {
-    pub fn new() -> Self {
-        Self {
-            reset_vector: None,
-            bus_interfaces: vec![],
-            io_interfaces: HashMap::new(),
-            interrupt_handlers: HashMap::new(),
-        }
-    }
-
     pub fn reset_vector(&mut self, segment: u16, offset: u16) -> &mut Self {
         self.reset_vector = Some((segment, offset));
         self

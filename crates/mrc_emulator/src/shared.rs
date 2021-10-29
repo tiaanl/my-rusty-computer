@@ -15,6 +15,7 @@ impl<T> Shared<T> {
         unsafe { &*self.inner.get() }
     }
 
+    #[allow(clippy::mut_from_ref)]
     pub fn write(&self) -> &mut T {
         unsafe { &mut *self.inner.get() }
     }

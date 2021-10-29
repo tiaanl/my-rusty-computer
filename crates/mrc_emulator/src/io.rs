@@ -27,9 +27,9 @@ pub struct IOController {
 impl IOInterface for IOController {
     fn read(&self, port: u16) -> Result<u8> {
         if let Some(interface) = self.interfaces.get(&port) {
-            interface.borrow().read(port).and_then(|value| {
+            interface.borrow().read(port).map(|value| {
                 log::info!("Read {:#02X} from port {:#04X}", value, port);
-                Ok(value)
+                value
             })
         } else {
             log::warn!("Reading from unmapped port. ({:04X})", port);

@@ -20,7 +20,7 @@ pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, bool> {
             // Reg./Memory with Register to Either 0 0 0 0 0 0 d w mod reg r/m
             // Immediate to Register/Memory 1 0 0 0 0 0 s w mod 0 0 0 r/m data data if s: w e 01
             OperandSet::DestinationAndSource(
-                Operand(ref destination, destination_operand_size),
+                Operand(_, destination_operand_size),
                 Operand(OperandType::Immediate(value), source_operand_size),
             ) if destination_operand_size == source_operand_size => {
                 let op_code = set_op_code_size_bit(0b10000000, destination_operand_size);

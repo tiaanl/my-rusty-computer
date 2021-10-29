@@ -89,10 +89,6 @@ impl PartialEq for Registers {
     fn eq(&self, other: &Self) -> bool {
         unsafe { self.word == other.word }
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        unsafe { self.word != other.word }
-    }
 }
 
 #[derive(Copy, Clone, Default, PartialEq)]

@@ -132,7 +132,7 @@ fn create_emulator(
         0xB8000..0xBC000,
         TextModeInterface::new(screen_text_mode.clone()),
     );
-    builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode.clone()));
+    builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode));
 
     builder.reset_vector(0xF000, 0xFFF0);
 }
@@ -148,7 +148,7 @@ fn main() {
 
     let mut screen = Screen::new(&event_loop);
 
-    let mut builder = EmulatorBuilder::new();
+    let mut builder = EmulatorBuilder::default();
 
     create_emulator(&mut builder, &config, screen.text_mode());
 
