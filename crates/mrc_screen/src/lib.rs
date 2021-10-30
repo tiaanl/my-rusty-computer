@@ -7,10 +7,8 @@ use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
 use mrc_emulator::bus::Address;
-use mrc_emulator::cpu::CPU;
 use mrc_emulator::swmr::Swmr;
-use mrc_emulator::{BusInterface, InterruptHandler};
-use mrc_x86::Register;
+use mrc_emulator::BusInterface;
 
 // const VGA_FONT: [u8; 1 * 8] = [
 //     0x7e,  // .111111.
@@ -559,6 +557,7 @@ impl BusInterface for TextModeInterface {
     }
 }
 
+/*
 impl InterruptHandler for TextModeInterface {
     fn handle(&mut self, cpu: &CPU) {
         let ah = cpu.state.get_byte_register_value(Register::AhSp);
@@ -684,3 +683,4 @@ impl InterruptHandler for TextModeInterface {
         }
     }
 }
+*/

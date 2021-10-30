@@ -427,9 +427,10 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             _ => illegal_operands(instruction),
         },
 
-        Operation::Int => match &instruction.operands {
-            OperandSet::Destination(Operand(OperandType::Immediate(value), OperandSize::Byte)) => {
-                cpu.interrupt_controller.borrow().handle(*value as u8, cpu);
+        Operation::Int => match instruction.operands {
+            OperandSet::Destination(Operand(OperandType::Immediate(index), OperandSize::Byte)) => {
+                // cpu.interrupt_controller.borrow().handle(index as u8, cpu);
+                log::info!("Calling interrupt {:02X}", index);
             }
 
             _ => illegal_operands(instruction),
@@ -861,8 +862,15 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
         }
 
         Operation::Sahf => {
-            let ah = cpu.state.get_byte_register_value(Register::AhSp);
-            cpu.state.flags.bits = u16::from_le_bytes([ah, 0]);
+            // EFLAGS(SF:ZF:0:AF:0:PF:1:CF) = AH;
+
+            let mut ah = cpu.state.get_byte_register_value(Register::AhSp);
+
+            let mut flags = Flags::from_bits(u16::from(ah)).unwrap();
+            flags.insert(Flags::_UNDEFINED_1);
+            flags.remove(Flags::_UNDEFINED_3 | Flags::_UNDEFINED_5);
+
+            cpu.state.flags.bits = u16::from_le_bytes(flags.bits.to_le_bytes());
         }
 
         Operation::Stc => {

@@ -3,7 +3,7 @@ use glium::glutin::event::{ElementState, Event};
 use glium::glutin::event_loop::EventLoop;
 use mrc_decoder::decode_instruction;
 use mrc_emulator::bus::segment_and_offset;
-use mrc_emulator::cpu::State;
+use mrc_emulator::cpu::{Flags, State};
 use mrc_emulator::swmr::Swmr;
 use mrc_emulator::{BusInterface, Emulator};
 use mrc_screen::{Screen, TextMode};
@@ -180,7 +180,31 @@ impl Debugger {
             text_mode.teletype_output(' ' as u8);
             self.print_register(&mut text_mode, "IP", self.state.ip);
 
-            self.print_string(&mut text_mode, &"test".to_string());
+            self.print_string(&mut text_mode, &"  FLAGS: ".to_string());
+
+            macro_rules! print_flag {
+                ($flag:expr, $is_set:literal, $not_set:literal) => {
+                    if self.state.flags.contains($flag) {
+                        text_mode.teletype_output($is_set as u8);
+                    } else {
+                        text_mode.teletype_output($not_set as u8);
+                    }
+                };
+            }
+
+            print_flag!(Flags::CARRY, 'C', 'c');
+            print_flag!(Flags::ZERO, 'Z', 'z');
+            print_flag!(Flags::SIGN, 'S', 's');
+            print_flag!(Flags::OVERFLOW, 'O', 'o');
+            print_flag!(Flags::AUX_CARRY, 'A', 'a');
+            print_flag!(Flags::PARITY, 'P', 'p');
+            print_flag!(Flags::DIRECTION, 'D', 'd');
+            print_flag!(Flags::INTERRUPT, 'I', 'i');
+            print_flag!(Flags::TRAP, 'T', 't');
+
+            print_flag!(Flags::_UNDEFINED_1, 'U', 'u');
+            print_flag!(Flags::_UNDEFINED_3, 'U', 'u');
+            print_flag!(Flags::_UNDEFINED_5, 'U', 'u');
 
             for (i, instruction) in self.instructions.iter().enumerate() {
                 text_mode.set_cursor_position(0, (3 + i) as u8);

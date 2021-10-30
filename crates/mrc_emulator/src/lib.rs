@@ -2,21 +2,18 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub use bus::BusInterface;
-pub use irq::InterruptHandler;
 use mrc_x86::Segment;
 
 use crate::bus::Bus;
 use crate::cpu::{ExecuteResult, CPU};
 use crate::error::Result;
 use crate::io::IOController;
-use crate::irq::InterruptController;
 
 pub mod builder;
 pub mod bus;
 pub mod cpu;
 pub mod error;
 mod io;
-mod irq;
 pub mod pic;
 pub mod ram;
 pub mod rom;
@@ -32,7 +29,6 @@ trait Installable {
 pub struct Emulator {
     bus: Rc<RefCell<Bus>>,
     io_controller: Rc<RefCell<IOController>>,
-    interrupt_controller: Rc<RefCell<InterruptController>>,
     pub cpu: CPU,
 }
 
@@ -40,13 +36,10 @@ impl Default for Emulator {
     fn default() -> Self {
         let bus = Rc::new(RefCell::new(Bus::default()));
         let io_controller = Rc::new(RefCell::new(IOController::default()));
-        let interrupt_controller = Rc::new(RefCell::new(InterruptController::default()));
         Self {
             bus: Rc::clone(&bus),
             io_controller: io_controller.clone(),
-            interrupt_controller: interrupt_controller.clone(),
-
-            cpu: CPU::new(bus, io_controller, interrupt_controller),
+            cpu: CPU::new(bus, io_controller),
         }
     }
 }
@@ -63,10 +56,6 @@ impl Emulator {
 
     pub fn io_controller(&self) -> Rc<RefCell<IOController>> {
         self.io_controller.clone()
-    }
-
-    pub fn interrupt_controller(&self) -> Rc<RefCell<InterruptController>> {
-        self.interrupt_controller.clone()
     }
 
     /// Start the emulator. This function will not return until the emulator is requested to exit

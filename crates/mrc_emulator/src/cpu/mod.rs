@@ -11,7 +11,6 @@ use crate::bus::{segment_and_offset, BusInterface};
 pub use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::Result;
 use crate::io::IOController;
-use crate::irq::InterruptController;
 
 mod executor;
 
@@ -107,7 +106,7 @@ pub struct State {
     // TODO: Do not have this public.  Right now it is required to set the reset vector. Maybe set
     //       with a builder config?
     pub ip: u16,
-    flags: Flags,
+    pub flags: Flags,
 }
 
 impl State {
@@ -204,8 +203,8 @@ impl Default for State {
             registers: Registers::default(),
             segments: Segments::default(),
             ip: 0,
-            // By default when the CPU starts, we enable interrupts.
-            flags: Flags::INTERRUPT,
+            // By default when the CPU starts, we enable interrupts and the 2nd flag it always set.
+            flags: Flags::_UNDEFINED_1 | Flags::INTERRUPT,
         }
     }
 }
@@ -263,7 +262,6 @@ pub struct CPU {
     // TODO: This is public because ip is public.
     pub state: State,
     io_controller: Rc<RefCell<IOController>>,
-    interrupt_controller: Rc<RefCell<InterruptController>>,
     bus: Rc<RefCell<dyn BusInterface>>,
 }
 
@@ -271,12 +269,10 @@ impl CPU {
     pub fn new(
         bus: Rc<RefCell<dyn BusInterface>>,
         io_controller: Rc<RefCell<IOController>>,
-        interrupt_controller: Rc<RefCell<InterruptController>>,
     ) -> Self {
         Self {
             state: Default::default(),
             io_controller,
-            interrupt_controller,
             bus,
         }
     }

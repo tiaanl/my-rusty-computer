@@ -1,8 +1,7 @@
 use crate::bus::{Address, Bus, InterfaceContainer};
 use crate::cpu::CPU;
 use crate::io::{IOController, IOInterface};
-use crate::irq::InterruptController;
-use crate::{BusInterface, Emulator, InterruptHandler};
+use crate::{BusInterface, Emulator};
 use mrc_x86::Segment;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -14,7 +13,6 @@ pub struct EmulatorBuilder {
     reset_vector: Option<(u16, u16)>,
     bus_interfaces: Vec<InterfaceContainer>,
     io_interfaces: HashMap<u16, Rc<RefCell<dyn IOInterface>>>,
-    interrupt_handlers: HashMap<u8, Rc<RefCell<dyn InterruptHandler>>>,
 }
 
 impl EmulatorBuilder {
@@ -57,17 +55,6 @@ impl EmulatorBuilder {
         self
     }
 
-    pub fn map_interrupt(
-        &mut self,
-        interrupt_num: u8,
-        interface: impl InterruptHandler + 'static,
-    ) -> &mut Self {
-        let interface = Rc::new(RefCell::new(interface));
-        self.interrupt_handlers.insert(interrupt_num, interface);
-
-        self
-    }
-
     /// Consumes the builder and return an Emulator with all the builder values.
     pub fn build(self) -> Emulator {
         let bus = Rc::new(RefCell::new(Bus::with_interfaces(self.bus_interfaces)));
@@ -76,15 +63,10 @@ impl EmulatorBuilder {
             self.io_interfaces,
         )));
 
-        let interrupt_controller = Rc::new(RefCell::new(InterruptController::with_handlers(
-            self.interrupt_handlers,
-        )));
-
         let mut emulator = Emulator {
             bus: bus.clone(),
             io_controller: io_controller.clone(),
-            interrupt_controller: interrupt_controller.clone(),
-            cpu: CPU::new(bus, io_controller, interrupt_controller),
+            cpu: CPU::new(bus, io_controller),
         };
 
         if let Some((segment, offset)) = self.reset_vector {

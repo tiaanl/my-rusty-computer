@@ -10,6 +10,7 @@ use config::Config;
 use debugger::Debugger;
 use glutin::event_loop::ControlFlow;
 use mrc_emulator::builder::EmulatorBuilder;
+use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::pic::ProgrammableInterruptController8259;
 
 use crate::debugger::DebuggerAction;
@@ -19,6 +20,7 @@ use mrc_emulator::shared::Shared;
 use mrc_emulator::swmr::Swmr;
 use mrc_emulator::timer::ProgrammableIntervalTimer8253;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
+use mrc_x86::Segment;
 
 fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
@@ -128,11 +130,8 @@ fn create_emulator(
         );
     }
 
-    builder.map_address(
-        0xB8000..0xBC000,
-        TextModeInterface::new(screen_text_mode.clone()),
-    );
-    builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode));
+    builder.map_address(0xB8000..0xBC000, TextModeInterface::new(screen_text_mode));
+    // builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode));
 
     builder.reset_vector(0xF000, 0xFFF0);
 }
@@ -156,6 +155,8 @@ fn main() {
 
     let mut last_monitor_update = Instant::now();
 
+    let mut is_debugging = false;
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
@@ -164,13 +165,30 @@ fn main() {
             return;
         }
 
-        if let Some(debugger_action) = debugger.handle_events(&event) {
-            match debugger_action {
-                DebuggerAction::Step => {
+        if is_debugging {
+            if let Some(debugger_action) = debugger.handle_events(&event) {
+                match debugger_action {
+                    DebuggerAction::Step => {
+                        emulator.write().tick();
+                    }
+                }
+                return;
+            }
+        } else {
+            for _ in 0..10 {
+                let current_cpu_addr = segment_and_offset(
+                    emulator.read().cpu.state.get_segment_value(Segment::Cs),
+                    emulator.read().cpu.state.ip,
+                );
+
+                // if current_cpu_addr == 0xFE0A7 {
+                // FE0AC
+                if current_cpu_addr == 0xFE0AC {
+                    is_debugging = true;
+                } else {
                     emulator.write().tick();
                 }
             }
-            return;
         }
 
         // 60 fps
