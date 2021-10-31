@@ -17,11 +17,11 @@ mod executor;
 bitflags! {
     pub struct Flags : u16 {
         const CARRY = 1 << 0;
-        const _UNDEFINED_1 = 1 << 1;
+        const RESERVED_1 = 1 << 1;
         const PARITY = 1 << 2;
-        const _UNDEFINED_3 = 1 << 3;
+        const RESERVED_3 = 1 << 3;
         const AUX_CARRY = 1 << 4;
-        const _UNDEFINED_5 = 1 << 5;
+        const RESERVED_5 = 1 << 5;
         const ZERO = 1 << 6;
         const SIGN = 1 << 7;
         const TRAP = 1 << 8;
@@ -45,7 +45,7 @@ struct WordRegisters {
 }
 
 #[cfg(target_endian = "little")]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Default, PartialEq)]
 struct ByteRegisters {
     al: u8,
     ah: u8,
@@ -58,7 +58,7 @@ struct ByteRegisters {
 }
 
 #[cfg(target_endian = "big")]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Default, PartialEq)]
 struct ByteRegisters {
     ah: u8,
     al: u8,
@@ -110,6 +110,14 @@ pub struct State {
 }
 
 impl State {
+    #[cfg(test)]
+    fn with_flags(flags: Flags) -> Self {
+        Self {
+            flags,
+            ..Default::default()
+        }
+    }
+
     pub fn get_byte_register_value(&self, register: Register) -> u8 {
         use Register::*;
 
@@ -203,8 +211,8 @@ impl Default for State {
             registers: Registers::default(),
             segments: Segments::default(),
             ip: 0,
-            // By default when the CPU starts, we enable interrupts and the 2nd flag it always set.
-            flags: Flags::_UNDEFINED_1 | Flags::INTERRUPT,
+            // By default when the CPU starts, we enable interrupts and the 2nd flag is always set.
+            flags: Flags::RESERVED_1 | Flags::INTERRUPT,
         }
     }
 }
@@ -246,11 +254,11 @@ impl Display for State {
         print_flag!(T, Flags::TRAP);
         print_flag!(S, Flags::SIGN);
         print_flag!(Z, Flags::ZERO);
-        print_flag!(U, Flags::_UNDEFINED_5);
+        print_flag!(U, Flags::RESERVED_5);
         print_flag!(A, Flags::AUX_CARRY);
-        print_flag!(U, Flags::_UNDEFINED_3);
+        print_flag!(U, Flags::RESERVED_3);
         print_flag!(P, Flags::PARITY);
-        print_flag!(U, Flags::_UNDEFINED_1);
+        print_flag!(U, Flags::RESERVED_1);
         print_flag!(C, Flags::CARRY);
 
         Ok(())

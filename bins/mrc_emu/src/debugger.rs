@@ -202,9 +202,9 @@ impl Debugger {
             print_flag!(Flags::INTERRUPT, 'I', 'i');
             print_flag!(Flags::TRAP, 'T', 't');
 
-            print_flag!(Flags::_UNDEFINED_1, 'U', 'u');
-            print_flag!(Flags::_UNDEFINED_3, 'U', 'u');
-            print_flag!(Flags::_UNDEFINED_5, 'U', 'u');
+            print_flag!(Flags::RESERVED_1, 'U', 'u');
+            print_flag!(Flags::RESERVED_3, 'U', 'u');
+            print_flag!(Flags::RESERVED_5, 'U', 'u');
 
             for (i, instruction) in self.instructions.iter().enumerate() {
                 text_mode.set_cursor_position(0, (3 + i) as u8);

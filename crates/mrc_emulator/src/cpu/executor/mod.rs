@@ -4,7 +4,7 @@ use mrc_x86::{
     Operation, Register, Repeat, Segment,
 };
 
-use crate::cpu::executor::operations::SignificantBit;
+use crate::cpu::executor::operations::{SignificantBit, StateExt};
 use crate::cpu::{Flags, State};
 use crate::error::{Error, Result};
 use crate::io::IOInterface;
@@ -613,11 +613,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             _ => illegal_operands(instruction),
         },
 
-        Operation::Lahf => {
-            // Use the low byte of the flags register.
-            let bytes = cpu.state.flags.bits.to_le_bytes();
-            cpu.state.set_byte_register_value(Register::AhSp, bytes[0]);
-        }
+        Operation::Lahf => cpu.state.load_ah_from_flags(),
 
         Operation::Lea => match instruction.operands {
             OperandSet::DestinationAndSource(
@@ -861,17 +857,7 @@ pub fn execute(cpu: &mut CPU, instruction: &Instruction) -> Result<ExecuteResult
             }
         }
 
-        Operation::Sahf => {
-            // EFLAGS(SF:ZF:0:AF:0:PF:1:CF) = AH;
-
-            let mut ah = cpu.state.get_byte_register_value(Register::AhSp);
-
-            let mut flags = Flags::from_bits(u16::from(ah)).unwrap();
-            flags.insert(Flags::_UNDEFINED_1);
-            flags.remove(Flags::_UNDEFINED_3 | Flags::_UNDEFINED_5);
-
-            cpu.state.flags.bits = u16::from_le_bytes(flags.bits.to_le_bytes());
-        }
+        Operation::Sahf => cpu.state.store_ah_into_flags(),
 
         Operation::Stc => {
             cpu.state.flags.insert(Flags::CARRY);

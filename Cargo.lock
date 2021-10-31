@@ -809,6 +809,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mrc-asm"
+version = "0.0.1"
+dependencies = [
+ "clap",
+ "mrc_assembler",
+]
+
+[[package]]
 name = "mrc-dis"
 version = "0.0.1"
 dependencies = [
@@ -834,6 +842,10 @@ dependencies = [
  "mrc_x86",
  "pretty_env_logger",
 ]
+
+[[package]]
+name = "mrc_assembler"
+version = "0.0.1"
 
 [[package]]
 name = "mrc_decoder"
