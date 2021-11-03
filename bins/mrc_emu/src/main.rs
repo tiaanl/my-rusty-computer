@@ -1,3 +1,4 @@
+mod component;
 mod config;
 mod debugger;
 
@@ -11,14 +12,14 @@ use debugger::Debugger;
 use glutin::event_loop::ControlFlow;
 use mrc_emulator::builder::EmulatorBuilder;
 use mrc_emulator::bus::segment_and_offset;
-use mrc_emulator::pic::ProgrammableInterruptController8259;
-
-use crate::debugger::DebuggerAction;
-use mrc_emulator::ram::RandomAccessMemory;
-use mrc_emulator::rom::ReadOnlyMemory;
 use mrc_emulator::shared::Shared;
 use mrc_emulator::swmr::Swmr;
-use mrc_emulator::timer::ProgrammableIntervalTimer8253;
+
+use crate::component::pic::{OperationMode, ProgrammableInterruptController8259};
+use crate::component::pit::ProgrammableIntervalTimer8253;
+use crate::component::ram::RandomAccessMemory;
+use crate::component::rom::ReadOnlyMemory;
+use crate::debugger::DebuggerAction;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
 use mrc_x86::Segment;
 
@@ -73,8 +74,16 @@ fn create_emulator(
     builder.map_address(0x00000..0xA0000, RandomAccessMemory::with_capacity(0xA0000));
 
     // Install 2 programmable interrupt controllers.
-    builder.map_io_range(0x20, 0x0F, ProgrammableInterruptController8259::default());
-    builder.map_io_range(0xA0, 0x0F, ProgrammableInterruptController8259::default());
+    builder.map_io_range(
+        0x20,
+        2,
+        ProgrammableInterruptController8259::new(OperationMode::Master),
+    );
+    builder.map_io_range(
+        0xA0,
+        2,
+        ProgrammableInterruptController8259::new(OperationMode::Slave),
+    );
 
     // Programmable Interval Timer
     builder.map_io_range(0x40, 0x04, ProgrammableIntervalTimer8253::default());

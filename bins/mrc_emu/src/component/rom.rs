@@ -1,5 +1,8 @@
-use crate::bus::{Address, BusInterface};
-use crate::error::{Error, Result};
+use mrc_emulator::{
+    bus::Address,
+    error::{Error, Result},
+    BusInterface,
+};
 
 pub struct ReadOnlyMemory {
     data: Vec<u8>,

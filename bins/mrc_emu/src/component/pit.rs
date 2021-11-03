@@ -1,5 +1,5 @@
-use crate::error::Result;
-use crate::io::IOInterface;
+use mrc_emulator::error::Result;
+use mrc_emulator::io::IOInterface;
 
 // Intel 8253 Programmable Interrupt Timer
 // https://en.wikipedia.org/wiki/Intel_8253

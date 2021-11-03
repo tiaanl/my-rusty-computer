@@ -1,5 +1,5 @@
-use crate::error::Result;
-use crate::io::IOInterface;
+use mrc_emulator::io::IOInterface;
+use mrc_emulator::error::Result;
 
 #[derive(Default)]
 pub struct DMAController;

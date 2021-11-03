@@ -6,24 +6,19 @@ use mrc_x86::Segment;
 
 use crate::bus::Bus;
 use crate::cpu::{ExecuteResult, CPU};
-use crate::error::Result;
 use crate::io::IOController;
 
 pub mod builder;
 pub mod bus;
 pub mod cpu;
 pub mod error;
-mod io;
-pub mod pic;
-pub mod ram;
-pub mod rom;
+pub mod io;
 pub mod shared;
 pub mod swmr;
-pub mod timer;
-pub mod dma;
 
-trait Installable {
-    fn install(bus: &mut Bus) -> Result<()>;
+pub trait Installable {
+    fn map_bus(&mut self, _bus: &mut Bus) {}
+    fn map_io(&mut self, _io_controller: &mut IOController) {}
 }
 
 /// An emulator with some basic components.
@@ -49,6 +44,11 @@ impl Emulator {
     pub fn set_reset_vector(&mut self, segment: u16, offset: u16) {
         self.cpu.state.set_segment_value(Segment::Cs, segment);
         self.cpu.state.ip = offset;
+    }
+
+    pub fn install(&mut self, component: &mut impl Installable) {
+        component.map_bus(&mut self.bus.borrow_mut());
+        component.map_io(&mut self.io_controller.borrow_mut());
     }
 
     pub fn bus(&self) -> Rc<RefCell<Bus>> {

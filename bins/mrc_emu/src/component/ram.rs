@@ -1,12 +1,13 @@
-use crate::bus::{Address, BusInterface};
-use crate::error::{Error, Result};
+use mrc_emulator::bus::Address;
+use mrc_emulator::error::{Error, Result};
+use mrc_emulator::BusInterface;
 
 pub struct RandomAccessMemory {
     data: Vec<u8>,
 }
 
 impl RandomAccessMemory {
-    pub fn from_vec(vec: Vec<u8>) -> Self {
+    pub fn _from_vec(vec: Vec<u8>) -> Self {
         Self { data: vec }
     }
 

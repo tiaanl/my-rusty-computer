@@ -64,6 +64,30 @@ print_message:
 .done:
 	ret
 
+init_pic:
+	cli
+	; init master pic
+	mov al, 0x1D
+	out 0x20, al	; icw1
+	mov al, 0x6B
+	out 0x21, al	; icw2
+	mov al, 0x08
+	out 0x21, al	; icw3
+	mov al, 0x6B
+	out 0x21, al	; icw4
+
+	; init slave pic
+	mov	al, 0x1D
+	out	0xA0, al	; icw1
+	mov	al, 0x6B
+	out	0xA1, al	; icw2
+	mov	al, 0x03
+	out	0xA1, al	; icw3
+
+	mov	al, 0x03
+	out	0xA0, al
+	sti
+
 msg_stack_not_working	db	"Stack not working!",0
 msg_cpu_test_failed	db	"CPU test failed!",0
 msg_welcome_string	db	"Ok!",0
