@@ -339,18 +339,24 @@ pub struct Operand(pub OperandType, pub OperandSize);
 
 impl std::fmt::Display for Operand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        macro_rules! print_segment_prefix {
+            ($segment:expr) => {
+                match $segment {
+                    Segment::Es => write!(f, "es:")?,
+                    Segment::Cs => write!(f, "cs:")?,
+                    Segment::Ss => write!(f, "ss:")?,
+                    Segment::Ds => {}
+                }
+            };
+        }
+
         match &self.0 {
             OperandType::Direct(segment, displacement) => {
                 match self.1 {
                     OperandSize::Byte => write!(f, "byte ")?,
                     OperandSize::Word => write!(f, "word ")?,
                 }
-                match segment {
-                    Segment::Es => write!(f, "es:")?,
-                    Segment::Cs => write!(f, "cs:")?,
-                    Segment::Ss => write!(f, "ss:")?,
-                    Segment::Ds => {}
-                }
+                print_segment_prefix!(segment);
                 write!(f, "[{:#06x}]", displacement)?;
             }
             OperandType::Indirect(segment, encoding, displacement) => {
@@ -358,12 +364,7 @@ impl std::fmt::Display for Operand {
                     OperandSize::Byte => write!(f, "byte ")?,
                     OperandSize::Word => write!(f, "word ")?,
                 }
-                match segment {
-                    Segment::Es => write!(f, "es:")?,
-                    Segment::Cs => write!(f, "cs:")?,
-                    Segment::Ss => write!(f, "ss:")?,
-                    Segment::Ds => {}
-                }
+                print_segment_prefix!(segment);
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
             OperandType::Register(encoding) => write!(f, "{}", RegisterDisplay(encoding, &self.1))?,
