@@ -1,6 +1,6 @@
 use crate::errors::Result;
-use crate::{Error, LowBitsDecoder, Modrm};
-use mrc_x86::{
+use crate::{Error, Modrm, TryFromByte};
+use mrc_instruction::{
     Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
 };
 
@@ -11,7 +11,7 @@ pub(crate) fn register_memory_and_register_to_either<It: Iterator<Item = u8>>(
     it: &mut It,
 ) -> Result<Instruction> {
     let direction = (op_code >> 1) & 1;
-    let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
+    let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
 
     let modrm_byte = match it.next() {
         Some(byte) => byte,
@@ -37,7 +37,7 @@ pub(crate) fn immediate_to_accumulator<It: Iterator<Item = u8>>(
     op_code: u8,
     it: &mut It,
 ) -> Result<Instruction> {
-    let operand_size = OperandSize::try_from_low_bits(op_code & 0b1)?;
+    let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
 
     let mut immediate = match it.next() {
         Some(byte) => byte,
@@ -71,7 +71,7 @@ pub(crate) fn push_pop_segment<It: Iterator<Item = u8>>(
             _ => Operation::Pop,
         },
         OperandSet::Destination(Operand(
-            OperandType::Segment(Segment::try_from_low_bits(op_code >> 3 & 0b111)?),
+            OperandType::Segment(Segment::try_from_byte(op_code >> 3 & 0b111)?),
             OperandSize::Word,
         )),
     ))

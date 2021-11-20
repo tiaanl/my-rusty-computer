@@ -5,7 +5,7 @@ use std::rc::Rc;
 use bitflags::bitflags;
 
 use mrc_decoder::decode_instruction;
-use mrc_x86::{Register, Segment};
+use mrc_instruction::{Register, Segment};
 
 use crate::bus::{segment_and_offset, BusInterface};
 pub use crate::cpu::executor::{execute, ExecuteResult};

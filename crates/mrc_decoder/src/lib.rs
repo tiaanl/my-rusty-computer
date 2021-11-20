@@ -1,23 +1,24 @@
+pub mod operations;
+
 mod decode;
 mod errors;
 mod modrm;
-pub mod operations;
 
-pub use decode::{decode_instruction, DecodeFn, DecodeFnMap};
+pub use decode::decode_instruction;
 pub use errors::{Error, Result};
 pub use modrm::Modrm;
-use mrc_x86::{OperandSize, Register, Segment};
+use mrc_instruction::{OperandSize, Register, Segment};
 
-trait LowBitsDecoder<T> {
-    fn try_from_low_bits(bits: u8) -> Result<T>;
+trait TryFromByte<T> {
+    fn try_from_byte(byte: u8) -> Result<T>;
 }
 
 trait ByteSize<T> {
     fn byte_size(&self) -> usize;
 }
 
-impl LowBitsDecoder<Register> for Register {
-    fn try_from_low_bits(byte: u8) -> Result<Self> {
+impl TryFromByte<Register> for Register {
+    fn try_from_byte(byte: u8) -> Result<Self> {
         assert!(byte <= 0b111);
 
         match byte {
@@ -34,8 +35,8 @@ impl LowBitsDecoder<Register> for Register {
     }
 }
 
-impl LowBitsDecoder<Self> for Segment {
-    fn try_from_low_bits(byte: u8) -> Result<Self> {
+impl TryFromByte<Self> for Segment {
+    fn try_from_byte(byte: u8) -> Result<Self> {
         match byte {
             0b00 => Ok(Self::Es),
             0b01 => Ok(Self::Cs),
@@ -82,12 +83,12 @@ fn it_read_word<It: Iterator<Item = u8>>(it: &mut It) -> Result<u16> {
     Ok(u16::from_le_bytes([first, second]))
 }
 
-impl LowBitsDecoder<Self> for OperandSize {
-    fn try_from_low_bits(encoding: u8) -> Result<OperandSize> {
-        match encoding {
+impl TryFromByte<Self> for OperandSize {
+    fn try_from_byte(byte: u8) -> Result<OperandSize> {
+        match byte {
             0b0 => Ok(OperandSize::Byte),
             0b1 => Ok(OperandSize::Word),
-            _ => Err(Error::InvalidDataSizeEncoding(encoding)),
+            _ => Err(Error::InvalidDataSizeEncoding(byte)),
         }
     }
 }

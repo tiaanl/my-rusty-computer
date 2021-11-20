@@ -1,4 +1,6 @@
-use mrc_x86::{Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register};
+use mrc_instruction::{
+    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register,
+};
 
 pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, bool> {
     match instruction.operation {

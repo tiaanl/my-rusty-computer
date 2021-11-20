@@ -4,4 +4,4 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-mrc_x86 = { path = "../mrc_x86" }
+mrc_instruction = { path = "../mrc_instruction" }

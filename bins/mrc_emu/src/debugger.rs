@@ -2,15 +2,15 @@ use glium::backend::glutin::glutin::event::{VirtualKeyCode, WindowEvent};
 use glium::glutin::event::{ElementState, Event};
 use glium::glutin::event_loop::EventLoop;
 use mrc_decoder::decode_instruction;
+use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::cpu::{Flags, State};
+use mrc_emulator::swmr::Swmr;
+use mrc_emulator::{BusInterface, Emulator};
+use mrc_instruction::{Instruction, Register, Segment};
 use mrc_screen::{Screen, TextMode};
-use mrc_x86::{Instruction, Register, Segment};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use mrc_emulator::{BusInterface, Emulator};
-use mrc_emulator::bus::segment_and_offset;
-use mrc_emulator::swmr::Swmr;
 
 pub enum DebuggerAction {
     Step,

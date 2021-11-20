@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "bins/gen_test_bin",
+    "bins/gui_test",
     "bins/mrc_asm",
     "bins/mrc_dis",
     "bins/mrc_emu",
@@ -10,6 +11,6 @@ members = [
     "crates/mrc_dos",
     "crates/mrc_emulator",
     "crates/mrc_encoder",
+    "crates/mrc_instruction",
     "crates/mrc_screen",
-    "crates/mrc_x86",
 ]

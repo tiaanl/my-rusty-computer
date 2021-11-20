@@ -1,12 +1,105 @@
-use crate::{
-    AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
-    Operation, Register, Segment,
-};
-use std::fmt;
-use std::fmt::Formatter;
+#[derive(PartialEq, Debug)]
+pub enum Operation {
+    Aaa,
+    Aad,
+    Aam,
+    Aas,
+    Adc,
+    Add,
+    And,
+    Baa,
+    Call,
+    Cbw,
+    Clc,
+    Cld,
+    Cli,
+    Cmc,
+    Cmp,
+    Cmpsb,
+    Cmpsw,
+    Cwd,
+    Daa,
+    Das,
+    Dec,
+    Div,
+    Esc,
+    Hlt,
+    Idiv,
+    Imul,
+    In,
+    Inc,
+    Int,
+    Into,
+    Iret,
+    Jb,
+    Jbe,
+    Jcxz,
+    Je,
+    Jl,
+    Jle,
+    Jmp,
+    Jnb,
+    Jnbe,
+    Jne,
+    Jnl,
+    Jnle,
+    Jno,
+    Jnp,
+    Jns,
+    Jo,
+    Jp,
+    Js,
+    Lahf,
+    Lds,
+    Lea,
+    Les,
+    Lock,
+    Lodsb,
+    Lodsw,
+    Loop,
+    Loopnz,
+    Loopz,
+    Mov,
+    Movsb,
+    Movsw,
+    Mul,
+    Neg,
+    Nop,
+    Not,
+    Or,
+    Out,
+    Pop,
+    Popf,
+    Push,
+    Pushf,
+    Rcl,
+    Rcr,
+    Ret,
+    Rol,
+    Ror,
+    Sahf,
+    Salc, // Undocumented
+    Sar,
+    Sbb,
+    Scasb,
+    Scasw,
+    Shl,
+    Shr,
+    Stc,
+    Std,
+    Sti,
+    Stosb,
+    Stosw,
+    Sub,
+    Test,
+    Wait,
+    Xchg,
+    Xlat,
+    Xor,
+}
 
-impl fmt::Display for Operation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Operation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operation::Aaa => write!(f, "aaa"),
             Operation::Aad => write!(f, "aad"),
@@ -108,26 +201,33 @@ impl fmt::Display for Operation {
     }
 }
 
-struct RegisterDisplay<'a> {
-    register: &'a Register,
-    operand_size: &'a OperandSize,
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum OperandSize {
+    Byte,
+    Word,
 }
 
-impl<'a> RegisterDisplay<'a> {
-    fn new(register: &'a Register, operand_size: &'a OperandSize) -> Self {
-        Self {
-            register,
-            operand_size,
-        }
-    }
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Register {
+    AlAx,
+    ClCx,
+    DlDx,
+    BlBx,
+    AhSp,
+    ChBp,
+    DhSi,
+    BhDi,
 }
 
-impl fmt::Display for RegisterDisplay<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+struct RegisterDisplay<'a>(&'a Register, &'a OperandSize);
+
+impl std::fmt::Display for RegisterDisplay<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Register::*;
 
-        match self.operand_size {
-            OperandSize::Byte => match self.register {
+        match self.1 {
+            OperandSize::Byte => match self.0 {
                 AlAx => write!(f, "al"),
                 ClCx => write!(f, "cl"),
                 DlDx => write!(f, "dl"),
@@ -137,7 +237,8 @@ impl fmt::Display for RegisterDisplay<'_> {
                 DhSi => write!(f, "dh"),
                 BhDi => write!(f, "bh"),
             },
-            OperandSize::Word => match self.register {
+
+            OperandSize::Word => match self.0 {
                 AlAx => write!(f, "ax"),
                 ClCx => write!(f, "cx"),
                 DlDx => write!(f, "dx"),
@@ -151,8 +252,17 @@ impl fmt::Display for RegisterDisplay<'_> {
     }
 }
 
-impl fmt::Display for Segment {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Segment {
+    Es,
+    Cs,
+    Ss,
+    Ds,
+}
+
+impl std::fmt::Display for Segment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Segment::*;
 
         match self {
@@ -164,8 +274,21 @@ impl fmt::Display for Segment {
     }
 }
 
-impl fmt::Display for AddressingMode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AddressingMode {
+    BxSi,
+    BxDi,
+    BpSi,
+    BpDi,
+    Si,
+    Di,
+    Bp,
+    Bx,
+}
+
+impl std::fmt::Display for AddressingMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use AddressingMode::*;
 
         match self {
@@ -181,8 +304,15 @@ impl fmt::Display for AddressingMode {
     }
 }
 
-impl fmt::Display for Displacement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+#[derive(PartialEq, Debug)]
+pub enum Displacement {
+    None,
+    Byte(i8),
+    Word(i16),
+}
+
+impl std::fmt::Display for Displacement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Displacement::None => Ok(()),
             Displacement::Byte(offset) => {
@@ -195,8 +325,20 @@ impl fmt::Display for Displacement {
     }
 }
 
-impl fmt::Display for Operand {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+#[derive(PartialEq, Debug)]
+pub enum OperandType {
+    Direct(Segment, u16),
+    Indirect(Segment, AddressingMode, Displacement),
+    Register(Register),
+    Segment(Segment),
+    Immediate(u16),
+}
+
+#[derive(PartialEq, Debug)]
+pub struct Operand(pub OperandType, pub OperandSize);
+
+impl std::fmt::Display for Operand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
             OperandType::Direct(segment, displacement) => {
                 match self.1 {
@@ -224,9 +366,7 @@ impl fmt::Display for Operand {
                 }
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
-            OperandType::Register(encoding) => {
-                write!(f, "{}", RegisterDisplay::new(encoding, &self.1))?
-            }
+            OperandType::Register(encoding) => write!(f, "{}", RegisterDisplay(encoding, &self.1))?,
             OperandType::Segment(encoding) => write!(f, "{}", encoding)?,
             OperandType::Immediate(value) => match &self.1 {
                 OperandSize::Byte => write!(f, "{:#04X}", value)?,
@@ -237,26 +377,68 @@ impl fmt::Display for Operand {
     }
 }
 
-impl fmt::Display for OperandSet {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+#[derive(PartialEq, Debug)]
+pub enum OperandSet {
+    None,
+    Destination(Operand),
+    DestinationAndSource(Operand, Operand),
+    Displacement(Displacement),
+    SegmentAndOffset(u16, u16),
+}
+
+impl std::fmt::Display for OperandSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OperandSet::None => {}
-            OperandSet::Destination(destination) => write!(f, "{}", destination)?,
+            OperandSet::None => Ok(()),
+            OperandSet::Destination(destination) => write!(f, "{}", destination),
             OperandSet::DestinationAndSource(destination, source) => {
-                write!(f, "{}, {}", destination, source)?;
+                write!(f, "{}, {}", destination, source)
             }
             OperandSet::SegmentAndOffset(segment, offset) => {
-                write!(f, "{:#06X}:{:#06X}", segment, offset)?
+                write!(f, "{:#06X}:{:#06X}", segment, offset)
             }
-            OperandSet::Displacement(displacement) => write!(f, "{}", displacement)?,
+            OperandSet::Displacement(displacement) => write!(f, "{}", displacement),
         }
-        Ok(())
     }
 }
 
-impl fmt::Display for Instruction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:<10} {}", self.operation, &self.operands)?;
-        Ok(())
+#[derive(PartialEq, Debug)]
+pub enum Repeat {
+    Equal,
+    NotEqual,
+}
+
+/// Representation of a 8086 instruction.
+#[derive(PartialEq, Debug)]
+pub struct Instruction {
+    pub operation: Operation,
+    pub operands: OperandSet,
+    pub repeat: Option<Repeat>,
+    pub lock: bool,
+}
+
+impl Instruction {
+    pub fn new(operation: Operation, operands: OperandSet) -> Self {
+        Self {
+            operation,
+            operands,
+            repeat: None,
+            lock: false,
+        }
+    }
+
+    pub fn with_repeat(repeat: Repeat, operation: Operation, operands: OperandSet) -> Self {
+        Self {
+            operation,
+            operands,
+            repeat: Some(repeat),
+            lock: false,
+        }
+    }
+}
+
+impl std::fmt::Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:<10} {}", self.operation, &self.operands)
     }
 }

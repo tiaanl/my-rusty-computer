@@ -1,5 +1,5 @@
 use crate::cpu::{Flags, State};
-use mrc_x86::Register;
+use mrc_instruction::Register;
 
 mod arithmetic;
 mod logic;

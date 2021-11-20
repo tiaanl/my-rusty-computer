@@ -1,5 +1,5 @@
 use crate::bus::{segment_and_offset, Address};
-use mrc_x86::{
+use mrc_instruction::{
     AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
     Operation, Register, Repeat, Segment,
 };

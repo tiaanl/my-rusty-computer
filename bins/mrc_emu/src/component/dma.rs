@@ -1,5 +1,5 @@
-use mrc_emulator::io::IOInterface;
 use mrc_emulator::error::Result;
+use mrc_emulator::io::IOInterface;
 
 #[derive(Default)]
 pub struct DMAController;

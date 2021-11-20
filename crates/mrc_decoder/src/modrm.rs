@@ -1,9 +1,9 @@
 use crate::errors::Result;
-use crate::{it_read_byte, it_read_word, Error, LowBitsDecoder};
-use mrc_x86::{AddressingMode, Displacement, OperandType, Register, Segment};
+use crate::{it_read_byte, it_read_word, Error, TryFromByte};
+use mrc_instruction::{AddressingMode, Displacement, OperandType, Register, Segment};
 
-impl LowBitsDecoder<Self> for AddressingMode {
-    fn try_from_low_bits(byte: u8) -> Result<Self> {
+impl TryFromByte<Self> for AddressingMode {
+    fn try_from_byte(byte: u8) -> Result<Self> {
         use AddressingMode::*;
 
         match byte {
@@ -37,19 +37,19 @@ impl RegisterOrMemory {
         match mode {
             0b00 => match rm {
                 0b110 => Ok(RegisterOrMemory::Direct(it_read_word(it).unwrap())),
-                _ => Ok(RegisterOrMemory::Indirect(
-                    AddressingMode::try_from_low_bits(rm)?,
-                )),
+                _ => Ok(RegisterOrMemory::Indirect(AddressingMode::try_from_byte(
+                    rm,
+                )?)),
             },
             0b01 => Ok(RegisterOrMemory::DisplacementByte(
-                AddressingMode::try_from_low_bits(rm)?,
+                AddressingMode::try_from_byte(rm)?,
                 it_read_byte(it).unwrap(),
             )),
             0b10 => Ok(RegisterOrMemory::DisplacementWord(
-                AddressingMode::try_from_low_bits(rm)?,
+                AddressingMode::try_from_byte(rm)?,
                 it_read_word(it).unwrap(),
             )),
-            0b11 => Ok(RegisterOrMemory::Register(Register::try_from_low_bits(rm)?)),
+            0b11 => Ok(RegisterOrMemory::Register(Register::try_from_byte(rm)?)),
             _ => Err(Error::InvalidModRmEncoding(mod_rm_byte)),
         }
     }
@@ -122,7 +122,7 @@ impl Modrm {
     }
 
     pub fn try_from_byte<It: Iterator<Item = u8>>(mod_rm_byte: u8, it: &mut It) -> Result<Self> {
-        let register = Register::try_from_low_bits(mod_rm_byte >> 3 & 0b111)?;
+        let register = Register::try_from_byte(mod_rm_byte >> 3 & 0b111)?;
 
         let register_or_memory = RegisterOrMemory::try_from_modrm(mod_rm_byte, it)?;
 
@@ -177,39 +177,39 @@ mod test {
     #[test]
     fn indirect_memory() {
         assert_eq!(
-            AddressingMode::try_from_low_bits(0b000).unwrap(),
+            AddressingMode::try_from_byte(0b000).unwrap(),
             AddressingMode::BxSi
         );
         assert_eq!(
-            AddressingMode::try_from_low_bits(0b001).unwrap(),
+            AddressingMode::try_from_byte(0b001).unwrap(),
             AddressingMode::BxDi
         );
         assert_eq!(
-            AddressingMode::try_from_low_bits(0b010).unwrap(),
+            AddressingMode::try_from_byte(0b010).unwrap(),
             AddressingMode::BpSi
         );
         assert_eq!(
-            AddressingMode::try_from_low_bits(0b011).unwrap(),
+            AddressingMode::try_from_byte(0b011).unwrap(),
             AddressingMode::BpDi
         );
         assert_eq!(
-            AddressingMode::try_from_low_bits(0b100).unwrap(),
+            AddressingMode::try_from_byte(0b100).unwrap(),
             AddressingMode::Si
         );
         assert_eq!(
-            AddressingMode::try_from_low_bits(0b101).unwrap(),
+            AddressingMode::try_from_byte(0b101).unwrap(),
             AddressingMode::Di
         );
         assert_eq!(
-            AddressingMode::try_from_low_bits(0b110).unwrap(),
+            AddressingMode::try_from_byte(0b110).unwrap(),
             AddressingMode::Bp
         );
         assert_eq!(
-            AddressingMode::try_from_low_bits(0b111).unwrap(),
+            AddressingMode::try_from_byte(0b111).unwrap(),
             AddressingMode::Bx
         );
 
-        if let Err(err) = AddressingMode::try_from_low_bits(77) {
+        if let Err(err) = AddressingMode::try_from_byte(77) {
             assert_eq!(err, Error::InvalidIndirectMemoryEncoding(77))
         } else {
             assert!(false, "does not return error");

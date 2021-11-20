@@ -1,4 +1,4 @@
 [package]
-name = "mrc_x86"
+name = "mrc_instruction"
 version = "0.0.1"
 edition = "2021"

@@ -15,13 +15,13 @@ use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::shared::Shared;
 use mrc_emulator::swmr::Swmr;
 
-use crate::component::pic::{OperationMode, ProgrammableInterruptController8259};
+use crate::component::pic::Pic;
 use crate::component::pit::ProgrammableIntervalTimer8253;
 use crate::component::ram::RandomAccessMemory;
 use crate::component::rom::ReadOnlyMemory;
 use crate::debugger::DebuggerAction;
+use mrc_instruction::Segment;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
-use mrc_x86::Segment;
 
 fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
@@ -73,17 +73,8 @@ fn create_emulator(
     // 640KiB RAM
     builder.map_address(0x00000..0xA0000, RandomAccessMemory::with_capacity(0xA0000));
 
-    // Install 2 programmable interrupt controllers.
-    builder.map_io_range(
-        0x20,
-        2,
-        ProgrammableInterruptController8259::new(OperationMode::Master),
-    );
-    builder.map_io_range(
-        0xA0,
-        2,
-        ProgrammableInterruptController8259::new(OperationMode::Slave),
-    );
+    // Single Intel 8259A programmable interrupt controller.
+    builder.map_io_range(0x20, 2, Pic::default());
 
     // Programmable Interval Timer
     builder.map_io_range(0x40, 0x04, ProgrammableIntervalTimer8253::default());

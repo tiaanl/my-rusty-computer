@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 pub use bus::BusInterface;
-use mrc_x86::Segment;
+use mrc_instruction::Segment;
 
 use crate::bus::Bus;
 use crate::cpu::{ExecuteResult, CPU};

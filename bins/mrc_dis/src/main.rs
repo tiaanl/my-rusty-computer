@@ -1,6 +1,6 @@
 use clap::{App, Arg};
 use mrc_decoder::decode_instruction;
-use mrc_x86::Instruction;
+use mrc_instruction::Instruction;
 use std::fmt::{Display, Formatter};
 use std::io::{ErrorKind, Read};
 

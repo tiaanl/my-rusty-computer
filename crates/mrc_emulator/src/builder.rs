@@ -2,7 +2,7 @@ use crate::bus::{Address, Bus, InterfaceContainer};
 use crate::cpu::CPU;
 use crate::io::{IOController, IOInterface};
 use crate::{BusInterface, Emulator};
-use mrc_x86::Segment;
+use mrc_instruction::Segment;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;

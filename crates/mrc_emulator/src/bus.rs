@@ -105,8 +105,8 @@ impl<T: BusInterface> BusInterface for WrappingBusInterface<T> {
 
 #[cfg(test)]
 mod test {
-    use crate::error::Result;
     use super::*;
+    use crate::error::Result;
 
     #[test]
     fn can_read_write_through_bus() {
