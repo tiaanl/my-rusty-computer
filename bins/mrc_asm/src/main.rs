@@ -1,5 +1,6 @@
 use mrc_assembler::lexer::{tokenize, TokenKind};
 use std::path::Path;
+use structopt::StructOpt;
 
 fn parse_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     let data = std::fs::read_to_string(path)?;
@@ -21,14 +22,23 @@ fn parse_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     Ok(())
 }
 
+#[derive(StructOpt)]
+struct Opt {
+    /// Sources files to assemble
+    sources: Vec<String>,
+}
+
 fn main() {
-    let matches = clap::App::new("mrc-asm")
-        .arg(clap::Arg::with_name("sources").min_values(1))
-        .get_matches();
+    let opts = Opt::from_args();
+
+    // TODO: Can `structopt` handle this case?
+    if opts.sources.is_empty() {
+        eprintln!("At least one source file is required");
+        return;
+    }
 
     // We can unwrap here, because `min_values` is set to at least 1.
-    let files: Vec<_> = matches.values_of("sources").unwrap().collect();
-    for file in files {
+    for file in opts.sources {
         parse_file(file).unwrap();
     }
 }

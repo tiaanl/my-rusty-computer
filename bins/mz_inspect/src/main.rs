@@ -1,6 +1,6 @@
-use clap::{App, Arg};
 use mrc_dos::mz::{ExeHeader, MzHeader, Relocation};
 use std::io::{Read, Seek, SeekFrom};
+use structopt::StructOpt;
 
 macro_rules! print_header_value {
     ($name:expr,$value:expr) => {
@@ -40,22 +40,16 @@ fn print_mz_header(header: &MzHeader) {
     );
 }
 
+#[derive(StructOpt)]
+struct Opt {
+    /// The .EXE file to inspect
+    binary: String,
+}
+
 fn main() {
-    let matches = App::new("mz-inspect")
-        .version("0.1.0")
-        .arg(
-            Arg::with_name("binary")
-                .value_name("BINARY")
-                .help("The .EXE file to inspect.")
-                .required(true)
-                .takes_value(true),
-        )
-        .get_matches();
+    let opts = Opt::from_args();
 
-    // We can unwrap, because clap will stop if binary is not provided.
-    let path = matches.value_of("binary").unwrap();
-
-    let mut file = match std::fs::File::open(path) {
+    let mut file = match std::fs::File::open(&opts.binary) {
         Err(err) => {
             eprintln!("Could not open file. ({})", err);
             return;
@@ -63,7 +57,7 @@ fn main() {
         Ok(file) => file,
     };
 
-    println!("{:<24}{}", "File", path);
+    println!("{:<24}{}", "File", opts.binary);
 
     let exe_header = match ExeHeader::new(&mut file) {
         Err(err) => {

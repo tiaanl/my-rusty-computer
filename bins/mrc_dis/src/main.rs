@@ -1,25 +1,45 @@
-use clap::{App, Arg};
 use mrc_decoder::decode_instruction;
 use mrc_instruction::Instruction;
-use std::fmt::{Display, Formatter};
-use std::io::{ErrorKind, Read};
+use std::{
+    fmt::{Display, Formatter},
+    io::Read,
+    str::FromStr,
+};
+use structopt::StructOpt;
 
-struct SegmentAndOffset(u16, u16);
+struct SegmentAndOffset {
+    segment: u16,
+    offset: u16,
+}
+
+#[inline(always)]
+fn segment_and_offset(segment: u16, offset: u16) -> SegmentAndOffset {
+    SegmentAndOffset { segment, offset }
+}
+
+impl From<(u16, u16)> for SegmentAndOffset {
+    fn from(x: (u16, u16)) -> Self {
+        Self {
+            segment: x.0,
+            offset: x.1,
+        }
+    }
+}
 
 trait ToSegmentAndOffset {
     fn relative_to(&self, segment_and_offset: &SegmentAndOffset) -> SegmentAndOffset;
 }
 
 impl ToSegmentAndOffset for u32 {
-    fn relative_to(&self, segment_and_offset: &SegmentAndOffset) -> SegmentAndOffset {
-        let offset = (self & !((segment_and_offset.0 as u32) << 4)) + segment_and_offset.1 as u32;
-        SegmentAndOffset(segment_and_offset.0, offset as u16)
+    fn relative_to(&self, addr: &SegmentAndOffset) -> SegmentAndOffset {
+        let offset = (self & !((addr.segment as u32) << 4)) + addr.offset as u32;
+        segment_and_offset(addr.segment, offset as u16)
     }
 }
 
 impl Display for SegmentAndOffset {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:04X}:{:04X}", self.0, self.1)
+        write!(f, "{:04X}:{:04X}", self.segment, self.offset)
     }
 }
 
@@ -29,9 +49,9 @@ struct Data {
 }
 
 impl Data {
-    fn new() -> Self {
+    fn from_buffer(buffer: Vec<u8>) -> Self {
         Self {
-            data: vec![],
+            data: buffer,
             current_position: 0,
         }
     }
@@ -125,45 +145,102 @@ fn print_section(section: &Section) {
     }
 }
 
-fn main() {
-    let matches = App::new("mrc-dis")
-        .version("0.1")
-        .arg(
-            Arg::with_name("binary")
-                .value_name("binary")
-                .help("The binary file to disassemble.")
-                .takes_value(true)
-                .required(true),
-        )
-        .get_matches();
+fn load_data(binary: &str) -> Result<Data, std::io::Error> {
+    let mut file = std::fs::File::open(binary)?;
+    let mut buffer: Vec<u8> = Vec::new();
+    let _ = file.read_to_end(&mut buffer)?;
 
-    let mut data = Data::new();
+    Ok(Data::from_buffer(buffer))
+}
 
-    if let Some(path) = matches.value_of("binary") {
-        match std::fs::File::open(path) {
-            Ok(ref mut file) => {
-                if let Err(err) = file.read_to_end(&mut data.data) {
-                    eprintln!("Could not read file. ({}) ({})", path, err);
-                    return;
-                }
-            }
-            Err(err) => {
-                match err.kind() {
-                    ErrorKind::NotFound => eprintln!("File not found. ({})", path),
-                    _ => eprintln!("Could not open file. ({}) ({})", path, err),
-                };
-                return;
-            }
+fn disassemble(binary: &str, format: BinaryFormat) -> Result<(), std::io::Error> {
+    let data = load_data(binary)?;
+
+    match format {
+        BinaryFormat::Raw => {
+            let section = Section::new(segment_and_offset(0, 0), data.data.as_slice());
+
+            print_section(&section);
+        }
+        _ => todo!(),
+    }
+
+    Ok(())
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+enum BinaryFormat {
+    Raw,
+    Com,
+    Exe,
+}
+
+impl FromStr for BinaryFormat {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "raw" => Ok(BinaryFormat::Raw),
+            "com" => Ok(BinaryFormat::Com),
+            "exe" => Ok(BinaryFormat::Exe),
+            _ => Err("supported binary formats: raw, com, exe"),
         }
     }
+}
 
-    if data.data.is_empty() {
-        println!("Could not read binary file.");
-        return;
+#[derive(StructOpt)]
+struct Opt {
+    /// The binary file to disassemble
+    binary: String,
+
+    /// The format of the binary file
+    #[structopt(short, long)]
+    format: Option<BinaryFormat>,
+}
+
+fn detect_format(path: &str) -> BinaryFormat {
+    if let Some(ext) = std::path::Path::new(path)
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(|s| s.to_lowercase())
+    {
+        match ext.as_str() {
+            "com" => BinaryFormat::Com,
+            "exe" => BinaryFormat::Exe,
+            _ => BinaryFormat::Raw,
+        }
+    } else {
+        BinaryFormat::Raw
     }
+}
 
-    // Create a section of the whole file.
-    let section = Section::new(SegmentAndOffset(0x1000, 0x0100), &data.data[..]);
+#[cfg(test)]
+#[test]
+fn test_detect_format() {
+    let tests = [
+        ("test.com", BinaryFormat::Com),    // Com
+        ("program.exe", BinaryFormat::Exe), // Exe
+        ("test.rom", BinaryFormat::Raw),    // Raw
+        ("TEST.EXE", BinaryFormat::Exe),    // Case-sensitivity
+        ("rom", BinaryFormat::Raw),         // no extension
+    ];
 
-    print_section(&section);
+    for (path, expected) in tests {
+        assert_eq!(detect_format(path), expected);
+    }
+}
+
+fn main() {
+    let opts = Opt::from_args();
+
+    let format = if let Some(format) = opts.format {
+        format
+    } else {
+        detect_format(opts.binary.as_str())
+    };
+
+    if let Err(err) = disassemble(opts.binary.as_str(), format) {
+        eprintln!("{}", err);
+    }
 }

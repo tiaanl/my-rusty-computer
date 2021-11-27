@@ -5,4 +5,4 @@ edition = "2021"
 
 [dependencies]
 mrc_assembler = { path = "../../crates/mrc_assembler" }
-clap = "2"
+structopt = "0.3"

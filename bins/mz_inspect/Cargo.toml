@@ -6,4 +6,4 @@ edition = "2021"
 
 [dependencies]
 mrc_dos = { path = "../../crates/mrc_dos" }
-clap = "2"
+structopt = "0.3"

@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 mrc_decoder = { path = "../../crates/mrc_decoder" }
 mrc_instruction = { path = "../../crates/mrc_instruction" }
-clap = "2"
+structopt = "0.3"

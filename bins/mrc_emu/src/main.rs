@@ -2,11 +2,11 @@ mod component;
 mod config;
 mod debugger;
 
-use std::convert::TryFrom;
-use std::io::Read;
-use std::sync::Arc;
-use std::time::Instant;
-
+use crate::component::pic::Pic;
+use crate::component::pit::ProgrammableIntervalTimer8253;
+use crate::component::ram::RandomAccessMemory;
+use crate::component::rom::ReadOnlyMemory;
+use crate::debugger::DebuggerAction;
 use config::Config;
 use debugger::Debugger;
 use glutin::event_loop::ControlFlow;
@@ -14,14 +14,13 @@ use mrc_emulator::builder::EmulatorBuilder;
 use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::shared::Shared;
 use mrc_emulator::swmr::Swmr;
-
-use crate::component::pic::Pic;
-use crate::component::pit::ProgrammableIntervalTimer8253;
-use crate::component::ram::RandomAccessMemory;
-use crate::component::rom::ReadOnlyMemory;
-use crate::debugger::DebuggerAction;
 use mrc_instruction::Segment;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
+use std::convert::TryFrom;
+use std::io::Read;
+use std::sync::Arc;
+use std::time::Instant;
+use structopt::StructOpt;
 
 fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
@@ -116,7 +115,7 @@ fn create_emulator(
         });
     */
 
-    if let Some(bios_path) = &config.bios_path {
+    if let Some(bios_path) = &config.bios {
         install_bios(builder, bios_path);
     } else {
         let data = include_bytes!("../ext/mrc_bios/bios.bin");
@@ -139,7 +138,7 @@ fn create_emulator(
 fn main() {
     pretty_env_logger::init();
 
-    let config = Config::default();
+    let config = Config::from_args();
 
     let event_loop = glutin::event_loop::EventLoop::new();
 
