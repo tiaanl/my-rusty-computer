@@ -14,7 +14,6 @@ pub mod cpu;
 pub mod error;
 pub mod io;
 pub mod shared;
-pub mod swmr;
 
 pub trait Installable {
     fn map_bus(&mut self, _bus: &mut Bus) {}

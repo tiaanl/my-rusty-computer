@@ -13,12 +13,11 @@ use glutin::event_loop::ControlFlow;
 use mrc_emulator::builder::EmulatorBuilder;
 use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::shared::Shared;
-use mrc_emulator::swmr::Swmr;
 use mrc_instruction::Segment;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
 use std::convert::TryFrom;
 use std::io::Read;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use structopt::StructOpt;
 
@@ -67,13 +66,16 @@ fn install_bios(builder: &mut EmulatorBuilder, path: &str) {
 fn create_emulator(
     builder: &mut EmulatorBuilder,
     config: &Config,
-    screen_text_mode: Arc<Swmr<TextMode>>,
+    screen_text_mode: Arc<RwLock<TextMode>>,
 ) {
     // 640KiB RAM
     builder.map_address(0x00000..0xA0000, RandomAccessMemory::with_capacity(0xA0000));
 
     // Single Intel 8259A programmable interrupt controller.
     builder.map_io_range(0x20, 2, Pic::default());
+
+    // On IBM PC/XT port 0xA0 is mapped to a non-maskable interrupt (NMI) register.
+    // builder.map_io_range(0xA0, 1, );
 
     // Programmable Interval Timer
     builder.map_io_range(0x40, 0x04, ProgrammableIntervalTimer8253::default());
@@ -180,9 +182,8 @@ fn main() {
                     emulator.read().cpu.state.ip,
                 );
 
-                // if current_cpu_addr == 0xFE0A7 {
-                // FE0AC
-                if current_cpu_addr == 0xFE0AC {
+                // fe00:00b0 = fe0b0
+                if current_cpu_addr == 0xFE0B0 {
                     is_debugging = true;
                 } else {
                     emulator.write().tick();

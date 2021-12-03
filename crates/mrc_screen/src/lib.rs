@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use glium::glutin::event::Event;
 use glium::glutin::event_loop::EventLoop;
@@ -7,7 +7,6 @@ use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
 use mrc_emulator::bus::Address;
-use mrc_emulator::swmr::Swmr;
 use mrc_emulator::BusInterface;
 
 // const VGA_FONT: [u8; 1 * 8] = [
@@ -251,7 +250,7 @@ pub struct Screen {
     vertex_buffer: Option<VertexBuffer<Character>>,
     texture: glium::Texture2d,
 
-    text_mode: Arc<Swmr<TextMode>>,
+    text_mode: Arc<RwLock<TextMode>>,
 }
 
 impl Screen {
@@ -279,11 +278,11 @@ impl Screen {
             program,
             vertex_buffer: None,
             texture,
-            text_mode: Arc::new(Swmr::new(TextMode::default())),
+            text_mode: Arc::new(RwLock::new(TextMode::default())),
         }
     }
 
-    pub fn text_mode(&self) -> Arc<Swmr<TextMode>> {
+    pub fn text_mode(&self) -> Arc<RwLock<TextMode>> {
         self.text_mode.clone()
     }
 }
@@ -472,7 +471,7 @@ impl Screen {
         let mut _screen_size = (0i32, 0i32);
 
         {
-            let text_mode = self.text_mode.borrow();
+            let text_mode = self.text_mode.read().unwrap();
 
             _screen_size = (text_mode.size.0 as i32, text_mode.size.1 as i32);
 
@@ -516,18 +515,18 @@ impl Screen {
 }
 
 pub struct TextModeInterface {
-    text_mode: Arc<Swmr<TextMode>>,
+    text_mode: Arc<RwLock<TextMode>>,
 }
 
 impl TextModeInterface {
-    pub fn new(text_mode: Arc<Swmr<TextMode>>) -> Self {
+    pub fn new(text_mode: Arc<RwLock<TextMode>>) -> Self {
         Self { text_mode }
     }
 }
 
 impl BusInterface for TextModeInterface {
     fn read(&self, address: Address) -> mrc_emulator::error::Result<u8> {
-        let text_mode = self.text_mode.borrow();
+        let text_mode = self.text_mode.read().unwrap();
 
         let index = address as usize / 2;
         let value = if address % 2 == 0 {
@@ -542,7 +541,7 @@ impl BusInterface for TextModeInterface {
     }
 
     fn write(&mut self, address: Address, value: u8) -> mrc_emulator::error::Result<()> {
-        let mut text_mode = self.text_mode.borrow_mut();
+        let mut text_mode = self.text_mode.write().unwrap();
 
         let index = address as usize / 2;
         if address % 2 == 0 {

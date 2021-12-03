@@ -4,13 +4,12 @@ use glium::glutin::event_loop::EventLoop;
 use mrc_decoder::decode_instruction;
 use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::cpu::{Flags, State};
-use mrc_emulator::swmr::Swmr;
 use mrc_emulator::{BusInterface, Emulator};
 use mrc_instruction::{Instruction, Register, Segment};
 use mrc_screen::{Screen, TextMode};
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 pub enum DebuggerAction {
     Step,
@@ -42,7 +41,7 @@ impl Iterator for TempIterator {
 }
 
 pub struct Debugger {
-    text_mode: Arc<Swmr<TextMode>>,
+    text_mode: Arc<RwLock<TextMode>>,
     screen: Screen,
     state: State,
     instructions: Vec<Instruction>,
@@ -101,7 +100,7 @@ impl Debugger {
         #![allow(clippy::char_lit_as_u8)]
 
         {
-            let mut text_mode = self.text_mode.borrow_mut();
+            let mut text_mode = self.text_mode.write().unwrap();
             text_mode.set_cursor_position(0, 0);
 
             self.print_register(
