@@ -33,9 +33,8 @@ impl EmulatorBuilder {
         self
     }
 
-    pub fn map_io(&mut self, port: u16, interface: impl IOInterface + 'static) -> &mut Self {
-        self.io_interfaces
-            .insert(port, Rc::new(RefCell::new(interface)));
+    pub fn map_io(&mut self, port: u16, interface: Rc<RefCell<dyn IOInterface>>) -> &mut Self {
+        self.io_interfaces.insert(port, interface);
 
         self
     }
@@ -44,10 +43,8 @@ impl EmulatorBuilder {
         &mut self,
         first_port: u16,
         port_count: u16,
-        interface: impl IOInterface + 'static,
+        interface: Rc<RefCell<dyn IOInterface>>,
     ) -> &mut Self {
-        let interface = Rc::new(RefCell::new(interface));
-
         for port in first_port..(first_port + port_count) {
             self.io_interfaces.insert(port, interface.clone());
         }

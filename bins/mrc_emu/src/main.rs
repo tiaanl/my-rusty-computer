@@ -6,6 +6,7 @@ use crate::component::pic::Pic;
 use crate::component::pit::ProgrammableIntervalTimer8253;
 use crate::component::ram::RandomAccessMemory;
 use crate::component::rom::ReadOnlyMemory;
+use crate::component::NMI;
 use crate::debugger::DebuggerAction;
 use config::Config;
 use debugger::Debugger;
@@ -15,8 +16,10 @@ use mrc_emulator::bus::segment_and_offset;
 use mrc_emulator::shared::Shared;
 use mrc_instruction::Segment;
 use mrc_screen::{Screen, TextMode, TextModeInterface};
+use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::io::Read;
+use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use structopt::StructOpt;
@@ -72,13 +75,18 @@ fn create_emulator(
     builder.map_address(0x00000..0xA0000, RandomAccessMemory::with_capacity(0xA0000));
 
     // Single Intel 8259A programmable interrupt controller.
-    builder.map_io_range(0x20, 2, Pic::default());
+    builder.map_io_range(0x20, 2, Rc::new(RefCell::new(Pic::default())));
 
     // On IBM PC/XT port 0xA0 is mapped to a non-maskable interrupt (NMI) register.
-    // builder.map_io_range(0xA0, 1, );
+    let nmi = NMI { value: 0xA0 };
+    builder.map_io_range(0xA0, 1, Rc::new(RefCell::new(nmi)));
 
     // Programmable Interval Timer
-    builder.map_io_range(0x40, 0x04, ProgrammableIntervalTimer8253::default());
+    builder.map_io_range(
+        0x40,
+        0x04,
+        Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default())),
+    );
 
     /*
     // Basic ROM just below BIOS.
