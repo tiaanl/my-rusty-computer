@@ -1,6 +1,5 @@
-use mrc_emulator::bus::Address;
+use mrc_emulator::bus::{Address, BusInterface};
 use mrc_emulator::error::{Error, Result};
-use mrc_emulator::BusInterface;
 
 pub struct RandomAccessMemory {
     data: Vec<u8>,
@@ -11,7 +10,7 @@ impl RandomAccessMemory {
         Self { data: vec }
     }
 
-    pub fn with_capacity(capacity: u32) -> Self {
+    pub fn _with_capacity(capacity: u32) -> Self {
         Self {
             data: vec![0; capacity as usize],
         }

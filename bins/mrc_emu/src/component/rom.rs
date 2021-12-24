@@ -1,8 +1,8 @@
 use mrc_emulator::{
     bus::Address,
     error::{Error, Result},
-    BusInterface,
 };
+use mrc_emulator::bus::BusInterface;
 
 pub struct ReadOnlyMemory {
     data: Vec<u8>,

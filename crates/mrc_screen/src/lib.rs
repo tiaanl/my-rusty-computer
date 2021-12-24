@@ -6,8 +6,7 @@ use glium::glutin::{event, event_loop, window, ContextBuilder};
 use glium::uniforms::{MagnifySamplerFilter, MinifySamplerFilter};
 use glium::{implement_vertex, uniform, Display, Program, Surface, VertexBuffer};
 
-use mrc_emulator::bus::Address;
-use mrc_emulator::BusInterface;
+use mrc_emulator::bus::{Address, BusInterface};
 
 // const VGA_FONT: [u8; 1 * 8] = [
 //     0x7e,  // .111111.

@@ -2,34 +2,24 @@ mod component;
 mod config;
 mod debugger;
 
-use crate::component::pic::Pic;
-use crate::component::pit::ProgrammableIntervalTimer8253;
 use crate::component::ram::RandomAccessMemory;
 use crate::component::rom::ReadOnlyMemory;
-use crate::component::NMI;
-use crate::debugger::DebuggerAction;
 use config::Config;
-use debugger::Debugger;
-use glutin::event_loop::ControlFlow;
-use mrc_emulator::builder::EmulatorBuilder;
-use mrc_emulator::bus::segment_and_offset;
-use mrc_emulator::shared::Shared;
-use mrc_instruction::Segment;
-use mrc_screen::{Screen, TextMode, TextModeInterface};
-use std::cell::RefCell;
-use std::convert::TryFrom;
+use mrc_emulator::bus::{Address, BusInterface};
+use mrc_emulator::cpu::{ExecuteResult, CPU};
+use mrc_emulator::error::Error;
+use mrc_emulator::io::IOController;
 use std::io::Read;
-use std::rc::Rc;
-use std::sync::{Arc, RwLock};
-use std::time::Instant;
 use structopt::StructOpt;
 
-fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
+const MEMORY_MAX: usize = 0x100000;
+const BIOS_SIZE: usize = 0x2000;
+
+const BIOS_START: Address = (MEMORY_MAX - BIOS_SIZE) as Address;
+
+fn load_rom(path: impl AsRef<std::path::Path>) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
     let file_size = metadata.len();
-
-    // TODO: This should be returned as an Err from the function.
-    assert!(file_size.is_power_of_two());
 
     let mut data = vec![0; file_size as usize];
 
@@ -38,111 +28,200 @@ fn load_rom<P: AsRef<std::path::Path>>(path: P) -> std::io::Result<Vec<u8>> {
     Ok(data)
 }
 
-fn install_bios(builder: &mut EmulatorBuilder, path: &str) {
-    log::info!("Loading BIOS from: {}", path);
-
-    let data = match load_rom(path) {
-        Ok(r) => r,
-        Err(err) => {
-            log::error!("Could not read BIOS file. ({}) ({})", &path, err);
-            return;
+/// Create a [ReadOnlyMemory] instance that has a fixed `size`.  If the path is valid and could
+/// be loaded from disk, then it will be mapped to the beginning of the block.
+fn create_bios(path: Option<String>) -> ReadOnlyMemory {
+    let bios = if let Some(path) = path {
+        if let Ok(mut data) = load_rom(&path) {
+            if data.len() > BIOS_SIZE {
+                log::warn!(
+                    "BIOS file truncated from {} to {}. ({})",
+                    data.len(),
+                    BIOS_SIZE,
+                    &path
+                );
+            }
+            data.resize(BIOS_SIZE, 0);
+            Some(ReadOnlyMemory::from_vec(data))
+        } else {
+            None
         }
+    } else {
+        None
     };
 
-    let data_size = u32::try_from(data.len()).unwrap();
-    let bios_start_addr = 0x100000 - data_size;
-
-    log::info!(
-        "Loading BIOS to: {:#05X}..{:#05X} ({:05X}/{} bytes)",
-        bios_start_addr,
-        bios_start_addr + data_size as u32,
-        data_size,
-        data_size
-    );
-
-    builder.map_address(
-        bios_start_addr..bios_start_addr + (data_size as u32),
-        ReadOnlyMemory::from_vec(data),
-    );
+    bios.unwrap_or_else(|| ReadOnlyMemory::from_vec(vec![0u8; BIOS_SIZE as usize]))
 }
 
-fn create_emulator(
-    builder: &mut EmulatorBuilder,
-    config: &Config,
-    screen_text_mode: Arc<RwLock<TextMode>>,
-) {
-    // 640KiB RAM
-    builder.map_address(0x00000..0xA0000, RandomAccessMemory::with_capacity(0xA0000));
+// fn create_emulator(
+//     builder: &mut EmulatorBuilder,
+//     config: &Config,
+//     screen_text_mode: Arc<RwLock<TextMode>>,
+// ) {
+//     // 640KiB RAM
+//     builder.map_address(0x00000..0xA0000, RandomAccessMemory::with_capacity(0xA0000));
+//
+//     // Single Intel 8259A programmable interrupt controller.
+//     builder.map_io_range(0x20, 2, Rc::new(RefCell::new(Pic::default())));
+//
+//     // On IBM PC/XT port 0xA0 is mapped to a non-maskable interrupt (NMI) register.
+//     let nmi = NMI { value: 0xA0 };
+//     builder.map_io_range(0xA0, 1, Rc::new(RefCell::new(nmi)));
+//
+//     // Programmable Interval Timer
+//     builder.map_io_range(
+//         0x40,
+//         0x04,
+//         Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default())),
+//     );
+//
+//     /*
+//     // Basic ROM just below BIOS.
+//     [
+//         (
+//             r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF6.ROM"#,
+//             0xF6000,
+//         ),
+//         (
+//             r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF8.ROM"#,
+//             0xF8000,
+//         ),
+//         (
+//             r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFA.ROM"#,
+//             0xFA000,
+//         ),
+//         (
+//             r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFC.ROM"#,
+//             0xFC000,
+//         ),
+//     ]
+//         .map(|(path, address)| {
+//             let data = load_rom(path).unwrap();
+//             let data_len = data.len() as u32;
+//             let rom = ReadOnlyMemory::from_vec(data);
+//             emulator
+//                 .bus()
+//                 .borrow_mut()
+//                 .map(address, data_len, Rc::new(RefCell::new(rom)));
+//             log::info!(
+//             "Loading ROM \"{}\" to [{:05X}..{:05X}]",
+//             path,
+//             address,
+//             address + data_len
+//         );
+//         });
+//     */
+//
+//     if let Some(bios_path) = &config.bios {
+//         install_bios(builder, bios_path);
+//     } else {
+//         let data = include_bytes!("../ext/mrc_bios/bios.bin");
+//         let data = Vec::from(*data);
+//         let data_size = data.len() as u32;
+//         let bios_start_addr = 0x100000 - data_size;
+//
+//         builder.map_address(
+//             bios_start_addr..bios_start_addr + data_size,
+//             ReadOnlyMemory::from_vec(data),
+//         );
+//     }
+//
+//     builder.map_address(0xB8000..0xBC000, TextModeInterface::new(screen_text_mode));
+//     // builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode));
+//
+//     builder.reset_vector(0xF000, 0xFFF0);
+// fn main() {
+//     pretty_env_logger::init();
+//
+//     let config = Config::from_args();
+//
+//     let event_loop = glutin::event_loop::EventLoop::new();
+//
+//     let mut screen = Screen::new(&event_loop);
+//
+//     let mut last_monitor_update = Instant::now();
+//
+//     let mut is_debugging = false;
+//
+//     event_loop.run(move |event, _, control_flow| {
+//         *control_flow = ControlFlow::Poll;
+//
+//         if let Some(cf) = screen.handle_events(&event) {
+//             *control_flow = cf;
+//             return;
+//         }
+//
+//         if is_debugging {
+//             // if let Some(debugger_action) = debugger.handle_events(&event) {
+//             //     match debugger_action {
+//             //         DebuggerAction::Step => {
+//             //             emulator.write().tick();
+//             //         }
+//             //     }
+//             //     return;
+//             // }
+//         } else {
+//             for _ in 0..10 {
+//                 let current_cpu_addr = segment_and_offset(
+//                     emulator.read().cpu.state.get_segment_value(Segment::Cs),
+//                     emulator.read().cpu.state.ip,
+//                 );
+//
+//                 // fe00:00b0 = fe0b0
+//                 if current_cpu_addr == 0xFE0B0 {
+//                     is_debugging = true;
+//                 } else {
+//                     emulator.write().tick();
+//                 }
+//             }
+//         }
+//
+//         // 60 fps
+//         let now = Instant::now();
+//         if now >= last_monitor_update + std::time::Duration::from_nanos(16_666_667) {
+//             last_monitor_update = now;
+//             screen.tick();
+//             debugger.update(emulator.read());
+//             debugger.tick();
+//         }
+//     });
+// }
+// }
 
-    // Single Intel 8259A programmable interrupt controller.
-    builder.map_io_range(0x20, 2, Rc::new(RefCell::new(Pic::default())));
+struct Memory {
+    ram: RandomAccessMemory,
+    bios: ReadOnlyMemory,
+}
 
-    // On IBM PC/XT port 0xA0 is mapped to a non-maskable interrupt (NMI) register.
-    let nmi = NMI { value: 0xA0 };
-    builder.map_io_range(0xA0, 1, Rc::new(RefCell::new(nmi)));
+impl Memory {
+    fn new(bios: ReadOnlyMemory) -> Self {
+        Self {
+            ram: RandomAccessMemory::_with_capacity(0xA0000),
+            bios,
+        }
+    }
+}
 
-    // Programmable Interval Timer
-    builder.map_io_range(
-        0x40,
-        0x04,
-        Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default())),
-    );
-
-    /*
-    // Basic ROM just below BIOS.
-    [
-        (
-            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF6.ROM"#,
-            0xF6000,
-        ),
-        (
-            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF8.ROM"#,
-            0xF8000,
-        ),
-        (
-            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFA.ROM"#,
-            0xFA000,
-        ),
-        (
-            r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFC.ROM"#,
-            0xFC000,
-        ),
-    ]
-        .map(|(path, address)| {
-            let data = load_rom(path).unwrap();
-            let data_len = data.len() as u32;
-            let rom = ReadOnlyMemory::from_vec(data);
-            emulator
-                .bus()
-                .borrow_mut()
-                .map(address, data_len, Rc::new(RefCell::new(rom)));
-            log::info!(
-            "Loading ROM \"{}\" to [{:05X}..{:05X}]",
-            path,
-            address,
-            address + data_len
-        );
-        });
-    */
-
-    if let Some(bios_path) = &config.bios {
-        install_bios(builder, bios_path);
-    } else {
-        let data = include_bytes!("../ext/mrc_bios/bios.bin");
-        let data = Vec::from(*data);
-        let data_size = data.len() as u32;
-        let bios_start_addr = 0x100000 - data_size;
-
-        builder.map_address(
-            bios_start_addr..bios_start_addr + data_size,
-            ReadOnlyMemory::from_vec(data),
-        );
+impl BusInterface for Memory {
+    fn read(&self, address: Address) -> mrc_emulator::error::Result<u8> {
+        if address >= BIOS_START {
+            self.bios.read(address - BIOS_START)
+        } else if address < 0xA0000 {
+            self.ram.read(address)
+        } else {
+            Err(Error::AddressOutOfRange(address))
+        }
     }
 
-    builder.map_address(0xB8000..0xBC000, TextModeInterface::new(screen_text_mode));
-    // builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode));
-
-    builder.reset_vector(0xF000, 0xFFF0);
+    fn write(&mut self, address: Address, value: u8) -> mrc_emulator::error::Result<()> {
+        if address >= BIOS_START {
+            self.bios.write(address - BIOS_START, value)
+        } else if address < 0xA0000 {
+            self.ram.write(address, value)
+        } else {
+            Err(Error::AddressOutOfRange(address))
+        }
+    }
 }
 
 fn main() {
@@ -150,62 +229,17 @@ fn main() {
 
     let config = Config::from_args();
 
-    let event_loop = glutin::event_loop::EventLoop::new();
+    let bios = create_bios(config.bios);
+    let memory = Memory::new(bios);
 
-    let mut debugger = Debugger::new(&event_loop);
+    let mut cpu = CPU::new(memory, IOController::default());
 
-    let mut screen = Screen::new(&event_loop);
+    // Set the CPU reset vector: 0xFFFF0
+    cpu.jump_to(0xF000, 0xFFF0);
 
-    let mut builder = EmulatorBuilder::default();
-
-    create_emulator(&mut builder, &config, screen.text_mode());
-
-    let emulator = Arc::new(Shared::new(builder.build()));
-
-    let mut last_monitor_update = Instant::now();
-
-    let mut is_debugging = false;
-
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
-
-        if let Some(cf) = screen.handle_events(&event) {
-            *control_flow = cf;
-            return;
+    for _ in 0..10 {
+        if !matches!(cpu.tick(), Ok(ExecuteResult::Continue)) {
+            break;
         }
-
-        if is_debugging {
-            if let Some(debugger_action) = debugger.handle_events(&event) {
-                match debugger_action {
-                    DebuggerAction::Step => {
-                        emulator.write().tick();
-                    }
-                }
-                return;
-            }
-        } else {
-            for _ in 0..10 {
-                let current_cpu_addr = segment_and_offset(
-                    emulator.read().cpu.state.get_segment_value(Segment::Cs),
-                    emulator.read().cpu.state.ip,
-                );
-
-                // fe00:00b0 = fe0b0
-                if current_cpu_addr == 0xFE0B0 {
-                    is_debugging = true;
-                } else {
-                    emulator.write().tick();
-                }
-            }
-        }
-
-        // 60 fps
-        let now = Instant::now();
-        if now >= last_monitor_update + std::time::Duration::from_nanos(16_666_667) {
-            last_monitor_update = now;
-            screen.tick();
-            debugger.update(emulator.read());
-            debugger.tick();
-        }
-    });
+    }
 }

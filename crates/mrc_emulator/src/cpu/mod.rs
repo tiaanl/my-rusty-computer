@@ -1,6 +1,4 @@
-use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
-use std::rc::Rc;
 
 use bitflags::bitflags;
 
@@ -10,7 +8,7 @@ use mrc_instruction::{Register, Segment};
 use crate::bus::{segment_and_offset, BusInterface};
 pub use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::Result;
-use crate::io::IOController;
+use crate::io::IOInterface;
 
 mod executor;
 
@@ -266,18 +264,15 @@ impl Display for State {
 }
 
 /// An emulated 8086 CPU.  Contains all data and functions to access it.
-pub struct CPU {
+pub struct CPU<D: BusInterface, I: IOInterface> {
     // TODO: This is public because ip is public.
     pub state: State,
-    io_controller: Rc<RefCell<IOController>>,
-    bus: Rc<RefCell<dyn BusInterface>>,
+    io_controller: I,
+    bus: D,
 }
 
-impl CPU {
-    pub fn new(
-        bus: Rc<RefCell<dyn BusInterface>>,
-        io_controller: Rc<RefCell<IOController>>,
-    ) -> Self {
+impl<D: BusInterface, I: IOInterface> CPU<D, I> {
+    pub fn new(bus: D, io_controller: I) -> Self {
         Self {
             state: Default::default(),
             io_controller,
@@ -285,9 +280,14 @@ impl CPU {
         }
     }
 
+    pub fn jump_to(&mut self, segment: u16, offset: u16) {
+        self.state.segments.cs = segment;
+        self.state.ip = offset;
+    }
+
     pub fn tick(&mut self) -> Result<ExecuteResult> {
-        // println!("state: {}", self.state);
-        // print_bus_bytes(self);
+        println!("state: {}", self.state);
+        _print_bus_bytes(self);
 
         let _start_cs = self.state.segments.cs;
         let _start_ip = self.state.ip;
@@ -295,7 +295,7 @@ impl CPU {
         let instruction = decode_instruction(self)?;
 
         // Print instruction.
-        // println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);
+        println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);
 
         execute(self, &instruction)
     }
@@ -314,12 +314,12 @@ impl CPU {
 }
 
 /// The decoder requires an iterator to fetch bytes.
-impl Iterator for CPU {
+impl<D: BusInterface, I: IOInterface> Iterator for CPU<D, I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
         let address = segment_and_offset(self.state.segments.cs, self.state.ip);
-        if let Ok(byte) = self.bus.borrow().read(address) {
+        if let Ok(byte) = self.bus.read(address) {
             let (new_ip, overflow) = self.state.ip.overflowing_add(1);
             if overflow {
                 log::error!("IP overflow!");
@@ -334,15 +334,18 @@ impl Iterator for CPU {
     }
 }
 
-fn _print_bus_bytes(cpu: &CPU) {
+fn _print_bus_bytes<D: BusInterface, I: IOInterface>(cpu: &CPU<D, I>) {
     print!("Bytes to decode: ");
     let start = segment_and_offset(cpu.state.get_segment_value(Segment::Cs), cpu.state.ip);
     for i in 0..5 {
         let addr = start + i;
 
-        let byte = match cpu.bus.borrow().read(addr) {
+        let byte = match cpu.bus.read(addr) {
             Ok(byte) => byte,
-            Err(_) => break,
+            Err(err) => {
+                log::error!("Could not read from bus: {}", err);
+                break
+            },
         };
 
         print!("{:02X} ", byte);
