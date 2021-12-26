@@ -6,6 +6,7 @@ members = [
     "bins/mrc_dis",
     "bins/mrc_emu",
     "bins/mz_inspect",
+    "bins/pop",
     "crates/mrc_assembler",
     "crates/mrc_decoder",
     "crates/mrc_dos",

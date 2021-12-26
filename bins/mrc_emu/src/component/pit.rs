@@ -1,5 +1,5 @@
+use mrc_emulator::{Bus, Port};
 use mrc_emulator::error::Result;
-use mrc_emulator::io::IOInterface;
 
 // Intel 8253 Programmable Interrupt Timer
 // https://en.wikipedia.org/wiki/Intel_8253
@@ -35,7 +35,7 @@ pub struct ProgrammableIntervalTimer8253 {
     _channels: [Channel; 3],
 }
 
-impl IOInterface for ProgrammableIntervalTimer8253 {
+impl Bus<Port> for ProgrammableIntervalTimer8253 {
     fn read(&self, port: u16) -> Result<u8> {
         let _channel = usize::from(port - 0x40);
 

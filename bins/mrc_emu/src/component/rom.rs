@@ -1,8 +1,5 @@
-use mrc_emulator::{
-    bus::Address,
-    error::{Error, Result},
-};
-use mrc_emulator::bus::BusInterface;
+use mrc_emulator::{Address, Bus};
+use mrc_emulator::error::{Error, Result};
 
 pub struct ReadOnlyMemory {
     data: Vec<u8>,
@@ -14,7 +11,7 @@ impl ReadOnlyMemory {
     }
 }
 
-impl BusInterface for ReadOnlyMemory {
+impl Bus<Address> for ReadOnlyMemory {
     fn read(&self, address: Address) -> Result<u8> {
         if address as usize >= self.data.len() {
             Err(Error::AddressNotMapped(address))

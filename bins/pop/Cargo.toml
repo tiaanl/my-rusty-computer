@@ -1,0 +1,9 @@
+[package]
+name = "pop"
+version = "0.1.0"
+authors = ["Tiaan Louw <tiaanl@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+mrc_emulator = { path = "../../crates/mrc_emulator" }
+structopt = "0.3"

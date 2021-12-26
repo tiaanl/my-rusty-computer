@@ -1,10 +1,10 @@
-use mrc_emulator::{error::Result, io::IOInterface};
+use mrc_emulator::{Bus, error::Result, Port};
 
 /// Based on Intel 8259A programmable interrupt controller.
 #[derive(Default)]
 pub struct Pic {}
 
-impl IOInterface for Pic {
+impl Bus<Port> for Pic {
     fn read(&self, _port: u16) -> Result<u8> {
         todo!()
     }

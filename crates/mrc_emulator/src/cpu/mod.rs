@@ -5,10 +5,11 @@ use bitflags::bitflags;
 use mrc_decoder::decode_instruction;
 use mrc_instruction::{Register, Segment};
 
-use crate::bus::{segment_and_offset, BusInterface};
+use crate::{segment_and_offset, Address};
+use crate::Bus;
 pub use crate::cpu::executor::{execute, ExecuteResult};
 use crate::error::Result;
-use crate::io::IOInterface;
+use crate::Port;
 
 mod executor;
 
@@ -264,14 +265,14 @@ impl Display for State {
 }
 
 /// An emulated 8086 CPU.  Contains all data and functions to access it.
-pub struct CPU<D: BusInterface, I: IOInterface> {
+pub struct CPU<D: Bus<Address>, I: Bus<Port>> {
     // TODO: This is public because ip is public.
     pub state: State,
     io_controller: I,
     bus: D,
 }
 
-impl<D: BusInterface, I: IOInterface> CPU<D, I> {
+impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
     pub fn new(bus: D, io_controller: I) -> Self {
         Self {
             state: Default::default(),
@@ -314,7 +315,7 @@ impl<D: BusInterface, I: IOInterface> CPU<D, I> {
 }
 
 /// The decoder requires an iterator to fetch bytes.
-impl<D: BusInterface, I: IOInterface> Iterator for CPU<D, I> {
+impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -334,7 +335,7 @@ impl<D: BusInterface, I: IOInterface> Iterator for CPU<D, I> {
     }
 }
 
-fn _print_bus_bytes<D: BusInterface, I: IOInterface>(cpu: &CPU<D, I>) {
+fn _print_bus_bytes<D: Bus<Address>, I: Bus<Port>>(cpu: &CPU<D, I>) {
     print!("Bytes to decode: ");
     let start = segment_and_offset(cpu.state.get_segment_value(Segment::Cs), cpu.state.ip);
     for i in 0..5 {

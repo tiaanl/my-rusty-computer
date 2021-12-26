@@ -4,7 +4,7 @@ pub mod pit;
 pub mod ram;
 pub mod rom;
 
-use mrc_emulator::io::IOInterface;
+use mrc_emulator::{Bus, Port};
 use mrc_emulator::error::Result;
 
 /// Temporary implementation for the NMI register
@@ -13,7 +13,7 @@ pub struct NMI {
     pub value: u8,
 }
 
-impl IOInterface for NMI {
+impl Bus<Port> for NMI {
     fn read(&self, port: u16) -> Result<u8> {
         log::info!("Reading NMI register from port {:#06X}", port);
         Ok(self.value)

@@ -1,15 +1,14 @@
-use crate::bus::{segment_and_offset, Address, BusInterface};
+use super::CPU;
+use crate::cpu::executor::operations::{SignificantBit, StateExt};
+use crate::cpu::{Flags, State};
+use crate::error::{Error, Result};
+use crate::Bus;
+use crate::Port;
+use crate::{segment_and_offset, Address};
 use mrc_instruction::{
     AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
     Operation, Register, Repeat, Segment,
 };
-
-use crate::cpu::executor::operations::{SignificantBit, StateExt};
-use crate::cpu::{Flags, State};
-use crate::error::{Error, Result};
-use crate::io::IOInterface;
-
-use super::CPU;
 
 pub mod operations;
 
@@ -23,7 +22,7 @@ fn illegal_operands(instruction: &Instruction) {
     panic!("Illegal operands! {:?}", instruction)
 }
 
-fn indirect_address_for<D: BusInterface, I: IOInterface>(
+fn indirect_address_for<D: Bus<Address>, I: Bus<Port>>(
     cpu: &CPU<D, I>,
     segment: Segment,
     addressing_mode: &AddressingMode,
@@ -82,11 +81,14 @@ fn indirect_address_for<D: BusInterface, I: IOInterface>(
 mod byte {
     use super::*;
 
-    pub fn bus_read<D: BusInterface, I: IOInterface>(cpu: &CPU<D, I>, address: Address) -> Result<u8> {
+    pub fn bus_read<D: Bus<Address>, I: Bus<Port>>(
+        cpu: &CPU<D, I>,
+        address: Address,
+    ) -> Result<u8> {
         cpu.bus.read(address)
     }
 
-    pub fn bus_write<D: BusInterface, I: IOInterface>(
+    pub fn bus_write<D: Bus<Address>, I: Bus<Port>>(
         cpu: &mut CPU<D, I>,
         address: Address,
         value: u8,
@@ -94,7 +96,7 @@ mod byte {
         cpu.bus.write(address, value)
     }
 
-    pub fn get_operand_type_value<D: BusInterface, I: IOInterface>(
+    pub fn get_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         operand_type: &OperandType,
     ) -> Result<u8> {
@@ -122,7 +124,7 @@ mod byte {
         }
     }
 
-    pub fn get_operand_value<D: BusInterface, I: IOInterface>(
+    pub fn get_operand_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         operand: &Operand,
     ) -> Result<u8> {
@@ -130,7 +132,7 @@ mod byte {
         byte::get_operand_type_value(cpu, &operand.0)
     }
 
-    pub fn set_operand_type_value<D: BusInterface, I: IOInterface>(
+    pub fn set_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &mut CPU<D, I>,
         operand_type: &OperandType,
         value: u8,
@@ -153,7 +155,7 @@ mod byte {
         }
     }
 
-    pub fn set_operand_value<D: BusInterface, I: IOInterface>(
+    pub fn set_operand_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &mut CPU<D, I>,
         operand: &Operand,
         value: u8,
@@ -166,7 +168,7 @@ mod byte {
 mod word {
     use super::*;
 
-    pub fn bus_read<D: BusInterface, I: IOInterface>(
+    pub fn bus_read<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         address: Address,
     ) -> Result<u16> {
@@ -175,7 +177,7 @@ mod word {
         Ok(u16::from_le_bytes([lo, hi]))
     }
 
-    pub fn bus_write<D: BusInterface, I: IOInterface>(
+    pub fn bus_write<D: Bus<Address>, I: Bus<Port>>(
         cpu: &mut CPU<D, I>,
         address: Address,
         value: u16,
@@ -186,7 +188,7 @@ mod word {
         Ok(())
     }
 
-    pub fn set_operand_type_value<D: BusInterface, I: IOInterface>(
+    pub fn set_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &mut CPU<D, I>,
         operand_type: &OperandType,
         value: u16,
@@ -213,7 +215,7 @@ mod word {
         }
     }
 
-    pub fn set_operand_value<D: BusInterface, I: IOInterface>(
+    pub fn set_operand_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &mut CPU<D, I>,
         operand: &Operand,
         value: u16,
@@ -222,7 +224,7 @@ mod word {
         set_operand_type_value(cpu, &operand.0, value)
     }
 
-    pub fn get_operand_type_value<D: BusInterface, I: IOInterface>(
+    pub fn get_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         operand_type: &OperandType,
     ) -> Result<u16> {
@@ -246,7 +248,7 @@ mod word {
         }
     }
 
-    pub fn get_operand_value<D: BusInterface, I: IOInterface>(
+    pub fn get_operand_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         operand: &Operand,
     ) -> Result<u16> {
@@ -256,7 +258,7 @@ mod word {
     }
 }
 
-fn push<D: BusInterface, I: IOInterface>(cpu: &mut CPU<D, I>, value: u16) -> Result<()> {
+fn push<D: Bus<Address>, I: Bus<Port>>(cpu: &mut CPU<D, I>, value: u16) -> Result<()> {
     let ss = cpu.state.get_segment_value(Segment::Ss);
     let mut sp = cpu.state.get_word_register_value(Register::AhSp);
 
@@ -268,7 +270,7 @@ fn push<D: BusInterface, I: IOInterface>(cpu: &mut CPU<D, I>, value: u16) -> Res
     word::bus_write(cpu, segment_and_offset(ss, sp), value)
 }
 
-fn pop<D: BusInterface, I: IOInterface>(cpu: &mut CPU<D, I>) -> Result<u16> {
+fn pop<D: Bus<Address>, I: Bus<Port>>(cpu: &mut CPU<D, I>) -> Result<u16> {
     let ss = cpu.state.get_segment_value(Segment::Ss);
     let mut sp = cpu.state.get_word_register_value(Register::AhSp);
 
@@ -296,7 +298,7 @@ fn displace_ip(state: &mut State, displacement: &Displacement) -> Result<()> {
     Ok(())
 }
 
-pub fn execute<D: BusInterface, I: IOInterface>(
+pub fn execute<D: Bus<Address>, I: Bus<Port>>(
     cpu: &mut CPU<D, I>,
     instruction: &Instruction,
 ) -> Result<ExecuteResult> {

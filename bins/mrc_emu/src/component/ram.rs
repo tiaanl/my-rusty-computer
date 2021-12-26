@@ -1,4 +1,4 @@
-use mrc_emulator::bus::{Address, BusInterface};
+use mrc_emulator::{Address, Bus};
 use mrc_emulator::error::{Error, Result};
 
 pub struct RandomAccessMemory {
@@ -17,7 +17,7 @@ impl RandomAccessMemory {
     }
 }
 
-impl BusInterface for RandomAccessMemory {
+impl Bus<Address> for RandomAccessMemory {
     fn read(&self, address: Address) -> Result<u8> {
         if address as usize >= self.data.len() {
             Err(Error::AddressNotMapped(address))

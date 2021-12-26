@@ -5,12 +5,11 @@ mod debugger;
 use crate::component::ram::RandomAccessMemory;
 use crate::component::rom::ReadOnlyMemory;
 use config::Config;
-use mrc_emulator::bus::{Address, BusInterface};
 use mrc_emulator::cpu::{ExecuteResult, CPU};
 use mrc_emulator::error::Error;
-use mrc_emulator::io::IOController;
 use std::io::Read;
 use structopt::StructOpt;
+use mrc_emulator::{Address, Bus, Port};
 
 const MEMORY_MAX: usize = 0x100000;
 const BIOS_SIZE: usize = 0x2000;
@@ -202,7 +201,7 @@ impl Memory {
     }
 }
 
-impl BusInterface for Memory {
+impl Bus<Address> for Memory {
     fn read(&self, address: Address) -> mrc_emulator::error::Result<u8> {
         if address >= BIOS_START {
             self.bios.read(address - BIOS_START)
@@ -224,6 +223,18 @@ impl BusInterface for Memory {
     }
 }
 
+struct IOBus;
+
+impl Bus<Port> for IOBus {
+    fn read(&self, _address: Port) -> mrc_emulator::error::Result<u8> {
+        todo!()
+    }
+
+    fn write(&mut self, _address: Port, _value: u8) -> mrc_emulator::error::Result<()> {
+        todo!()
+    }
+}
+
 fn main() {
     pretty_env_logger::init();
 
@@ -231,8 +242,9 @@ fn main() {
 
     let bios = create_bios(config.bios);
     let memory = Memory::new(bios);
+    let io = IOBus;
 
-    let mut cpu = CPU::new(memory, IOController::default());
+    let mut cpu = CPU::new(memory, io);
 
     // Set the CPU reset vector: 0xFFFF0
     cpu.jump_to(0xF000, 0xFFF0);
