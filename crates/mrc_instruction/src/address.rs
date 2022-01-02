@@ -2,8 +2,9 @@
 /// segment and offset values, but can also be represented as a 20-bit flat address.
 ///
 /// ```rust
+/// use mrc_instruction::Address;
 /// let reset_vector = Address::new(0xFFFF, 0x0000);
-/// assert_eq!(address.flat(), 0xFFFF0);
+/// assert_eq!(reset_vector.flat(), 0xFFFF0);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Address {

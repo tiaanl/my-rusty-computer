@@ -2,204 +2,224 @@ use crate::Address;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operation {
-    AAA,
-    AAD,
-    AAM,
-    AAS,
-    ADC,
-    ADD,
-    AND,
-    BAA,
-    CALL,
-    CBW,
-    CLC,
-    CLD,
-    CLI,
-    CMC,
-    CMP,
-    CMPSB,
-    CMPSW,
-    CWD,
-    DAA,
-    DAS,
-    DEC,
-    DIV,
-    ESC,
-    HLT,
-    IDIV,
-    IMUL,
-    IN,
-    INC,
-    INT,
-    INTO,
-    IRET,
-    JB,
-    JBE,
-    JCXZ,
-    JE,
-    JL,
-    JLE,
-    JMP,
-    JNB,
-    JNBE,
-    JNE,
-    JNL,
-    JNLE,
-    JNO,
-    JNP,
-    JNS,
-    JO,
-    JP,
-    JS,
-    LAHF,
-    LDS,
-    LEA,
-    LES,
-    LOCK,
-    LODSB,
-    LODSW,
-    LOOP,
-    LOOPNZ,
-    LOOPZ,
-    MOV,
-    MOVSB,
-    MOVSW,
-    MUL,
-    NEG,
-    NOP,
-    NOT,
-    OR,
-    OUT,
-    POP,
-    POPF,
-    PUSH,
-    PUSHF,
-    RCL,
-    RCR,
-    RET,
-    ROL,
-    ROR,
-    SAHF,
-    SALC, // Undocumented
-    SAR,
-    SBB,
-    SCASB,
-    SCASW,
-    SHL,
-    SHR,
-    STC,
-    STD,
-    STI,
-    STOSB,
-    STOSW,
-    SUB,
-    TEST,
-    WAIT,
-    XCHG,
-    XLAT,
-    XOR,
+    // Data transfer
+    MOV,   // Move
+    PUSH,  // Push
+    POP,   // Pop
+    XCHG,  // Exchange
+    IN,    // Input from
+    OUT,   // Output to
+    XLAT,  // Translate byte to AL
+    LEA,   // Load effective address to register
+    LDS,   // Load pointer to DS
+    LES,   // Load pointer to ES
+    LAHF,  // Load AH with flags
+    SAHF,  // Store AH into flags
+    PUSHF, // Push flags
+    POPF,  // Pop flags
+
+    // Arithmetic
+    ADD,  // Add
+    ADC,  // Add with carry
+    INC,  // Increment
+    AAA,  // ASCII adjust for add
+    DAA,  // Decimal adjust for add
+    SUB,  // Subtract
+    SBB,  // Subtract with borrow
+    DEC,  // Decrement
+    NEG,  // Change sign
+    CMP,  // Compare
+    AAS,  // ASCII adjust for subtract
+    DAS,  // Decimal adjust for subtract
+    MUL,  // Multiply (unsigned)
+    IMUL, // Integer multiply (signed)
+    AAM,  // ASCII adjust for multiply
+    DIV,  // Divide (unsigned)
+    IDIV, // Integer divide (signed)
+    AAD,  // ASCII adjust for divide
+    CBW,  // Convert byte to word
+    CWD,  // Convert word to double word
+
+    // Logic
+    NOT,  // Invert
+    SHL,  // Shift logical left (alias: SAL)
+    SHR,  // Shift logical right
+    SAR,  // Shift arithmetic right
+    ROL,  // Rotate left
+    ROR,  // Rotate right
+    RCL,  // Rotate through carry flag left
+    RCR,  // Rotate through carry flag right
+    AND,  // And
+    TEST, // And function to flags, no result
+    OR,   // Or
+    XOR,  // Exclusive or
+
+    // String manipulation
+    // TODO: Should these be without size and have the size as another operand type?
+    REP,   // Repeat
+    MOVSB, // Move byte
+    MOVSW, // Move word
+    CMPSB, // Compare byte
+    CMPSW, // Compare word
+    SCASB, // Scan byte
+    SCASW, // Scan word
+    LODSB, // Load byte to AL
+    LODSW, // Load word to AX
+    STOSB, // Store byte to AL
+    STOSW, // Store word to AX
+
+    // Control transfer
+    CALL,   // Call
+    JMP,    // Unconditional jump
+    RET,    // Return from CALL
+    JE,     // Jump on equal/zero (alias JZ)
+    JL,     // Jump on less/not greater or equal (alias JNGE)
+    JLE,    // Jump on less or equal/not greater (alias JNG)
+    JB,     // Jump on below/not above or equal (alias JNAE)
+    JBE,    // Jump on below or equal/not above (alias JNA)
+    JP,     // Jump on parity/parity even (alias JPE)
+    JO,     // Jump on overflow
+    JS,     // Jump on sign
+    JNE,    // Jump on not equal/not zero (alias JNZ)
+    JNL,    // Jump on not less/greater or equal (alias JGE)
+    JNLE,   // Jump on not less or equal/greater (alias JG)
+    JNB,    // Jump on not below/above or equal (alias JAE)
+    JNBE,   // Jump on not below or equal/above (alias JA)
+    JNP,    // Jump on not parity/parity odd (alias JPO)
+    JNO,    // Jump on not overflow
+    JNS,    // Jump on not sign
+    LOOP,   // Loop CX times
+    LOOPZ,  // Loop while zero/equal (alias LOOPE)
+    LOOPNZ, // Loop while not zero/equal (alias LOOPNE)
+    JCXZ,   // Jump on CX zero
+    INT,    // Interrupt
+    INTO,   // Interrupt on overflow
+    IRET,   // Interrupt return
+
+    // Processor control
+    CLC,  // Clear carry
+    CMC,  // Complement carry
+    STC,  // Set carry
+    CLD,  // Clear direction
+    STD,  // Set direction
+    CLI,  // Clear interrupt
+    STI,  // Set interrupt
+    HLT,  // Halt
+    WAIT, // Wait
+    ESC,  // Escape (to external device)
+    LOCK, // Bus lock prefix
+
+    NOP, // No operation
+
+    // Undocumented
+    SALC, // Set AL on carry
 }
 
 impl std::fmt::Display for Operation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Operation::AAA => write!(f, "aaa"),
-            Operation::AAD => write!(f, "aad"),
-            Operation::AAM => write!(f, "aam"),
-            Operation::AAS => write!(f, "aas"),
-            Operation::ADC => write!(f, "adc"),
-            Operation::ADD => write!(f, "add"),
-            Operation::AND => write!(f, "and"),
-            Operation::BAA => write!(f, "baa"),
-            Operation::CALL => write!(f, "call"),
-            Operation::CBW => write!(f, "cbw"),
-            Operation::CLC => write!(f, "clc"),
-            Operation::CLD => write!(f, "cld"),
-            Operation::CLI => write!(f, "cli"),
-            Operation::CMC => write!(f, "cmc"),
-            Operation::CMP => write!(f, "cmp"),
-            Operation::CMPSB => write!(f, "cmpsb"),
-            Operation::CMPSW => write!(f, "cmpsw"),
-            Operation::CWD => write!(f, "cwd"),
-            Operation::DAA => write!(f, "daa"),
-            Operation::DAS => write!(f, "das"),
-            Operation::DEC => write!(f, "dec"),
-            Operation::DIV => write!(f, "div"),
-            Operation::ESC => write!(f, "esc"),
-            Operation::HLT => write!(f, "hlt"),
-            Operation::IDIV => write!(f, "idiv"),
-            Operation::IMUL => write!(f, "imul"),
-            Operation::IN => write!(f, "in"),
-            Operation::INC => write!(f, "inc"),
-            Operation::INT => write!(f, "int"),
-            Operation::INTO => write!(f, "into"),
-            Operation::IRET => write!(f, "iret"),
-            Operation::JB => write!(f, "jb"),
-            Operation::JBE => write!(f, "jbe"),
-            Operation::JCXZ => write!(f, "jcxz"),
-            Operation::JE => write!(f, "je"),
-            Operation::JL => write!(f, "jl"),
-            Operation::JLE => write!(f, "jle"),
-            Operation::JMP => write!(f, "jmp"),
-            Operation::JNB => write!(f, "jnb"),
-            Operation::JNBE => write!(f, "jnbe"),
-            Operation::JNE => write!(f, "jne"),
-            Operation::JNL => write!(f, "jnl"),
-            Operation::JNLE => write!(f, "jnle"),
-            Operation::JNO => write!(f, "jno"),
-            Operation::JNP => write!(f, "jnp"),
-            Operation::JNS => write!(f, "jns"),
-            Operation::JO => write!(f, "jo"),
-            Operation::JP => write!(f, "jp"),
-            Operation::JS => write!(f, "js"),
-            Operation::LAHF => write!(f, "lahf"),
-            Operation::LDS => write!(f, "lds"),
-            Operation::LEA => write!(f, "lea"),
-            Operation::LES => write!(f, "les"),
-            Operation::LOCK => write!(f, "lock"),
-            Operation::LODSB => write!(f, "lodsb"),
-            Operation::LODSW => write!(f, "lodsw"),
-            Operation::LOOP => write!(f, "loop"),
-            Operation::LOOPNZ => write!(f, "loopnz"),
-            Operation::LOOPZ => write!(f, "loopz"),
-            Operation::MOV => write!(f, "mov"),
-            Operation::MOVSB => write!(f, "movsb"),
-            Operation::MOVSW => write!(f, "movsw"),
-            Operation::MUL => write!(f, "mul"),
-            Operation::NEG => write!(f, "neg"),
-            Operation::NOP => write!(f, "nop"),
-            Operation::NOT => write!(f, "not"),
-            Operation::OR => write!(f, "or"),
-            Operation::OUT => write!(f, "out"),
-            Operation::POP => write!(f, "pop"),
-            Operation::POPF => write!(f, "popf"),
-            Operation::PUSH => write!(f, "push"),
-            Operation::PUSHF => write!(f, "pushf"),
-            Operation::RCL => write!(f, "rcl"),
-            Operation::RCR => write!(f, "rcr"),
-            Operation::RET => write!(f, "ret"),
-            Operation::ROL => write!(f, "rol"),
-            Operation::ROR => write!(f, "ror"),
-            Operation::SAHF => write!(f, "sahf"),
-            Operation::SALC => write!(f, "salc"),
-            Operation::SAR => write!(f, "sar"),
-            Operation::SBB => write!(f, "sbb"),
-            Operation::SCASB => write!(f, "scasb"),
-            Operation::SCASW => write!(f, "scasw"),
-            Operation::SHL => write!(f, "shl"),
-            Operation::SHR => write!(f, "shr"),
-            Operation::STC => write!(f, "stc"),
-            Operation::STD => write!(f, "std"),
-            Operation::STI => write!(f, "sti"),
-            Operation::STOSB => write!(f, "stosb"),
-            Operation::STOSW => write!(f, "stosw"),
-            Operation::SUB => write!(f, "sub"),
-            Operation::TEST => write!(f, "test"),
-            Operation::WAIT => write!(f, "wait"),
-            Operation::XCHG => write!(f, "xchg"),
-            Operation::XLAT => write!(f, "xlat"),
-            Operation::XOR => write!(f, "xor"),
-        }
+        use Operation::*;
+        write!(
+            f,
+            "{}",
+            match self {
+                MOV => "mov",
+                PUSH => "push",
+                POP => "pop",
+                XCHG => "xchg",
+                IN => "in",
+                OUT => "out",
+                XLAT => "xlat",
+                LEA => "lea",
+                LDS => "lds",
+                LES => "les",
+                LAHF => "lahf",
+                SAHF => "sahf",
+                PUSHF => "pushf",
+                POPF => "popf",
+                ADD => "add",
+                ADC => "adc",
+                INC => "inc",
+                AAA => "aaa",
+                DAA => "daa",
+                SUB => "sub",
+                SBB => "sbb",
+                DEC => "dec",
+                NEG => "neg",
+                CMP => "cmp",
+                AAS => "aas",
+                DAS => "das",
+                MUL => "mul",
+                IMUL => "imul",
+                AAM => "aam",
+                DIV => "div",
+                IDIV => "idiv",
+                AAD => "aad",
+                CBW => "cbw",
+                CWD => "cwd",
+                NOT => "not",
+                SHL => "shl",
+                SHR => "shr",
+                SAR => "sar",
+                ROL => "rol",
+                ROR => "ror",
+                RCL => "rcl",
+                RCR => "rcr",
+                AND => "and",
+                TEST => "test",
+                OR => "or",
+                XOR => "xor",
+                REP => "rep",
+                MOVSB => "movsb",
+                MOVSW => "movsw",
+                CMPSB => "cmpsb",
+                CMPSW => "cmpsw",
+                SCASB => "scasb",
+                SCASW => "scasw",
+                LODSB => "lodsb",
+                LODSW => "lodsw",
+                STOSB => "stosb",
+                STOSW => "stosw",
+                CALL => "call",
+                JMP => "jmp",
+                RET => "ret",
+                JE => "je",
+                JL => "jl",
+                JLE => "jle",
+                JB => "jb",
+                JBE => "jbe",
+                JP => "jp",
+                JO => "jo",
+                JS => "js",
+                JNE => "jne",
+                JNL => "jnl",
+                JNLE => "jnle",
+                JNB => "jnb",
+                JNBE => "jnbe",
+                JNP => "jnp",
+                JNO => "jno",
+                JNS => "jns",
+                LOOP => "loop",
+                LOOPZ => "loopz",
+                LOOPNZ => "loopnz",
+                JCXZ => "jcxz",
+                INT => "int",
+                INTO => "into",
+                IRET => "iret",
+                CLC => "clc",
+                CMC => "cmc",
+                STC => "stc",
+                CLD => "cld",
+                STD => "std",
+                CLI => "cli",
+                STI => "sti",
+                HLT => "hlt",
+                WAIT => "wait",
+                ESC => "esc",
+                LOCK => "lock",
+                NOP => "nop",
+                SALC => "salc",
+            }
+        )
     }
 }
 
