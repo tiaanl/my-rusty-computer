@@ -303,36 +303,26 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
     instruction: &Instruction,
 ) -> Result<ExecuteResult> {
     macro_rules! destination_and_source_ops {
-        ($operation:expr,$d:expr,$s:expr,$size:ident) => {
+        ($operation:expr,$d:expr,$s:expr,$size:ident) => {{
+            use operations as op;
+            use Operation::*;
             match $operation {
-                Adc => Some(operations::$size::add_with_carry(
-                    $d,
-                    $s,
-                    &mut cpu.state.flags,
-                )),
-                Add => Some(operations::$size::add($d, $s, &mut cpu.state.flags)),
-                And => Some(operations::$size::and($d, $s, &mut cpu.state.flags)),
-                Cmp => Some(operations::$size::compare($d, $s, &mut cpu.state.flags)),
-                Mul => Some(operations::$size::multiply($d, $s, &mut cpu.state.flags)),
-                Or => Some(operations::$size::or($d, $s, &mut cpu.state.flags)),
-                Rol => Some(operations::$size::rotate_left($d, $s, &mut cpu.state.flags)),
-                Ror => Some(operations::$size::rotate_right(
-                    $d,
-                    $s,
-                    &mut cpu.state.flags,
-                )),
-                Shl => Some(operations::$size::shift_left($d, $s, &mut cpu.state.flags)),
-                Shr => Some(operations::$size::shift_right($d, $s, &mut cpu.state.flags)),
-                Sub => Some(operations::$size::subtract($d, $s, &mut cpu.state.flags)),
-                Test => Some(operations::$size::test($d, $s, &mut cpu.state.flags)),
-                Xor => Some(operations::$size::exclusive_or(
-                    $d,
-                    $s,
-                    &mut cpu.state.flags,
-                )),
+                ADC => Some(op::$size::add_with_carry($d, $s, &mut cpu.state.flags)),
+                ADD => Some(op::$size::add($d, $s, &mut cpu.state.flags)),
+                AND => Some(op::$size::and($d, $s, &mut cpu.state.flags)),
+                CMP => Some(op::$size::compare($d, $s, &mut cpu.state.flags)),
+                MUL => Some(op::$size::multiply($d, $s, &mut cpu.state.flags)),
+                OR => Some(op::$size::or($d, $s, &mut cpu.state.flags)),
+                ROL => Some(op::$size::rotate_left($d, $s, &mut cpu.state.flags)),
+                ROR => Some(op::$size::rotate_right($d, $s, &mut cpu.state.flags)),
+                SHL => Some(op::$size::shift_left($d, $s, &mut cpu.state.flags)),
+                SHR => Some(op::$size::shift_right($d, $s, &mut cpu.state.flags)),
+                SUB => Some(op::$size::subtract($d, $s, &mut cpu.state.flags)),
+                TEST => Some(op::$size::test($d, $s, &mut cpu.state.flags)),
+                XOR => Some(op::$size::exclusive_or($d, $s, &mut cpu.state.flags)),
                 _ => None,
             }
-        };
+        }};
     }
 
     match instruction.operands {
@@ -340,8 +330,6 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             Operand(ref destination, OperandSize::Byte),
             Operand(ref source, OperandSize::Byte),
         ) => {
-            use Operation::*;
-
             let d = byte::get_operand_type_value(cpu, destination)?;
             let s = byte::get_operand_type_value(cpu, source)?;
             if let Some(result) = destination_and_source_ops!(instruction.operation, d, s, byte) {
@@ -356,8 +344,6 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             Operand(ref destination, OperandSize::Word),
             Operand(ref source, OperandSize::Word),
         ) => {
-            use Operation::*;
-
             let d = word::get_operand_type_value(cpu, destination)?;
             let s = word::get_operand_type_value(cpu, source)?;
             if let Some(result) = destination_and_source_ops!(instruction.operation, d, s, word) {
@@ -372,7 +358,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
     }
 
     match instruction.operation {
-        Operation::Call => match &instruction.operands {
+        Operation::CALL => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 // Store the current IP (which is after this CALL) on the stack. So that RET
                 // can pop it.
@@ -382,7 +368,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => todo!(),
         },
 
-        Operation::Cbw => {
+        Operation::CBW => {
             let al = cpu.state.get_byte_register_value(Register::AlAx);
             if al.most_significant_bit() {
                 cpu.state
@@ -393,19 +379,19 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             }
         }
 
-        Operation::Clc => {
+        Operation::CLC => {
             cpu.state.flags.remove(Flags::CARRY);
         }
 
-        Operation::Cld => {
+        Operation::CLD => {
             cpu.state.flags.remove(Flags::DIRECTION);
         }
 
-        Operation::Cli => {
+        Operation::CLI => {
             cpu.state.flags.remove(Flags::INTERRUPT);
         }
 
-        Operation::Dec => match instruction.operands {
+        Operation::DEC => match instruction.operands {
             OperandSet::Destination(Operand(ref destination, OperandSize::Byte)) => {
                 let mut value = byte::get_operand_type_value(cpu, destination)?;
                 value = value.wrapping_sub(1);
@@ -419,16 +405,16 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Esc => {
+        Operation::ESC => {
             // TODO: Implement FPU
         }
 
-        Operation::Hlt => {
+        Operation::HLT => {
             log::info!("HALT");
             return Ok(ExecuteResult::Stop);
         }
 
-        Operation::In => match instruction.operands {
+        Operation::IN => match instruction.operands {
             OperandSet::DestinationAndSource(ref destination, ref port) => {
                 let port = match port.1 {
                     OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
@@ -450,7 +436,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Inc => match &instruction.operands {
+        Operation::INC => match &instruction.operands {
             OperandSet::Destination(destination) => match destination.1 {
                 OperandSize::Byte => {
                     let mut value = byte::get_operand_value(cpu, destination)?;
@@ -466,7 +452,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Int => match instruction.operands {
+        Operation::INT => match instruction.operands {
             OperandSet::Destination(Operand(OperandType::Immediate(index), OperandSize::Byte)) => {
                 log::info!("Calling interrupt {:02X}", index);
 
@@ -498,7 +484,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Iret => match instruction.operands {
+        Operation::IRET => match instruction.operands {
             OperandSet::None => {
                 cpu.state.ip = pop(cpu)?;
                 cpu.state.segments.cs = pop(cpu)?;
@@ -508,7 +494,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jb => match &instruction.operands {
+        Operation::JB => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::CARRY) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -517,7 +503,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jbe => match &instruction.operands {
+        Operation::JBE => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::CARRY | Flags::ZERO) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -526,7 +512,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jcxz => match &instruction.operands {
+        Operation::JCXZ => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.get_word_register_value(Register::ClCx) == 0 {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -535,7 +521,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Je => match &instruction.operands {
+        Operation::JE => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::ZERO) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -544,7 +530,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jl => match &instruction.operands {
+        Operation::JL => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::SIGN)
                     != cpu.state.flags.contains(Flags::OVERFLOW)
@@ -555,7 +541,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jnl => match &instruction.operands {
+        Operation::JNL => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::SIGN)
                     == cpu.state.flags.contains(Flags::OVERFLOW)
@@ -566,7 +552,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jle => match &instruction.operands {
+        Operation::JLE => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::ZERO)
                     || cpu.state.flags.contains(Flags::SIGN)
@@ -578,7 +564,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jmp => match &instruction.operands {
+        Operation::JMP => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 displace_ip(&mut cpu.state, displacement)?;
             }
@@ -589,7 +575,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jnb => match &instruction.operands {
+        Operation::JNB => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::CARRY) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -598,7 +584,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jnbe => match &instruction.operands {
+        Operation::JNBE => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::CARRY) && !cpu.state.flags.contains(Flags::ZERO)
                 {
@@ -608,7 +594,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jne => match &instruction.operands {
+        Operation::JNE => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::ZERO) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -617,7 +603,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jno => match &instruction.operands {
+        Operation::JNO => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::OVERFLOW) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -626,7 +612,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jnp => match &instruction.operands {
+        Operation::JNP => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::PARITY) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -635,7 +621,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jns => match &instruction.operands {
+        Operation::JNS => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if !cpu.state.flags.contains(Flags::SIGN) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -644,7 +630,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jo => match &instruction.operands {
+        Operation::JO => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::OVERFLOW) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -653,7 +639,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Jp => match &instruction.operands {
+        Operation::JP => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::PARITY) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -662,7 +648,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Js => match &instruction.operands {
+        Operation::JS => match &instruction.operands {
             OperandSet::Displacement(displacement) => {
                 if cpu.state.flags.contains(Flags::SIGN) {
                     displace_ip(&mut cpu.state, displacement)?;
@@ -671,9 +657,9 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Lahf => cpu.state.load_ah_from_flags(),
+        Operation::LAHF => cpu.state.load_ah_from_flags(),
 
-        Operation::Lea => match instruction.operands {
+        Operation::LEA => match instruction.operands {
             OperandSet::DestinationAndSource(
                 Operand(OperandType::Register(register), OperandSize::Word),
                 Operand(
@@ -687,7 +673,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Loop => match instruction.operands {
+        Operation::LOOP => match instruction.operands {
             OperandSet::Displacement(ref displacement) => {
                 let cx = cpu.state.get_word_register_value(Register::ClCx);
                 let cx = cx.wrapping_sub(1);
@@ -700,7 +686,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Mov => match &instruction.operands {
+        Operation::MOV => match &instruction.operands {
             OperandSet::DestinationAndSource(
                 Operand(destination, OperandSize::Byte),
                 Operand(source, OperandSize::Byte),
@@ -718,17 +704,17 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Lodsb
-        | Operation::Lodsw
-        | Operation::Movsb
-        | Operation::Movsw
-        | Operation::Stosb
-        | Operation::Stosw
-        | Operation::Scasb
-        | Operation::Scasw => {
+        Operation::LODSB
+        | Operation::LODSW
+        | Operation::MOVSB
+        | Operation::MOVSW
+        | Operation::STOSB
+        | Operation::STOSW
+        | Operation::SCASB
+        | Operation::SCASW => {
             let value_size: u16 = match instruction.operation {
-                Operation::Lodsb | Operation::Movsb | Operation::Stosb | Operation::Scasb => 1,
-                Operation::Lodsw | Operation::Movsw | Operation::Stosw | Operation::Scasw => 2,
+                Operation::LODSB | Operation::MOVSB | Operation::STOSB | Operation::SCASB => 1,
+                Operation::LODSW | Operation::MOVSW | Operation::STOSW | Operation::SCASW => 2,
                 _ => unreachable!(),
             };
 
@@ -750,44 +736,44 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
             loop {
                 match instruction.operation {
-                    Operation::Lodsb => {
+                    Operation::LODSB => {
                         let value = byte::bus_read(cpu, segment_and_offset(ds, si))?;
                         cpu.state.set_byte_register_value(Register::AlAx, value);
                     }
 
-                    Operation::Lodsw => {
+                    Operation::LODSW => {
                         let value = word::bus_read(cpu, segment_and_offset(ds, si))?;
                         cpu.state.set_word_register_value(Register::AlAx, value);
                     }
 
-                    Operation::Movsb => {
+                    Operation::MOVSB => {
                         let value = byte::bus_read(cpu, segment_and_offset(ds, si))?;
                         byte::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
-                    Operation::Movsw => {
+                    Operation::MOVSW => {
                         let value = word::bus_read(cpu, segment_and_offset(ds, si))?;
                         word::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
-                    Operation::Stosb => {
+                    Operation::STOSB => {
                         let value = cpu.state.get_byte_register_value(Register::AlAx);
                         byte::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
-                    Operation::Stosw => {
+                    Operation::STOSW => {
                         let value = cpu.state.get_word_register_value(Register::AlAx);
                         word::bus_write(cpu, segment_and_offset(es, di), value)?;
                     }
 
-                    Operation::Scasb => {
+                    Operation::SCASB => {
                         let destination = byte::bus_read(cpu, segment_and_offset(ds, si))?;
                         let source = byte::bus_read(cpu, segment_and_offset(es, di))?;
                         let _ =
                             operations::byte::compare(destination, source, &mut cpu.state.flags);
                     }
 
-                    Operation::Scasw => {
+                    Operation::SCASW => {
                         let destination = word::bus_read(cpu, segment_and_offset(ds, si))?;
                         let source = word::bus_read(cpu, segment_and_offset(es, di))?;
                         let _ =
@@ -835,9 +821,9 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             }
         }
 
-        Operation::Nop => {}
+        Operation::NOP => {}
 
-        Operation::Not => match instruction.operands {
+        Operation::NOT => match instruction.operands {
             OperandSet::Destination(Operand(ref destination, OperandSize::Byte)) => {
                 let value = byte::get_operand_type_value(cpu, destination)?;
                 if let Some(result) = operations::byte::not(value) {
@@ -854,7 +840,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Out => match instruction.operands {
+        Operation::OUT => match instruction.operands {
             OperandSet::DestinationAndSource(ref port, Operand(ref value, OperandSize::Byte)) => {
                 let port = match port.1 {
                     OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
@@ -872,7 +858,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Push => match &instruction.operands {
+        Operation::PUSH => match &instruction.operands {
             OperandSet::Destination(destination) => {
                 let value = word::get_operand_value(cpu, destination)?;
                 push(cpu, value)?;
@@ -880,7 +866,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Pop => match &instruction.operands {
+        Operation::POP => match &instruction.operands {
             OperandSet::Destination(destination) => {
                 let value = pop(cpu)?;
                 word::set_operand_value(cpu, destination, value)?;
@@ -888,13 +874,13 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
-        Operation::Ret => {
+        Operation::RET => {
             // Pop the return address from the stack.
             cpu.state.ip = pop(cpu)?;
         }
 
         // Shift left/right has a special case where a word value can be shifted by cl, which is a byte.
-        Operation::Shl | Operation::Shr => {
+        Operation::SHL | Operation::SHR => {
             if let OperandSet::DestinationAndSource(
                 Operand(ref destination, OperandSize::Word),
                 Operand(OperandType::Register(Register::ClCx), OperandSize::Byte),
@@ -903,10 +889,10 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 let d = word::get_operand_type_value(cpu, destination)?;
                 let s = cpu.state.get_byte_register_value(Register::ClCx) as u16;
                 let result = match instruction.operation {
-                    Operation::Shl => {
+                    Operation::SHL => {
                         operations::word::shift_left(d, s, &mut cpu.state.flags).unwrap()
                     }
-                    Operation::Shr => {
+                    Operation::SHR => {
                         operations::word::shift_right(d, s, &mut cpu.state.flags).unwrap()
                     }
                     _ => unreachable!(),
@@ -915,21 +901,21 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             }
         }
 
-        Operation::Sahf => cpu.state.store_ah_into_flags(),
+        Operation::SAHF => cpu.state.store_ah_into_flags(),
 
-        Operation::Stc => {
+        Operation::STC => {
             cpu.state.flags.insert(Flags::CARRY);
         }
 
-        Operation::Std => {
+        Operation::STD => {
             cpu.state.flags.insert(Flags::DIRECTION);
         }
 
-        Operation::Sti => {
+        Operation::STI => {
             cpu.state.flags.insert(Flags::INTERRUPT);
         }
 
-        Operation::Xchg => match instruction.operands {
+        Operation::XCHG => match instruction.operands {
             OperandSet::DestinationAndSource(
                 Operand(ref destination, OperandSize::Byte),
                 Operand(ref source, OperandSize::Byte),

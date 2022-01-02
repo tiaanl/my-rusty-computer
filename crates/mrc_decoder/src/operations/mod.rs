@@ -67,8 +67,8 @@ pub(crate) fn push_pop_segment<It: Iterator<Item = u8>>(
 ) -> Result<Instruction> {
     Ok(Instruction::new(
         match op_code & 1 {
-            0 => Operation::Push,
-            _ => Operation::Pop,
+            0 => Operation::PUSH,
+            _ => Operation::POP,
         },
         OperandSet::Destination(Operand(
             OperandType::Segment(Segment::try_from_byte(op_code >> 3 & 0b111)?),

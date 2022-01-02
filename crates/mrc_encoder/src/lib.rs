@@ -4,7 +4,7 @@ use mrc_instruction::{
 
 pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, bool> {
     match instruction.operation {
-        Operation::Add => match instruction.operands {
+        Operation::ADD => match instruction.operands {
             // Immediate to Accumulator 0000010w data data if w e 1
             OperandSet::DestinationAndSource(
                 Operand(OperandType::Register(Register::AlAx), destination_operand_size),
@@ -65,7 +65,7 @@ mod test {
     #[test]
     fn basic() {
         let result = encode_instruction(&Instruction::new(
-            Operation::Add,
+            Operation::ADD,
             OperandSet::DestinationAndSource(
                 Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                 Operand(OperandType::Immediate(0x10), OperandSize::Byte),
@@ -75,7 +75,7 @@ mod test {
         assert_eq!(vec![0x04, 0x10], result.unwrap());
 
         let result = encode_instruction(&Instruction::new(
-            Operation::Add,
+            Operation::ADD,
             OperandSet::DestinationAndSource(
                 Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                 Operand(OperandType::Immediate(0x1020), OperandSize::Word),

@@ -8,14 +8,14 @@ use mrc_instruction::{
 
 fn group1_operation(op_code: u8) -> Operation {
     match (op_code >> 3) & 0b111 {
-        0b000 => Operation::Add,
-        0b001 => Operation::Or,
-        0b010 => Operation::Adc,
-        0b011 => Operation::Sbb,
-        0b100 => Operation::And,
-        0b101 => Operation::Sub,
-        0b110 => Operation::Xor,
-        0b111 => Operation::Cmp,
+        0b000 => Operation::ADD,
+        0b001 => Operation::OR,
+        0b010 => Operation::ADC,
+        0b011 => Operation::SBB,
+        0b100 => Operation::AND,
+        0b101 => Operation::SUB,
+        0b110 => Operation::XOR,
+        0b111 => Operation::CMP,
 
         _ => unreachable!(),
     }
@@ -25,14 +25,14 @@ fn group80_operation(bits: u8) -> Operation {
     assert!(bits <= 0b111);
 
     match bits {
-        0b000 => Operation::Add,
-        0b001 => Operation::Or,
-        0b010 => Operation::Adc,
-        0b011 => Operation::Sbb,
-        0b100 => Operation::And,
-        0b101 => Operation::Sub,
-        0b110 => Operation::Xor,
-        0b111 => Operation::Cmp,
+        0b000 => Operation::ADD,
+        0b001 => Operation::OR,
+        0b010 => Operation::ADC,
+        0b011 => Operation::SBB,
+        0b100 => Operation::AND,
+        0b101 => Operation::SUB,
+        0b110 => Operation::XOR,
+        0b111 => Operation::CMP,
         _ => unreachable!(),
     }
 }
@@ -41,14 +41,14 @@ fn group2_operation(low_bits: u8) -> Operation {
     assert!(low_bits <= 0b111);
 
     match (low_bits) & 0b111 {
-        0b000 => Operation::Rol,
-        0b001 => Operation::Ror,
-        0b010 => Operation::Rcl,
-        0b011 => Operation::Rcr,
-        0b100 => Operation::Shl,
-        0b101 => Operation::Shr,
-        0b110 => Operation::Shl,
-        0b111 => Operation::Sar,
+        0b000 => Operation::ROL,
+        0b001 => Operation::ROR,
+        0b010 => Operation::RCL,
+        0b011 => Operation::RCR,
+        0b100 => Operation::SHL,
+        0b101 => Operation::SHR,
+        0b110 => Operation::SHL,
+        0b111 => Operation::SAR,
         _ => unreachable!(),
     }
 }
@@ -57,22 +57,22 @@ fn jump_operation_from_low_bits(bits: u8) -> Operation {
     assert!(bits <= 0b1111);
 
     match bits {
-        0b0000 => /*0x0 =>*/ Operation::Jo,
-        0b0001 => /*0x1 =>*/ Operation::Jno,
-        0b0010 => /*0x2 =>*/ Operation::Jb,
-        0b0011 => /*0x3 =>*/ Operation::Jnb,
-        0b0100 => /*0x4 =>*/ Operation::Je,
-        0b0101 => /*0x5 =>*/ Operation::Jne,
-        0b0110 => /*0x6 =>*/ Operation::Jbe,
-        0b0111 => /*0x7 =>*/ Operation::Jnbe,
-        0b1000 => /*0x8 =>*/ Operation::Js,
-        0b1001 => /*0x9 =>*/ Operation::Jns,
-        0b1010 => /*0xA =>*/ Operation::Jp,
-        0b1011 => /*0xB =>*/ Operation::Jnp,
-        0b1100 => /*0xC =>*/ Operation::Jl,
-        0b1101 => /*0xD =>*/ Operation::Jnl,
-        0b1110 => /*0xE =>*/ Operation::Jle,
-        0b1111 => /*0xF =>*/ Operation::Jnle,
+        0b0000 => /*0x0 =>*/ Operation::JO,
+        0b0001 => /*0x1 =>*/ Operation::JNO,
+        0b0010 => /*0x2 =>*/ Operation::JB,
+        0b0011 => /*0x3 =>*/ Operation::JNB,
+        0b0100 => /*0x4 =>*/ Operation::JE,
+        0b0101 => /*0x5 =>*/ Operation::JNE,
+        0b0110 => /*0x6 =>*/ Operation::JBE,
+        0b0111 => /*0x7 =>*/ Operation::JNBE,
+        0b1000 => /*0x8 =>*/ Operation::JS,
+        0b1001 => /*0x9 =>*/ Operation::JNS,
+        0b1010 => /*0xA =>*/ Operation::JP,
+        0b1011 => /*0xB =>*/ Operation::JNP,
+        0b1100 => /*0xC =>*/ Operation::JL,
+        0b1101 => /*0xD =>*/ Operation::JNL,
+        0b1110 => /*0xE =>*/ Operation::JLE,
+        0b1111 => /*0xF =>*/ Operation::JNLE,
         _ => unreachable!(),
     }
 }
@@ -164,10 +164,10 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0x27 | 0x2F | 0x37 | 0x3F => Ok(Instruction::new(
             match (op_code >> 3) & 0b11 {
-                0b00 => Operation::Daa,
-                0b01 => Operation::Das,
-                0b10 => Operation::Aaa,
-                0b11 => Operation::Aas,
+                0b00 => Operation::DAA,
+                0b01 => Operation::DAS,
+                0b10 => Operation::AAA,
+                0b11 => Operation::AAS,
                 _ => unreachable!(),
             },
             OperandSet::None,
@@ -178,9 +178,9 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
             Ok(Instruction::new(
                 if (op_code >> 3) & 0b1 == 0 {
-                    Operation::Inc
+                    Operation::INC
                 } else {
-                    Operation::Dec
+                    Operation::DEC
                 },
                 OperandSet::Destination(Operand(
                     OperandType::Register(register),
@@ -191,9 +191,9 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0x50..=0x5F => Ok(Instruction::new(
             if (op_code >> 3) & 0b1 == 0 {
-                Operation::Push
+                Operation::PUSH
             } else {
-                Operation::Pop
+                Operation::POP
             },
             OperandSet::Destination(Operand(
                 OperandType::Register(Register::try_from_byte(op_code & 0b111)?),
@@ -243,7 +243,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let modrm = Modrm::try_from_iter(it)?;
 
             Ok(Instruction::new(
-                Operation::Test,
+                Operation::TEST,
                 OperandSet::DestinationAndSource(
                     Operand(modrm.register_or_memory.into(), operand_size),
                     Operand(OperandType::Register(modrm.register), operand_size),
@@ -256,7 +256,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let modrm = Modrm::try_from_iter(it)?;
 
             Ok(Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(modrm.register_or_memory.into(), operand_size),
                     Operand(OperandType::Register(modrm.register), operand_size),
@@ -273,7 +273,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let source = Operand(OperandType::Register(modrm.register), operand_size);
 
             Ok(Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 match direction {
                     0 => OperandSet::DestinationAndSource(destination, source),
                     _ => OperandSet::DestinationAndSource(source, destination),
@@ -294,7 +294,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             );
 
             Ok(Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 match direction {
                     0 => OperandSet::DestinationAndSource(destination, source),
                     _ => OperandSet::DestinationAndSource(source, destination),
@@ -307,7 +307,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let modrm = Modrm::try_from_iter(it)?;
 
             Ok(Instruction::new(
-                Operation::Lea,
+                Operation::LEA,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(modrm.register), operand_size),
                     Operand(modrm.register_or_memory.into(), operand_size),
@@ -324,7 +324,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             }
 
             Ok(Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     modrm.register_or_memory.into(),
                     OperandSize::Word,
@@ -332,7 +332,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
 
-        0x90 => Ok(Instruction::new(Operation::Nop, OperandSet::None)),
+        0x90 => Ok(Instruction::new(Operation::NOP, OperandSet::None)),
 
         0x91..=0x97 => {
             let operand_size = OperandSize::Word;
@@ -342,33 +342,33 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
                 operand_size,
             );
             Ok(Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(destination, source),
             ))
         }
 
-        0x98 => Ok(Instruction::new(Operation::Cbw, OperandSet::None)),
+        0x98 => Ok(Instruction::new(Operation::CBW, OperandSet::None)),
 
-        0x99 => Ok(Instruction::new(Operation::Cwd, OperandSet::None)),
+        0x99 => Ok(Instruction::new(Operation::CWD, OperandSet::None)),
 
         0x9A => {
             let offset = it_read_word(it)?;
             let segment = it_read_word(it)?;
             Ok(Instruction::new(
-                Operation::Call,
+                Operation::CALL,
                 OperandSet::SegmentAndOffset(segment, offset),
             ))
         }
 
-        0x9B => Ok(Instruction::new(Operation::Wait, OperandSet::None)),
+        0x9B => Ok(Instruction::new(Operation::WAIT, OperandSet::None)),
 
-        0x9C => Ok(Instruction::new(Operation::Pushf, OperandSet::None)),
+        0x9C => Ok(Instruction::new(Operation::PUSHF, OperandSet::None)),
 
-        0x9D => Ok(Instruction::new(Operation::Popf, OperandSet::None)),
+        0x9D => Ok(Instruction::new(Operation::POPF, OperandSet::None)),
 
-        0x9E => Ok(Instruction::new(Operation::Sahf, OperandSet::None)),
+        0x9E => Ok(Instruction::new(Operation::SAHF, OperandSet::None)),
 
-        0x9F => Ok(Instruction::new(Operation::Lahf, OperandSet::None)),
+        0x9F => Ok(Instruction::new(Operation::LAHF, OperandSet::None)),
 
         0xA0..=0xA3 => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
@@ -380,7 +380,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let source = Operand(OperandType::Direct(Segment::Ds, address), operand_size);
 
             Ok(Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 match direction {
                     0 => OperandSet::DestinationAndSource(destination, source),
                     _ => OperandSet::DestinationAndSource(source, destination),
@@ -388,13 +388,13 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
 
-        0xA4 => Ok(Instruction::new(Operation::Movsb, OperandSet::None)),
+        0xA4 => Ok(Instruction::new(Operation::MOVSB, OperandSet::None)),
 
-        0xA5 => Ok(Instruction::new(Operation::Movsw, OperandSet::None)),
+        0xA5 => Ok(Instruction::new(Operation::MOVSW, OperandSet::None)),
 
-        0xA6 => Ok(Instruction::new(Operation::Cmpsb, OperandSet::None)),
+        0xA6 => Ok(Instruction::new(Operation::CMPSB, OperandSet::None)),
 
-        0xA7 => Ok(Instruction::new(Operation::Cmpsw, OperandSet::None)),
+        0xA7 => Ok(Instruction::new(Operation::CMPSW, OperandSet::None)),
 
         0xA8 | 0xA9 => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
@@ -403,7 +403,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let source = immediate_operand_from_it(it, operand_size)?;
 
             Ok(Instruction::new(
-                Operation::Test,
+                Operation::TEST,
                 OperandSet::DestinationAndSource(destination, source),
             ))
         }
@@ -412,8 +412,8 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             Ok(Instruction::new(
                 match operand_size {
-                    OperandSize::Byte => Operation::Stosb,
-                    OperandSize::Word => Operation::Stosw,
+                    OperandSize::Byte => Operation::STOSB,
+                    OperandSize::Word => Operation::STOSW,
                 },
                 OperandSet::None,
             ))
@@ -423,8 +423,8 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             Ok(Instruction::new(
                 match operand_size {
-                    OperandSize::Byte => Operation::Lodsb,
-                    OperandSize::Word => Operation::Lodsw,
+                    OperandSize::Byte => Operation::LODSB,
+                    OperandSize::Word => Operation::LODSW,
                 },
                 OperandSet::None,
             ))
@@ -434,8 +434,8 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             Ok(Instruction::new(
                 match operand_size {
-                    OperandSize::Byte => Operation::Scasb,
-                    OperandSize::Word => Operation::Scasw,
+                    OperandSize::Byte => Operation::SCASB,
+                    OperandSize::Word => Operation::SCASW,
                 },
                 OperandSet::None,
             ))
@@ -460,7 +460,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             };
 
             Ok(Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(destination, source),
             ))
         }
@@ -480,11 +480,11 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         }
 
         0xC2 => Ok(Instruction::new(
-            Operation::Ret,
+            Operation::RET,
             displacement_word_from_it(it)?,
         )),
 
-        0xC3 => Ok(Instruction::new(Operation::Ret, OperandSet::None)),
+        0xC3 => Ok(Instruction::new(Operation::RET, OperandSet::None)),
 
         0xC4 | 0xC5 => {
             let operand_size = OperandSize::Word;
@@ -501,8 +501,8 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
             Ok(Instruction::new(
                 match op_code & 0b1 {
-                    0 => Operation::Les,
-                    _ => Operation::Lds,
+                    0 => Operation::LES,
+                    _ => Operation::LDS,
                 },
                 OperandSet::DestinationAndSource(destination, source),
             ))
@@ -522,7 +522,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let source = immediate_operand_from_it(it, operand_size)?;
 
             Ok(Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(destination, source),
             ))
         }
@@ -530,7 +530,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         0xCA | 0xCB => {
             let with_immediate = op_code & 1 == 0;
             Ok(Instruction::new(
-                Operation::Ret,
+                Operation::RET,
                 if with_immediate {
                     let immediate = immediate_operand_from_it(it, OperandSize::Word)?;
                     OperandSet::Destination(immediate)
@@ -541,14 +541,14 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         }
 
         0xCC => Ok(Instruction::new(
-            Operation::Int,
+            Operation::INT,
             OperandSet::Destination(Operand(OperandType::Immediate(3), OperandSize::Byte)),
         )),
 
         0xCD => {
             let code = it_read_byte(it)?;
             Ok(Instruction::new(
-                Operation::Int,
+                Operation::INT,
                 OperandSet::Destination(Operand(
                     OperandType::Immediate(code as u16),
                     OperandSize::Byte,
@@ -556,9 +556,9 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
 
-        0xCE => Ok(Instruction::new(Operation::Into, OperandSet::None)),
+        0xCE => Ok(Instruction::new(Operation::INTO, OperandSet::None)),
 
-        0xCF => Ok(Instruction::new(Operation::Iret, OperandSet::None)),
+        0xCF => Ok(Instruction::new(Operation::IRET, OperandSet::None)),
 
         0xD0..=0xD3 => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
@@ -582,29 +582,29 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
         0xD4 | 0xD5 => Ok(Instruction::new(
             if op_code & 0b1 == 0 {
-                Operation::Aam
+                Operation::AAM
             } else {
-                Operation::Aad
+                Operation::AAD
             },
             OperandSet::Destination(immediate_operand_from_it(it, OperandSize::Byte)?),
         )),
 
-        0xD6 => Ok(Instruction::new(Operation::Salc, OperandSet::None)),
+        0xD6 => Ok(Instruction::new(Operation::SALC, OperandSet::None)),
 
-        0xD7 => Ok(Instruction::new(Operation::Xlat, OperandSet::None)),
+        0xD7 => Ok(Instruction::new(Operation::XLAT, OperandSet::None)),
 
         0xD8..=0xDF => {
             // For now, just consume the byte.
             let _ = Modrm::try_from_iter(it)?;
-            Ok(Instruction::new(Operation::Esc, OperandSet::None))
+            Ok(Instruction::new(Operation::ESC, OperandSet::None))
         }
 
         0xE0..=0xE3 => Ok(Instruction::new(
             match op_code {
-                0xE0 => Operation::Loopnz,
-                0xE1 => Operation::Loopz,
-                0xE2 => Operation::Loop,
-                0xE3 => Operation::Jcxz,
+                0xE0 => Operation::LOOPNZ,
+                0xE1 => Operation::LOOPZ,
+                0xE2 => Operation::LOOP,
+                0xE3 => Operation::JCXZ,
                 _ => unreachable!(),
             },
             displacement_byte_from_it(it)?,
@@ -616,7 +616,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let port = it_read_byte(it)?;
 
             Ok(Instruction::new(
-                Operation::In,
+                Operation::IN,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), operand_size),
                     Operand(OperandType::Immediate(port as u16), OperandSize::Byte),
@@ -630,7 +630,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let port = it_read_byte(it)?;
 
             Ok(Instruction::new(
-                Operation::Out,
+                Operation::OUT,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Immediate(port as u16), OperandSize::Byte),
                     Operand(OperandType::Register(Register::AlAx), operand_size),
@@ -639,12 +639,12 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
         }
 
         0xE8 => Ok(Instruction::new(
-            Operation::Call,
+            Operation::CALL,
             displacement_word_from_it(it)?,
         )),
 
         0xE9 => Ok(Instruction::new(
-            Operation::Jmp,
+            Operation::JMP,
             displacement_word_from_it(it)?,
         )),
 
@@ -653,13 +653,13 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let segment = it_read_word(it)?;
 
             Ok(Instruction::new(
-                Operation::Jmp,
+                Operation::JMP,
                 OperandSet::SegmentAndOffset(segment, offset),
             ))
         }
 
         0xEB => Ok(Instruction::new(
-            Operation::Jmp,
+            Operation::JMP,
             displacement_byte_from_it(it)?,
         )),
 
@@ -667,7 +667,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
 
             Ok(Instruction::new(
-                Operation::In,
+                Operation::IN,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), operand_size),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -679,7 +679,7 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
 
             Ok(Instruction::new(
-                Operation::Out,
+                Operation::OUT,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
                     Operand(OperandType::Register(Register::AlAx), operand_size),
@@ -687,10 +687,10 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             ))
         }
 
-        0xF0 => Ok(Instruction::new(Operation::Lock, OperandSet::None)),
+        0xF0 => Ok(Instruction::new(Operation::LOCK, OperandSet::None)),
 
         0xF1 => Ok(Instruction::new(
-            Operation::Int,
+            Operation::INT,
             OperandSet::Destination(Operand(OperandType::Immediate(0x01), OperandSize::Byte)),
         )),
 
@@ -705,9 +705,9 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             Err(err) => Err(err),
         },
 
-        0xF4 => Ok(Instruction::new(Operation::Hlt, OperandSet::None)),
+        0xF4 => Ok(Instruction::new(Operation::HLT, OperandSet::None)),
 
-        0xF5 => Ok(Instruction::new(Operation::Cmc, OperandSet::None)),
+        0xF5 => Ok(Instruction::new(Operation::CMC, OperandSet::None)),
 
         0xF6 | 0xF7 => {
             // TEST     1 1 1 1 0 1 1 w     mod 0 0 0 r/m   data data if w e 1
@@ -726,18 +726,18 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
 
             let operation = match (modrm_byte >> 3) & 0b111 {
-                0b000 => Operation::Test,
+                0b000 => Operation::TEST,
                 // 0b001 => ,
-                0b010 => Operation::Not,
-                0b011 => Operation::Neg,
-                0b100 => Operation::Mul,
-                0b101 => Operation::Imul,
-                0b110 => Operation::Div,
-                0b111 => Operation::Idiv,
+                0b010 => Operation::NOT,
+                0b011 => Operation::NEG,
+                0b100 => Operation::MUL,
+                0b101 => Operation::IMUL,
+                0b110 => Operation::DIV,
+                0b111 => Operation::IDIV,
                 _ => unreachable!(),
             };
 
-            if operation == Operation::Test {
+            if operation == Operation::TEST {
                 let source = immediate_operand_from_it(it, operand_size)?;
                 Ok(Instruction::new(
                     operation,
@@ -751,17 +751,17 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
             }
         }
 
-        0xF8 => Ok(Instruction::new(Operation::Clc, OperandSet::None)),
+        0xF8 => Ok(Instruction::new(Operation::CLC, OperandSet::None)),
 
-        0xF9 => Ok(Instruction::new(Operation::Stc, OperandSet::None)),
+        0xF9 => Ok(Instruction::new(Operation::STC, OperandSet::None)),
 
-        0xFA => Ok(Instruction::new(Operation::Cli, OperandSet::None)),
+        0xFA => Ok(Instruction::new(Operation::CLI, OperandSet::None)),
 
-        0xFB => Ok(Instruction::new(Operation::Sti, OperandSet::None)),
+        0xFB => Ok(Instruction::new(Operation::STI, OperandSet::None)),
 
-        0xFC => Ok(Instruction::new(Operation::Cld, OperandSet::None)),
+        0xFC => Ok(Instruction::new(Operation::CLD, OperandSet::None)),
 
-        0xFD => Ok(Instruction::new(Operation::Std, OperandSet::None)),
+        0xFD => Ok(Instruction::new(Operation::STD, OperandSet::None)),
 
         0xFE | 0xFF => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
@@ -772,14 +772,14 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instru
 
             Ok(Instruction::new(
                 match (modrm_byte >> 3) & 0b111 {
-                    0b000 => Operation::Inc,
-                    0b001 => Operation::Dec,
-                    0b010 => Operation::Call,
-                    0b011 => Operation::Call,
-                    0b100 => Operation::Jmp,
-                    0b101 => Operation::Jmp,
-                    0b110 => Operation::Push,
-                    0b111 => Operation::Push,
+                    0b000 => Operation::INC,
+                    0b001 => Operation::DEC,
+                    0b010 => Operation::CALL,
+                    0b011 => Operation::CALL,
+                    0b100 => Operation::JMP,
+                    0b101 => Operation::JMP,
+                    0b110 => Operation::PUSH,
+                    0b111 => Operation::PUSH,
                     _ => unreachable!(),
                 },
                 OperandSet::Destination(destination),
@@ -839,7 +839,7 @@ mod test {
         test_decoder!(
             &[0x00, 0xF7, 0xDD, 0x92, 0x59, 0xA1], // ADD        BH,DH
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Byte),
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Byte),
@@ -853,7 +853,7 @@ mod test {
         test_decoder!(
             &[0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr [BP + DI + 0x4f57],DX
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -874,7 +874,7 @@ mod test {
         test_decoder!(
             &[0x02, 0xE6, 0x2E, 0xB2, 0x3A, 0xF8], // ADD        AH,DH
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AhSp), OperandSize::Byte),
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Byte),
@@ -888,7 +888,7 @@ mod test {
         test_decoder!(
             &[0x03, 0x82, 0xC1, 0x05, 0x07, 0xD9], // ADD        AX,word ptr [BP + SI + 0x5c1]
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(
@@ -909,7 +909,7 @@ mod test {
         test_decoder!(
             &[0x04, 0x27, 0x08, 0xA3, 0x4F, 0x34], // ADD        AL,0x27
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x27), OperandSize::Byte),
@@ -923,7 +923,7 @@ mod test {
         test_decoder!(
             &[0x05, 0xCA, 0x57, 0x6D, 0x22, 0x3D], // ADD        AX,0x57ca
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0x57ca), OperandSize::Word),
@@ -937,7 +937,7 @@ mod test {
         test_decoder!(
             &[0x06, 0x62, 0x41, 0x01, 0xAA, 0x72], // PUSH       ES
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Segment(Segment::Es),
                     OperandSize::Word
@@ -951,7 +951,7 @@ mod test {
         test_decoder!(
             &[0x07, 0xD5, 0x55, 0x36, 0xDA, 0x37], // POP        ES
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Segment(Segment::Es),
                     OperandSize::Word
@@ -965,7 +965,7 @@ mod test {
         test_decoder!(
             &[0x08, 0xE6, 0xC2, 0x15, 0xAF, 0xFF], // OR         DH,AH
             Instruction::new(
-                Operation::Or,
+                Operation::OR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Byte),
                     Operand(OperandType::Register(Register::AhSp), OperandSize::Byte),
@@ -979,7 +979,7 @@ mod test {
         test_decoder!(
             &[0x09, 0x2F, 0x77, 0xF1, 0x59, 0x99], // OR         word ptr [BX],BP
             Instruction::new(
-                Operation::Or,
+                Operation::OR,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
@@ -996,7 +996,7 @@ mod test {
         test_decoder!(
             &[0x0A, 0xE7, 0x1C, 0xDC, 0xE5, 0xC2], // OR         AH,BH
             Instruction::new(
-                Operation::Or,
+                Operation::OR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AhSp), OperandSize::Byte),
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Byte),
@@ -1010,7 +1010,7 @@ mod test {
         test_decoder!(
             &[0x0B, 0xD0, 0xD7, 0xAB, 0xC6, 0x31], // OR         DX,AX
             Instruction::new(
-                Operation::Or,
+                Operation::OR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
@@ -1024,7 +1024,7 @@ mod test {
         test_decoder!(
             &[0x0C, 0x9F, 0x80, 0xA5, 0xEA, 0x2A], // OR         AL,0x9f
             Instruction::new(
-                Operation::Or,
+                Operation::OR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x9f), OperandSize::Byte),
@@ -1038,7 +1038,7 @@ mod test {
         test_decoder!(
             &[0x0D, 0x3A, 0xA0, 0x87, 0x85, 0x91], // OR         AX,0xa03a
             Instruction::new(
-                Operation::Or,
+                Operation::OR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0xa03a), OperandSize::Word),
@@ -1052,7 +1052,7 @@ mod test {
         test_decoder!(
             &[0x0E, 0x0D, 0x52, 0x52, 0x30, 0x59], // PUSH       CS
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Segment(Segment::Cs),
                     OperandSize::Word
@@ -1065,7 +1065,7 @@ mod test {
     // fn test_0f() {
     //     test_decoder!(
     //         &[0x0F, 0x8A, 0x77, 0x66, 0x6A, 0xC4],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -1074,7 +1074,7 @@ mod test {
         test_decoder!(
             &[0x10, 0xBE, 0x65, 0x69, 0xAC, 0xF7], // ADC        byte ptr [BP + 0x6965],BH
             Instruction::new(
-                Operation::Adc,
+                Operation::ADC,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1095,7 +1095,7 @@ mod test {
         test_decoder!(
             &[0x11, 0x70, 0x80, 0x94, 0xC1, 0x0C], // ADC        word ptr [BX + SI + -0x80],SI
             Instruction::new(
-                Operation::Adc,
+                Operation::ADC,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1116,7 +1116,7 @@ mod test {
         test_decoder!(
             &[0x12, 0xCA, 0x03, 0xF6, 0xAF, 0x96], // ADC        CL,DL
             Instruction::new(
-                Operation::Adc,
+                Operation::ADC,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Byte),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Byte),
@@ -1130,7 +1130,7 @@ mod test {
         test_decoder!(
             &[0x13, 0xEC, 0xE6, 0x37, 0xD9, 0x28], // ADC        BP,SP
             Instruction::new(
-                Operation::Adc,
+                Operation::ADC,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Word),
                     Operand(OperandType::Register(Register::AhSp), OperandSize::Word),
@@ -1144,7 +1144,7 @@ mod test {
         test_decoder!(
             &[0x14, 0x15, 0x95, 0x0B, 0x87, 0x43], // ADC        AL,0x15
             Instruction::new(
-                Operation::Adc,
+                Operation::ADC,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x15), OperandSize::Byte),
@@ -1158,7 +1158,7 @@ mod test {
         test_decoder!(
             &[0x15, 0x76, 0x67, 0x37, 0x73, 0x43], // ADC        AX,0x6776
             Instruction::new(
-                Operation::Adc,
+                Operation::ADC,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0x6776), OperandSize::Word),
@@ -1172,7 +1172,7 @@ mod test {
         test_decoder!(
             &[0x16, 0x6A, 0xF1, 0x1A, 0x21, 0xA0], // PUSH       SS
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Segment(Segment::Ss),
                     OperandSize::Word
@@ -1186,7 +1186,7 @@ mod test {
         test_decoder!(
             &[0x17, 0xEA, 0x3D, 0xDB, 0xF3, 0x1E], // POP        SS
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Segment(Segment::Ss),
                     OperandSize::Word
@@ -1200,7 +1200,7 @@ mod test {
         test_decoder!(
             &[0x18, 0x15, 0xC0, 0x92, 0xA8, 0xED], // SBB        byte ptr [DI],DL
             Instruction::new(
-                Operation::Sbb,
+                Operation::SBB,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(Segment::Ds, AddressingMode::Di, Displacement::None),
@@ -1217,7 +1217,7 @@ mod test {
         test_decoder!(
             &[0x19, 0x01, 0x7D, 0x0C, 0xFE, 0x52], // SBB        word ptr [BX + DI],AX
             Instruction::new(
-                Operation::Sbb,
+                Operation::SBB,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1238,7 +1238,7 @@ mod test {
         test_decoder!(
             &[0x1A, 0x9B, 0x3D, 0x20, 0x95, 0x01], // SBB        BL,byte ptr [BP + DI + 0x203d]
             Instruction::new(
-                Operation::Sbb,
+                Operation::SBB,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Byte),
                     Operand(
@@ -1259,7 +1259,7 @@ mod test {
         test_decoder!(
             &[0x1B, 0xED, 0x76, 0x9B, 0x79, 0xF1], // SBB        BP,BP
             Instruction::new(
-                Operation::Sbb,
+                Operation::SBB,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Word),
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Word),
@@ -1273,7 +1273,7 @@ mod test {
         test_decoder!(
             &[0x1C, 0x31, 0xA3, 0xE5, 0xF4, 0x00], // SBB        AL,0x31
             Instruction::new(
-                Operation::Sbb,
+                Operation::SBB,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x31), OperandSize::Byte),
@@ -1287,7 +1287,7 @@ mod test {
         test_decoder!(
             &[0x1D, 0x65, 0xD6, 0x1A, 0x67, 0x69], // SBB        AX,0xd665
             Instruction::new(
-                Operation::Sbb,
+                Operation::SBB,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0xd665), OperandSize::Word),
@@ -1301,7 +1301,7 @@ mod test {
         test_decoder!(
             &[0x1E, 0xAC, 0x77, 0x40, 0x36, 0xC1], // PUSH       DS
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Segment(Segment::Ds),
                     OperandSize::Word
@@ -1315,7 +1315,7 @@ mod test {
         test_decoder!(
             &[0x1F, 0x07, 0x9E, 0x32, 0x4F, 0xE2], // POP        DS
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Segment(Segment::Ds),
                     OperandSize::Word
@@ -1329,7 +1329,7 @@ mod test {
         test_decoder!(
             &[0x20, 0x3C, 0x7C, 0x19, 0x60, 0xBC], // AND        byte ptr [SI],BH
             Instruction::new(
-                Operation::And,
+                Operation::AND,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(Segment::Ds, AddressingMode::Si, Displacement::None),
@@ -1346,7 +1346,7 @@ mod test {
         test_decoder!(
             &[0x21, 0x94, 0x34, 0x36, 0xCF, 0x8E], // AND        word ptr [SI + 0x3634],DX
             Instruction::new(
-                Operation::And,
+                Operation::AND,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1367,7 +1367,7 @@ mod test {
         test_decoder!(
             &[0x22, 0xD3, 0x4C, 0x6A, 0xC2, 0xD4], // AND        DL,BL
             Instruction::new(
-                Operation::And,
+                Operation::AND,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Byte),
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Byte),
@@ -1381,7 +1381,7 @@ mod test {
         test_decoder!(
             &[0x23, 0x19, 0x70, 0x5F, 0x49, 0xFA], // AND        BX,word ptr [BX + DI]
             Instruction::new(
-                Operation::And,
+                Operation::AND,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
                     Operand(
@@ -1402,7 +1402,7 @@ mod test {
         test_decoder!(
             &[0x24, 0x51, 0xA3, 0xEA, 0x9A, 0x7F], // AND        AL,0x51
             Instruction::new(
-                Operation::And,
+                Operation::AND,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x51), OperandSize::Byte),
@@ -1416,7 +1416,7 @@ mod test {
         test_decoder!(
             &[0x25, 0x27, 0x8B, 0x3D, 0xEB, 0x91], // AND        AX,0x8b27
             Instruction::new(
-                Operation::And,
+                Operation::AND,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0x8b27), OperandSize::Word),
@@ -1429,7 +1429,7 @@ mod test {
         test_decoder!(
             &[0x26, 0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr ES:[BP + DI + 0x4f57],DX
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1449,7 +1449,7 @@ mod test {
     fn test_27() {
         test_decoder!(
             &[0x27, 0xDA, 0x52, 0xB2, 0x23, 0xC1], // DAA
-            Instruction::new(Operation::Daa, OperandSet::None)
+            Instruction::new(Operation::DAA, OperandSet::None)
         );
     }
 
@@ -1458,7 +1458,7 @@ mod test {
         test_decoder!(
             &[0x28, 0x9A, 0xE7, 0x98, 0x82, 0xF9], // SUB        byte ptr [BP + SI + 0x98e7],BL
             Instruction::new(
-                Operation::Sub,
+                Operation::SUB,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1479,7 +1479,7 @@ mod test {
         test_decoder!(
             &[0x29, 0xA5, 0x61, 0x52, 0x22, 0x3D], // SUB        word ptr [DI + 0x5261],SP
             Instruction::new(
-                Operation::Sub,
+                Operation::SUB,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1500,7 +1500,7 @@ mod test {
         test_decoder!(
             &[0x2A, 0x38, 0x3B, 0xC8, 0xAC, 0xD3], // SUB        BH,byte ptr [BX + SI]
             Instruction::new(
-                Operation::Sub,
+                Operation::SUB,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Byte),
                     Operand(
@@ -1521,7 +1521,7 @@ mod test {
         test_decoder!(
             &[0x2B, 0x4B, 0x9F, 0xFC, 0xA5, 0xCD], // SUB        CX,word ptr [BP + DI + -0x61]
             Instruction::new(
-                Operation::Sub,
+                Operation::SUB,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Word),
                     Operand(
@@ -1542,7 +1542,7 @@ mod test {
         test_decoder!(
             &[0x2C, 0x3A, 0x55, 0xEB, 0x6E, 0x82], // SUB        AL,0x3a
             Instruction::new(
-                Operation::Sub,
+                Operation::SUB,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x3a), OperandSize::Byte),
@@ -1556,7 +1556,7 @@ mod test {
         test_decoder!(
             &[0x2D, 0x6E, 0xFD, 0xC2, 0xF1, 0x1B], // SUB        AX,0xfd6e
             Instruction::new(
-                Operation::Sub,
+                Operation::SUB,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0xfd6e), OperandSize::Word),
@@ -1570,7 +1570,7 @@ mod test {
         test_decoder!(
             &[0x2E, 0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr CS:[BP + DI + 0x4f57],DX
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1590,7 +1590,7 @@ mod test {
     fn test_2f() {
         test_decoder!(
             &[0x2F, 0x49, 0x9F, 0x21, 0x9F, 0xAE], // DAS
-            Instruction::new(Operation::Das, OperandSet::None)
+            Instruction::new(Operation::DAS, OperandSet::None)
         );
     }
 
@@ -1599,7 +1599,7 @@ mod test {
         test_decoder!(
             &[0x30, 0x55, 0x83, 0x80, 0xC5, 0x75], // XOR        byte ptr [DI + -0x7d],DL
             Instruction::new(
-                Operation::Xor,
+                Operation::XOR,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1620,7 +1620,7 @@ mod test {
         test_decoder!(
             &[0x31, 0x13, 0x71, 0x65, 0xD4, 0xFC], // XOR        word ptr [BP + DI],DX
             Instruction::new(
-                Operation::Xor,
+                Operation::XOR,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1641,7 +1641,7 @@ mod test {
         test_decoder!(
             &[0x32, 0xF5, 0xF7, 0x53, 0xB1, 0xB9], // XOR        DH,CH
             Instruction::new(
-                Operation::Xor,
+                Operation::XOR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Byte),
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Byte),
@@ -1655,7 +1655,7 @@ mod test {
         test_decoder!(
             &[0x33, 0xFD, 0x9A, 0x71, 0x35, 0xE0], // XOR        DI,BP
             Instruction::new(
-                Operation::Xor,
+                Operation::XOR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Word),
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Word),
@@ -1669,7 +1669,7 @@ mod test {
         test_decoder!(
             &[0x34, 0x30, 0xD6, 0xA2, 0xBF, 0x32], // XOR        AL,0x30
             Instruction::new(
-                Operation::Xor,
+                Operation::XOR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x30), OperandSize::Byte),
@@ -1683,7 +1683,7 @@ mod test {
         test_decoder!(
             &[0x35, 0x6A, 0xCD, 0x8D, 0xF0, 0x03], // XOR        AX,0xcd6a
             Instruction::new(
-                Operation::Xor,
+                Operation::XOR,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0xcd6a), OperandSize::Word),
@@ -1697,7 +1697,7 @@ mod test {
         test_decoder!(
             &[0x36, 0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr SS:[BP + DI + 0x4f57],DX
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1717,7 +1717,7 @@ mod test {
     fn test_37() {
         test_decoder!(
             &[0x37, 0x21, 0x81, 0xA3, 0x7A, 0x05], // AAA
-            Instruction::new(Operation::Aaa, OperandSet::None)
+            Instruction::new(Operation::AAA, OperandSet::None)
         );
     }
 
@@ -1726,7 +1726,7 @@ mod test {
         test_decoder!(
             &[0x38, 0x37, 0x83, 0x79, 0xE0, 0xE9], // CMP        byte ptr [BX],DH
             Instruction::new(
-                Operation::Cmp,
+                Operation::CMP,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
@@ -1743,7 +1743,7 @@ mod test {
         test_decoder!(
             &[0x39, 0x8A, 0x86, 0xEC, 0x5E, 0x32], // CMP        word ptr [BP + SI + 0xec86],CX
             Instruction::new(
-                Operation::Cmp,
+                Operation::CMP,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1764,7 +1764,7 @@ mod test {
         test_decoder!(
             &[0x3A, 0xF2, 0xFB, 0x61, 0xF5, 0x1B], // CMP        DH,DL
             Instruction::new(
-                Operation::Cmp,
+                Operation::CMP,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Byte),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Byte),
@@ -1778,7 +1778,7 @@ mod test {
         test_decoder!(
             &[0x3B, 0xF9, 0x81, 0x83, 0xF9, 0x10], // CMP        DI,CX
             Instruction::new(
-                Operation::Cmp,
+                Operation::CMP,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Word),
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Word),
@@ -1792,7 +1792,7 @@ mod test {
         test_decoder!(
             &[0x3C, 0xC6, 0xAD, 0xF1, 0xB0, 0x33], // CMP        AL,0xc6
             Instruction::new(
-                Operation::Cmp,
+                Operation::CMP,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0xc6), OperandSize::Byte),
@@ -1806,7 +1806,7 @@ mod test {
         test_decoder!(
             &[0x3D, 0xB1, 0xC8, 0x04, 0x98, 0xDE], // CMP        AX,0xc8b1
             Instruction::new(
-                Operation::Cmp,
+                Operation::CMP,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0xc8b1), OperandSize::Word),
@@ -1820,7 +1820,7 @@ mod test {
         test_decoder!(
             &[0x3E, 0x01, 0x93, 0x57, 0x4F, 0x9E, 0x15], // ADD        word ptr DS:[BP + DI + 0x4f57],DX
             Instruction::new(
-                Operation::Add,
+                Operation::ADD,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -1840,7 +1840,7 @@ mod test {
     fn test_3f() {
         test_decoder!(
             &[0x3F, 0x6C, 0x3A, 0x14, 0x6B, 0x08], // AAS
-            Instruction::new(Operation::Aas, OperandSet::None)
+            Instruction::new(Operation::AAS, OperandSet::None)
         );
     }
 
@@ -1849,7 +1849,7 @@ mod test {
         test_decoder!(
             &[0x40, 0xAB, 0x51, 0x27, 0x6D, 0x9A], // INC        AX
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AlAx),
                     OperandSize::Word
@@ -1863,7 +1863,7 @@ mod test {
         test_decoder!(
             &[0x41, 0x7A, 0x69, 0xFC, 0xC4, 0x20], // INC        CX
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ClCx),
                     OperandSize::Word
@@ -1877,7 +1877,7 @@ mod test {
         test_decoder!(
             &[0x42, 0xBA, 0x7D, 0x24, 0x33, 0x92], // INC        DX
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::DlDx),
                     OperandSize::Word
@@ -1891,7 +1891,7 @@ mod test {
         test_decoder!(
             &[0x43, 0x47, 0x97, 0xB4, 0x68, 0xC8], // INC        BX
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BlBx),
                     OperandSize::Word
@@ -1905,7 +1905,7 @@ mod test {
         test_decoder!(
             &[0x44, 0x5A, 0xC2, 0x6A, 0xF7, 0xB8], // INC        SP
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AhSp),
                     OperandSize::Word
@@ -1919,7 +1919,7 @@ mod test {
         test_decoder!(
             &[0x45, 0x33, 0xA5, 0x42, 0xBC, 0x09], // INC        Bp
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ChBp),
                     OperandSize::Word
@@ -1933,7 +1933,7 @@ mod test {
         test_decoder!(
             &[0x46, 0x8E, 0x2B, 0xD8, 0x42, 0x45], // INC        SI
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::DhSi),
                     OperandSize::Word
@@ -1947,7 +1947,7 @@ mod test {
         test_decoder!(
             &[0x47, 0x63, 0x45, 0xC4, 0x2F, 0x0B], // INC        DI
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BhDi),
                     OperandSize::Word
@@ -1961,7 +1961,7 @@ mod test {
         test_decoder!(
             &[0x48, 0x87, 0xC8, 0x19, 0xE9, 0x75], // DEC        AX
             Instruction::new(
-                Operation::Dec,
+                Operation::DEC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AlAx),
                     OperandSize::Word
@@ -1975,7 +1975,7 @@ mod test {
         test_decoder!(
             &[0x49, 0xC3, 0xD8, 0x50, 0xE8, 0xCA], // DEC        CX
             Instruction::new(
-                Operation::Dec,
+                Operation::DEC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ClCx),
                     OperandSize::Word
@@ -1989,7 +1989,7 @@ mod test {
         test_decoder!(
             &[0x4A, 0x4E, 0xE9, 0xB9, 0xE5, 0x98], // DEC        DX
             Instruction::new(
-                Operation::Dec,
+                Operation::DEC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::DlDx),
                     OperandSize::Word
@@ -2003,7 +2003,7 @@ mod test {
         test_decoder!(
             &[0x4B, 0x53, 0x9B, 0x2E, 0x14, 0x4D], // DEC        BX
             Instruction::new(
-                Operation::Dec,
+                Operation::DEC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BlBx),
                     OperandSize::Word
@@ -2017,7 +2017,7 @@ mod test {
         test_decoder!(
             &[0x4C, 0x15, 0x8D, 0x53, 0x84, 0x39], // DEC        SP
             Instruction::new(
-                Operation::Dec,
+                Operation::DEC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AhSp),
                     OperandSize::Word
@@ -2031,7 +2031,7 @@ mod test {
         test_decoder!(
             &[0x4D, 0xB5, 0xA8, 0x3E, 0x0B, 0xD7], // DEC        BP
             Instruction::new(
-                Operation::Dec,
+                Operation::DEC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ChBp),
                     OperandSize::Word
@@ -2045,7 +2045,7 @@ mod test {
         test_decoder!(
             &[0x4E, 0xD7, 0x4E, 0x7F, 0x6D, 0xE8], // DEC        SI
             Instruction::new(
-                Operation::Dec,
+                Operation::DEC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::DhSi),
                     OperandSize::Word
@@ -2059,7 +2059,7 @@ mod test {
         test_decoder!(
             &[0x4F, 0xAB, 0xD7, 0x16, 0x0C, 0x59], // DEC        DI
             Instruction::new(
-                Operation::Dec,
+                Operation::DEC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BhDi),
                     OperandSize::Word
@@ -2073,7 +2073,7 @@ mod test {
         test_decoder!(
             &[0x50, 0xBB, 0xFF, 0x5A, 0x86, 0xA7], // PUSH       AX
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AlAx),
                     OperandSize::Word
@@ -2087,7 +2087,7 @@ mod test {
         test_decoder!(
             &[0x51, 0x15, 0x08, 0x37, 0xCF, 0xB1], // PUSH       CX
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ClCx),
                     OperandSize::Word
@@ -2101,7 +2101,7 @@ mod test {
         test_decoder!(
             &[0x52, 0x84, 0xC5, 0x4E, 0x55, 0x82], // PUSH       DX
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::DlDx),
                     OperandSize::Word
@@ -2115,7 +2115,7 @@ mod test {
         test_decoder!(
             &[0x53, 0x90, 0xD6, 0x62, 0x9D, 0x00], // PUSH       BX
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BlBx),
                     OperandSize::Word
@@ -2129,7 +2129,7 @@ mod test {
         test_decoder!(
             &[0x54, 0x07, 0xB8, 0x32, 0x4B, 0xF8], // PUSH       SP
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AhSp),
                     OperandSize::Word
@@ -2143,7 +2143,7 @@ mod test {
         test_decoder!(
             &[0x55, 0x92, 0xB0, 0xFF, 0x8E, 0x55], // PUSH       BP
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ChBp),
                     OperandSize::Word
@@ -2157,7 +2157,7 @@ mod test {
         test_decoder!(
             &[0x56, 0x50, 0xE1, 0x00, 0x28, 0x4B], // PUSH       SI
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::DhSi),
                     OperandSize::Word
@@ -2171,7 +2171,7 @@ mod test {
         test_decoder!(
             &[0x57, 0xE5, 0x26, 0x32, 0x89, 0x00], // PUSH       DI
             Instruction::new(
-                Operation::Push,
+                Operation::PUSH,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BhDi),
                     OperandSize::Word
@@ -2185,7 +2185,7 @@ mod test {
         test_decoder!(
             &[0x58, 0x18, 0xE9, 0xC6, 0x71, 0x50], // POP        AX
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AlAx),
                     OperandSize::Word
@@ -2199,7 +2199,7 @@ mod test {
         test_decoder!(
             &[0x59, 0xA1, 0x49, 0x14, 0x00, 0xC7], // POP        CX
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ClCx),
                     OperandSize::Word
@@ -2213,7 +2213,7 @@ mod test {
         test_decoder!(
             &[0x5A, 0xD7, 0xF7, 0x7C, 0xE8, 0x5A], // POP        DX
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::DlDx),
                     OperandSize::Word
@@ -2227,7 +2227,7 @@ mod test {
         test_decoder!(
             &[0x5B, 0x35, 0xBB, 0x67, 0x87, 0x32], // POP        BX
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BlBx),
                     OperandSize::Word
@@ -2241,7 +2241,7 @@ mod test {
         test_decoder!(
             &[0x5C, 0xD0, 0x6C, 0x59, 0xB4, 0x41], // POP        SP
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AhSp),
                     OperandSize::Word
@@ -2255,7 +2255,7 @@ mod test {
         test_decoder!(
             &[0x5D, 0x07, 0xFA, 0x7A, 0x5B, 0xB2], // POP        BP
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ChBp),
                     OperandSize::Word
@@ -2269,7 +2269,7 @@ mod test {
         test_decoder!(
             &[0x5E, 0x4A, 0x30, 0x5D, 0x74, 0x76], // POP        SI
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::DhSi),
                     OperandSize::Word
@@ -2283,7 +2283,7 @@ mod test {
         test_decoder!(
             &[0x5F, 0xC1, 0xDC, 0x74, 0xE5, 0x51], // POP        DI
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BhDi),
                     OperandSize::Word
@@ -2297,7 +2297,7 @@ mod test {
     // fn test_60() {
     //     test_decoder!(
     //         &[0x60, 0x82, 0x12, 0x7C, 0x03, 0x2A],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2306,7 +2306,7 @@ mod test {
     // fn test_61() {
     //     test_decoder!(
     //         &[0x61, 0x83, 0xB7, 0xBC, 0xDE, 0xD4],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2315,7 +2315,7 @@ mod test {
     // fn test_62() {
     //     test_decoder!(
     //         &[0x62, 0xA4, 0x66, 0xC7, 0x4A, 0xE8],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2324,7 +2324,7 @@ mod test {
     // fn test_63() {
     //     test_decoder!(
     //         &[0x63, 0x49, 0x11, 0x74, 0x5C, 0xD7],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2333,7 +2333,7 @@ mod test {
     // fn test_64() {
     //     test_decoder!(
     //         &[0x64, 0x37, 0x96, 0x49, 0x49, 0xD5],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2342,7 +2342,7 @@ mod test {
     // fn test_65() {
     //     test_decoder!(
     //         &[0x65, 0x23, 0xAB, 0xD2, 0x38, 0xE6],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2351,7 +2351,7 @@ mod test {
     // fn test_66() {
     //     test_decoder!(
     //         &[0x66, 0x4D, 0xDD, 0x3B, 0x63, 0x1F],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2360,7 +2360,7 @@ mod test {
     // fn test_67() {
     //     test_decoder!(
     //         &[0x67, 0x01, 0x65, 0x66, 0xBD, 0x4C],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2369,7 +2369,7 @@ mod test {
     // fn test_68() {
     //     test_decoder!(
     //         &[0x68, 0x47, 0x28, 0x4C, 0xA6, 0xEF],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2378,7 +2378,7 @@ mod test {
     // fn test_69() {
     //     test_decoder!(
     //         &[0x69, 0xEC, 0x71, 0x2E, 0x02, 0x5C],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2387,7 +2387,7 @@ mod test {
     // fn test_6a() {
     //     test_decoder!(
     //         &[0x6A, 0x9B, 0xDB, 0xE0, 0x8D, 0xCC],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2396,7 +2396,7 @@ mod test {
     // fn test_6b() {
     //     test_decoder!(
     //         &[0x6B, 0x20, 0x44, 0x17, 0x00, 0x88],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2405,7 +2405,7 @@ mod test {
     // fn test_6c() {
     //     test_decoder!(
     //         &[0x6C, 0xDD, 0x7C, 0xB9, 0xC7, 0x05],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2414,7 +2414,7 @@ mod test {
     // fn test_6d() {
     //     test_decoder!(
     //         &[0x6D, 0xD5, 0xB1, 0x69, 0xAA, 0x49],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2423,7 +2423,7 @@ mod test {
     // fn test_6e() {
     //     test_decoder!(
     //         &[0x6E, 0x64, 0xC6, 0x5D, 0x58, 0x5B],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2432,7 +2432,7 @@ mod test {
     // fn test_6f() {
     //     test_decoder!(
     //         &[0x6F, 0xAD, 0x58, 0x3F, 0x35, 0x21],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -2441,7 +2441,7 @@ mod test {
         test_decoder!(
             &[0x70, 0x71, 0x48, 0xAE, 0xB3, 0xAB],
             Instruction::new(
-                Operation::Jo,
+                Operation::JO,
                 OperandSet::Displacement(Displacement::Byte(0x71))
             )
         );
@@ -2452,7 +2452,7 @@ mod test {
         test_decoder!(
             &[0x71, 0xB7, 0x1D, 0xAC, 0xBC, 0x73],
             Instruction::new(
-                Operation::Jno,
+                Operation::JNO,
                 OperandSet::Displacement(Displacement::Byte(-0x49))
             )
         );
@@ -2463,7 +2463,7 @@ mod test {
         test_decoder!(
             &[0x72, 0x56, 0x3F, 0x26, 0xBD, 0x03],
             Instruction::new(
-                Operation::Jb,
+                Operation::JB,
                 OperandSet::Displacement(Displacement::Byte(0x56))
             )
         );
@@ -2474,7 +2474,7 @@ mod test {
         test_decoder!(
             &[0x73, 0x08, 0x4E, 0x74, 0x6C, 0x77],
             Instruction::new(
-                Operation::Jnb,
+                Operation::JNB,
                 OperandSet::Displacement(Displacement::Byte(0x08))
             )
         );
@@ -2485,7 +2485,7 @@ mod test {
         test_decoder!(
             &[0x74, 0x99, 0xDB, 0xCB, 0x45, 0x22],
             Instruction::new(
-                Operation::Je,
+                Operation::JE,
                 OperandSet::Displacement(Displacement::Byte(-0x67))
             )
         );
@@ -2496,7 +2496,7 @@ mod test {
         test_decoder!(
             &[0x75, 0x55, 0x87, 0xFD, 0x1C, 0xDE],
             Instruction::new(
-                Operation::Jne,
+                Operation::JNE,
                 OperandSet::Displacement(Displacement::Byte(0x55))
             )
         );
@@ -2507,7 +2507,7 @@ mod test {
         test_decoder!(
             &[0x76, 0x9F, 0xA9, 0x37, 0x99, 0x10],
             Instruction::new(
-                Operation::Jbe,
+                Operation::JBE,
                 OperandSet::Displacement(Displacement::Byte(-0x61))
             )
         );
@@ -2518,7 +2518,7 @@ mod test {
         test_decoder!(
             &[0x77, 0xAF, 0x90, 0x5E, 0xD1, 0x33],
             Instruction::new(
-                Operation::Jnbe,
+                Operation::JNBE,
                 OperandSet::Displacement(Displacement::Byte(-0x51))
             )
         );
@@ -2529,7 +2529,7 @@ mod test {
         test_decoder!(
             &[0x78, 0x99, 0x7C, 0x0D, 0x5C, 0x0E],
             Instruction::new(
-                Operation::Js,
+                Operation::JS,
                 OperandSet::Displacement(Displacement::Byte(-0x67))
             )
         );
@@ -2540,7 +2540,7 @@ mod test {
         test_decoder!(
             &[0x79, 0x38, 0x60, 0xBD, 0x6B, 0x09],
             Instruction::new(
-                Operation::Jns,
+                Operation::JNS,
                 OperandSet::Displacement(Displacement::Byte(0x38))
             )
         );
@@ -2551,7 +2551,7 @@ mod test {
         test_decoder!(
             &[0x7A, 0x0A, 0xC2, 0x33, 0x7B, 0x23],
             Instruction::new(
-                Operation::Jp,
+                Operation::JP,
                 OperandSet::Displacement(Displacement::Byte(0x0A))
             )
         );
@@ -2562,7 +2562,7 @@ mod test {
         test_decoder!(
             &[0x7B, 0xC3, 0xB9, 0x28, 0xF5, 0x64],
             Instruction::new(
-                Operation::Jnp,
+                Operation::JNP,
                 OperandSet::Displacement(Displacement::Byte(-0x3D))
             )
         );
@@ -2573,7 +2573,7 @@ mod test {
         test_decoder!(
             &[0x7C, 0x2E, 0xCB, 0x5A, 0x0A, 0x32],
             Instruction::new(
-                Operation::Jl,
+                Operation::JL,
                 OperandSet::Displacement(Displacement::Byte(0x2E))
             )
         );
@@ -2584,7 +2584,7 @@ mod test {
         test_decoder!(
             &[0x7D, 0xB9, 0x3C, 0x7A, 0x28, 0xE6],
             Instruction::new(
-                Operation::Jnl,
+                Operation::JNL,
                 OperandSet::Displacement(Displacement::Byte(-0x47))
             )
         );
@@ -2595,7 +2595,7 @@ mod test {
         test_decoder!(
             &[0x7E, 0x82, 0x6D, 0xFE, 0x49, 0x00],
             Instruction::new(
-                Operation::Jle,
+                Operation::JLE,
                 OperandSet::Displacement(Displacement::Byte(-0x7E))
             )
         );
@@ -2606,7 +2606,7 @@ mod test {
         test_decoder!(
             &[0x7F, 0xFA, 0x30, 0x70, 0xB8, 0x34],
             Instruction::new(
-                Operation::Jnle,
+                Operation::JNLE,
                 OperandSet::Displacement(Displacement::Byte(-0x06))
             )
         );
@@ -2617,7 +2617,7 @@ mod test {
         test_decoder!(
             &[0x80, 0x48, 0x07, 0x85, 0x69, 0xCF], // OR         byte ptr [BX + SI + 0x7],0x85
             Instruction::new(
-                Operation::Or,
+                Operation::OR,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -2638,7 +2638,7 @@ mod test {
         test_decoder!(
             &[0x81, 0xA7, 0xA8, 0x88, 0x33, 0xBB], // AND        word ptr [BX + 0x88a8],0xbb33
             Instruction::new(
-                Operation::And,
+                Operation::AND,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -2659,7 +2659,7 @@ mod test {
         test_decoder!(
             &[0x82, 0xBB, 0xD3, 0x8F, 0x33, 0x88], // CMP        byte ptr [BP + DI + 0x8fd3],0x33
             Instruction::new(
-                Operation::Cmp,
+                Operation::CMP,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -2680,7 +2680,7 @@ mod test {
         test_decoder!(
             &[0x83, 0x1F, 0x2F, 0x95, 0x30, 0x19], // SBB        word ptr [BX],0x2f
             Instruction::new(
-                Operation::Sbb,
+                Operation::SBB,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
@@ -2697,7 +2697,7 @@ mod test {
         test_decoder!(
             &[0x84, 0x50, 0xFD, 0xE9, 0x1F, 0xD7], // TEST       byte ptr [BX + SI + -0x3],DL
             Instruction::new(
-                Operation::Test,
+                Operation::TEST,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -2718,7 +2718,7 @@ mod test {
         test_decoder!(
             &[0x85, 0x1F, 0xDB, 0xCB, 0xCB, 0xC9], // TEST       word ptr [BX],BX
             Instruction::new(
-                Operation::Test,
+                Operation::TEST,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
@@ -2735,7 +2735,7 @@ mod test {
         test_decoder!(
             &[0x86, 0xAB, 0x96, 0x5C, 0xD0, 0x9D], // XCHG       byte ptr [BP + DI + 0x5c96],CH
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -2756,7 +2756,7 @@ mod test {
         test_decoder!(
             &[0x87, 0x47, 0x4E, 0x37, 0xB2, 0x9E], // XCHG       word ptr [BX + 0x4e],AX
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -2777,7 +2777,7 @@ mod test {
         test_decoder!(
             &[0x88, 0x8C, 0x1C, 0xED, 0x66, 0xE1], // MOV        byte ptr [SI + 0xed1c],CL
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -2798,7 +2798,7 @@ mod test {
         test_decoder!(
             &[0x89, 0x4F, 0xC0, 0x93, 0x93, 0x64], // MOV        word ptr [BX + -0x40],CX
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -2819,7 +2819,7 @@ mod test {
         test_decoder!(
             &[0x8A, 0x6B, 0x4E, 0xF5, 0x7F, 0x2D], // MOV        CH,byte ptr [BP + DI + 0x4e]
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Byte),
                     Operand(
@@ -2840,7 +2840,7 @@ mod test {
         test_decoder!(
             &[0x8B, 0x74, 0x34, 0x9C, 0x6B, 0x2E], // MOV        SI,word ptr [SI + 0x34]
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Word),
                     Operand(
@@ -2861,7 +2861,7 @@ mod test {
         test_decoder!(
             &[0x8C, 0xC8, 0xB6, 0x37, 0xB3, 0x15], // MOV        AX,CS
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Segment(Segment::Cs), OperandSize::Word),
@@ -2875,7 +2875,7 @@ mod test {
         test_decoder!(
             &[0x8D, 0x44, 0x82, 0x80, 0x7F, 0x72], // LEA        AX,[SI + -0x7e]
             Instruction::new(
-                Operation::Lea,
+                Operation::LEA,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(
@@ -2896,7 +2896,7 @@ mod test {
         test_decoder!(
             &[0x8E, 0xDE, 0x6A, 0x25, 0x2F, 0x4C], // MOV        DS,SI
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Segment(Segment::Ds), OperandSize::Word),
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Word),
@@ -2910,7 +2910,7 @@ mod test {
         test_decoder!(
             &[0x8F, 0xC5, 0xF8, 0xF1, 0x43, 0xE6], // POP        BP
             Instruction::new(
-                Operation::Pop,
+                Operation::POP,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::ChBp),
                     OperandSize::Word
@@ -2923,7 +2923,7 @@ mod test {
     fn test_90() {
         test_decoder!(
             &[0x90, 0x96, 0x23, 0xFA, 0x5C, 0x41],
-            Instruction::new(Operation::Nop, OperandSet::None)
+            Instruction::new(Operation::NOP, OperandSet::None)
         );
     }
 
@@ -2932,7 +2932,7 @@ mod test {
         test_decoder!(
             &[0x91, 0x5C, 0x1D, 0xB3, 0x81, 0xFE], // XCHG       AX,CX
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Word),
@@ -2946,7 +2946,7 @@ mod test {
         test_decoder!(
             &[0x92, 0xC8, 0x21, 0xB5, 0x67, 0x77], // XCHG       AX,DX
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -2960,7 +2960,7 @@ mod test {
         test_decoder!(
             &[0x93, 0x49, 0x04, 0x87, 0x8C, 0x61], // XCHG       AX,BX
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
@@ -2974,7 +2974,7 @@ mod test {
         test_decoder!(
             &[0x94, 0x9A, 0xAE, 0x2B, 0x72, 0xB3], // XCHG       AX,SP
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::AhSp), OperandSize::Word),
@@ -2988,7 +2988,7 @@ mod test {
         test_decoder!(
             &[0x95, 0x9A, 0x0C, 0x61, 0x44, 0x5D], // XCHG       AX,BP
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Word),
@@ -3002,7 +3002,7 @@ mod test {
         test_decoder!(
             &[0x96, 0x4E, 0x02, 0x8B, 0x6B, 0x3C], // XCHG       AX,SI
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Word),
@@ -3016,7 +3016,7 @@ mod test {
         test_decoder!(
             &[0x97, 0x7D, 0x21, 0xC0, 0x14, 0x30], // XCHG       AX,DI
             Instruction::new(
-                Operation::Xchg,
+                Operation::XCHG,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Word),
@@ -3029,7 +3029,7 @@ mod test {
     fn test_98() {
         test_decoder!(
             &[0x98, 0x2A, 0xB3, 0x45, 0xA5, 0x80], // CBW
-            Instruction::new(Operation::Cbw, OperandSet::None)
+            Instruction::new(Operation::CBW, OperandSet::None)
         );
     }
 
@@ -3037,7 +3037,7 @@ mod test {
     fn test_99() {
         test_decoder!(
             &[0x99, 0xBF, 0x9E, 0x62, 0x2E, 0x38], // CWD
-            Instruction::new(Operation::Cwd, OperandSet::None)
+            Instruction::new(Operation::CWD, OperandSet::None)
         );
     }
 
@@ -3046,7 +3046,7 @@ mod test {
         test_decoder!(
             &[0x9A, 0x50, 0xDC, 0xD8, 0xA4, 0x10], // CALLF      b000:29d0
             Instruction::new(
-                Operation::Call,
+                Operation::CALL,
                 OperandSet::SegmentAndOffset(0xA4D8, 0xDC50)
             )
         );
@@ -3056,7 +3056,7 @@ mod test {
     fn test_9b() {
         test_decoder!(
             &[0x9B, 0xC5, 0x94, 0x02, 0x28, 0x83], // WAIT
-            Instruction::new(Operation::Wait, OperandSet::None)
+            Instruction::new(Operation::WAIT, OperandSet::None)
         );
     }
 
@@ -3064,7 +3064,7 @@ mod test {
     fn test_9c() {
         test_decoder!(
             &[0x9C, 0xC6, 0x85, 0xBD, 0x79, 0x1C], // PUSHF
-            Instruction::new(Operation::Pushf, OperandSet::None)
+            Instruction::new(Operation::PUSHF, OperandSet::None)
         );
     }
 
@@ -3072,7 +3072,7 @@ mod test {
     fn test_9d() {
         test_decoder!(
             &[0x9D, 0xBB, 0x06, 0x21, 0x57, 0xDA], // POPF
-            Instruction::new(Operation::Popf, OperandSet::None)
+            Instruction::new(Operation::POPF, OperandSet::None)
         );
     }
 
@@ -3080,7 +3080,7 @@ mod test {
     fn test_9e() {
         test_decoder!(
             &[0x9E, 0xB9, 0x42, 0xAF, 0x99, 0x26], // SAHF
-            Instruction::new(Operation::Sahf, OperandSet::None)
+            Instruction::new(Operation::SAHF, OperandSet::None)
         );
     }
 
@@ -3088,7 +3088,7 @@ mod test {
     fn test_9f() {
         test_decoder!(
             &[0x9F, 0x44, 0xD6, 0x88, 0x6B, 0xDD], // LAHF
-            Instruction::new(Operation::Lahf, OperandSet::None)
+            Instruction::new(Operation::LAHF, OperandSet::None)
         );
     }
 
@@ -3097,7 +3097,7 @@ mod test {
         test_decoder!(
             &[0xA0, 0x0C, 0x43, 0xE8, 0x90, 0x4F], // MOV        AL,[0x430c]
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Direct(Segment::Ds, 0x430c), OperandSize::Byte),
@@ -3111,7 +3111,7 @@ mod test {
         test_decoder!(
             &[0xA1, 0xE5, 0x8B, 0xE7, 0x38, 0x25], // MOV        AX,[0x8be5]
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Direct(Segment::Ds, 0x8be5), OperandSize::Word),
@@ -3125,7 +3125,7 @@ mod test {
         test_decoder!(
             &[0xA2, 0x98, 0x9D, 0x54, 0x24, 0x7C], // MOV        [0x9d98],AL
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Direct(Segment::Ds, 0x9d98), OperandSize::Byte),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
@@ -3139,7 +3139,7 @@ mod test {
         test_decoder!(
             &[0xA3, 0x47, 0xF8, 0xE4, 0xCC, 0x58], // MOV        [0xf847],AX
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Direct(Segment::Ds, 0xf847), OperandSize::Word),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
@@ -3152,7 +3152,7 @@ mod test {
     fn test_a4() {
         test_decoder!(
             &[0xA4, 0x2F, 0x38, 0x4B, 0xCB, 0x67], // MOVSB      ES:DI,SI
-            Instruction::new(Operation::Movsb, OperandSet::None)
+            Instruction::new(Operation::MOVSB, OperandSet::None)
         );
     }
 
@@ -3160,7 +3160,7 @@ mod test {
     fn test_a5() {
         test_decoder!(
             &[0xA5, 0x16, 0x62, 0xE8, 0x52, 0xE8], // MOVSW      ES:DI,SI
-            Instruction::new(Operation::Movsw, OperandSet::None)
+            Instruction::new(Operation::MOVSW, OperandSet::None)
         );
     }
 
@@ -3168,7 +3168,7 @@ mod test {
     fn test_a6() {
         test_decoder!(
             &[0xA6, 0x2C, 0x21, 0x96, 0xE0, 0x94], // CMPSB      ES:DI,SI
-            Instruction::new(Operation::Cmpsb, OperandSet::None)
+            Instruction::new(Operation::CMPSB, OperandSet::None)
         );
     }
 
@@ -3176,7 +3176,7 @@ mod test {
     fn test_a7() {
         test_decoder!(
             &[0xA7, 0x40, 0x0D, 0x9A, 0xD2, 0x63], // CMPSW      ES:DI,SI
-            Instruction::new(Operation::Cmpsw, OperandSet::None)
+            Instruction::new(Operation::CMPSW, OperandSet::None)
         );
     }
 
@@ -3185,7 +3185,7 @@ mod test {
         test_decoder!(
             &[0xA8, 0x53, 0x39, 0xC4, 0xCF, 0x7B], // TEST       AL,0x53
             Instruction::new(
-                Operation::Test,
+                Operation::TEST,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x53), OperandSize::Byte),
@@ -3199,7 +3199,7 @@ mod test {
         test_decoder!(
             &[0xA9, 0x0D, 0x9A, 0xCA, 0xCF, 0xB7], // TEST       AX,0x9a0d
             Instruction::new(
-                Operation::Test,
+                Operation::TEST,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0x9a0d), OperandSize::Word),
@@ -3212,7 +3212,7 @@ mod test {
     fn test_aa() {
         test_decoder!(
             &[0xAA, 0xB1, 0x86, 0x4E, 0xF2, 0x1F], // STOSB      ES:DI
-            Instruction::new(Operation::Stosb, OperandSet::None)
+            Instruction::new(Operation::STOSB, OperandSet::None)
         );
     }
 
@@ -3220,7 +3220,7 @@ mod test {
     fn test_ab() {
         test_decoder!(
             &[0xAB, 0xF1, 0x75, 0x4F, 0xF9, 0xF3], // STOSW      ES:DI
-            Instruction::new(Operation::Stosw, OperandSet::None)
+            Instruction::new(Operation::STOSW, OperandSet::None)
         );
     }
 
@@ -3228,7 +3228,7 @@ mod test {
     fn test_ac() {
         test_decoder!(
             &[0xAC, 0x80, 0x80, 0x0D, 0x8D, 0x00], // LODSB      SI
-            Instruction::new(Operation::Lodsb, OperandSet::None)
+            Instruction::new(Operation::LODSB, OperandSet::None)
         );
     }
 
@@ -3236,7 +3236,7 @@ mod test {
     fn test_ad() {
         test_decoder!(
             &[0xAD, 0xC9, 0x7B, 0x5D, 0xD6, 0xF8], // LODSW      SI
-            Instruction::new(Operation::Lodsw, OperandSet::None)
+            Instruction::new(Operation::LODSW, OperandSet::None)
         );
     }
 
@@ -3244,7 +3244,7 @@ mod test {
     fn test_ae() {
         test_decoder!(
             &[0xAE, 0x79, 0xFA, 0x9C, 0xDC, 0x70], // SCASB      ES:DI
-            Instruction::new(Operation::Scasb, OperandSet::None)
+            Instruction::new(Operation::SCASB, OperandSet::None)
         );
     }
 
@@ -3252,7 +3252,7 @@ mod test {
     fn test_af() {
         test_decoder!(
             &[0xAF, 0x42, 0x34, 0x64, 0x5E, 0x46], // SCASW      ES:DI
-            Instruction::new(Operation::Scasw, OperandSet::None)
+            Instruction::new(Operation::SCASW, OperandSet::None)
         );
     }
 
@@ -3261,7 +3261,7 @@ mod test {
         test_decoder!(
             &[0xB0, 0x3D, 0xD5, 0xF8, 0x22, 0x05], // MOV        AL,0x3d
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x3d), OperandSize::Byte),
@@ -3275,7 +3275,7 @@ mod test {
         test_decoder!(
             &[0xB1, 0x92, 0x05, 0xE4, 0xAF, 0xB9], // MOV        CL,0x92
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x92), OperandSize::Byte),
@@ -3289,7 +3289,7 @@ mod test {
         test_decoder!(
             &[0xB2, 0x3A, 0xFE, 0x3C, 0x27, 0x02], // MOV        DL,0x3A
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x3A), OperandSize::Byte),
@@ -3303,7 +3303,7 @@ mod test {
         test_decoder!(
             &[0xB3, 0x12, 0x49, 0x14, 0xB5, 0xA5], // MOV        BL,0x12
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x12), OperandSize::Byte),
@@ -3317,7 +3317,7 @@ mod test {
         test_decoder!(
             &[0xB4, 0x41, 0xE5, 0x66, 0x70, 0x3B], // MOV        AH,0x41
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AhSp), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x41), OperandSize::Byte),
@@ -3331,7 +3331,7 @@ mod test {
         test_decoder!(
             &[0xB5, 0x2D, 0x36, 0x1E, 0x9D, 0xC8], // MOV        CH,0x2D
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x2D), OperandSize::Byte),
@@ -3345,7 +3345,7 @@ mod test {
         test_decoder!(
             &[0xB6, 0x9A, 0x0B, 0x99, 0x6F, 0xF8], // MOV        DH,0x9A
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x9A), OperandSize::Byte),
@@ -3359,7 +3359,7 @@ mod test {
         test_decoder!(
             &[0xB7, 0x80, 0x05, 0xE6, 0xEC, 0xAA], // MOV        BH,0x80
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x80), OperandSize::Byte),
@@ -3373,7 +3373,7 @@ mod test {
         test_decoder!(
             &[0xB8, 0x72, 0x36, 0x7F, 0xDD, 0x8F], // MOV        AX,0x3672
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0x3672), OperandSize::Word),
@@ -3387,7 +3387,7 @@ mod test {
         test_decoder!(
             &[0xB9, 0x70, 0xEB, 0xE6, 0x1B, 0x83], // MOV        CX,0xEB70
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ClCx), OperandSize::Word),
                     Operand(OperandType::Immediate(0xEB70), OperandSize::Word),
@@ -3401,7 +3401,7 @@ mod test {
         test_decoder!(
             &[0xBA, 0x37, 0x56, 0x19, 0x9E, 0x0B], // MOV        DX,0x5637
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
                     Operand(OperandType::Immediate(0x5637), OperandSize::Word),
@@ -3415,7 +3415,7 @@ mod test {
         test_decoder!(
             &[0xBB, 0xD5, 0xAF, 0x28, 0x3F, 0x3E], // MOV        BX,0xAFD5
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
                     Operand(OperandType::Immediate(0xAFD5), OperandSize::Word),
@@ -3429,7 +3429,7 @@ mod test {
         test_decoder!(
             &[0xBC, 0x07, 0x1B, 0xEF, 0xD9, 0x2D], // MOV        SP,0x1B07
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AhSp), OperandSize::Word),
                     Operand(OperandType::Immediate(0x1B07), OperandSize::Word),
@@ -3443,7 +3443,7 @@ mod test {
         test_decoder!(
             &[0xBD, 0x3D, 0x35, 0x5E, 0xAD, 0x8E], // MOV        BP,0x353D
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::ChBp), OperandSize::Word),
                     Operand(OperandType::Immediate(0x353D), OperandSize::Word),
@@ -3457,7 +3457,7 @@ mod test {
         test_decoder!(
             &[0xBE, 0x8A, 0x98, 0xD7, 0x91, 0x0F], // MOV        SI,0x988A
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DhSi), OperandSize::Word),
                     Operand(OperandType::Immediate(0x988A), OperandSize::Word),
@@ -3471,7 +3471,7 @@ mod test {
         test_decoder!(
             &[0xBF, 0xAD, 0x1D, 0x80, 0xC9, 0xD3], // MOV        DI,0x1DAD
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BhDi), OperandSize::Word),
                     Operand(OperandType::Immediate(0x1DAD), OperandSize::Word),
@@ -3485,7 +3485,7 @@ mod test {
         test_decoder!(
             &[0xC0, 0x61, 0xFB, 0x83, 0x06, 0xD4], // SHL        byte ptr [BX + DI + -0x5],0x83
             Instruction::new(
-                Operation::Shl,
+                Operation::SHL,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -3506,7 +3506,7 @@ mod test {
         test_decoder!(
             &[0xC1, 0x92, 0x49, 0x4F, 0xA0, 0xDB], // RCL        word ptr [BP + SI + 0x4f49],0xa0
             Instruction::new(
-                Operation::Rcl,
+                Operation::RCL,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -3527,7 +3527,7 @@ mod test {
         test_decoder!(
             &[0xC2, 0x0F, 0xC7, 0x19, 0x12, 0xFC], // RET        0xc70f
             Instruction::new(
-                Operation::Ret,
+                Operation::RET,
                 OperandSet::Displacement(Displacement::Word(-0x38F1))
             )
         );
@@ -3537,7 +3537,7 @@ mod test {
     fn test_c3() {
         test_decoder!(
             &[0xC3, 0x6E, 0xA0, 0x04, 0x41, 0x1F], // RET
-            Instruction::new(Operation::Ret, OperandSet::None)
+            Instruction::new(Operation::RET, OperandSet::None)
         );
     }
 
@@ -3546,7 +3546,7 @@ mod test {
         test_decoder!(
             &[0xC4, 0x5C, 0x5C, 0x27, 0xED, 0x3C], // LES        BX,[SI + 0x5c]
             Instruction::new(
-                Operation::Les,
+                Operation::LES,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::BlBx), OperandSize::Word),
                     Operand(
@@ -3567,7 +3567,7 @@ mod test {
         test_decoder!(
             &[0xC5, 0x05, 0x1E, 0xE9, 0x87, 0x03], // LDS        AX, dword ptr [DI]
             Instruction::new(
-                Operation::Lds,
+                Operation::LDS,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(
@@ -3584,7 +3584,7 @@ mod test {
         test_decoder!(
             &[0xC6, 0x87, 0xD8, 0x0C, 0xC9, 0x0F], // MOV        byte ptr [BX + 0xcd8],0xc9
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -3605,7 +3605,7 @@ mod test {
         test_decoder!(
             &[0xC7, 0x43, 0xDC, 0x05, 0x55, 0x46], // MOV        word ptr [BP + DI + -0x24],0x5505
             Instruction::new(
-                Operation::Mov,
+                Operation::MOV,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -3626,7 +3626,7 @@ mod test {
     // fn test_c8() {
     //     test_decoder!(
     //         &[0xC8, 0xC4, 0xC7, 0x97, 0x0B, 0x67],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -3635,7 +3635,7 @@ mod test {
     // fn test_c9() {
     //     test_decoder!(
     //         &[0xC9, 0xE1, 0x11, 0xAB, 0x71, 0x69],
-    //         Instruction::new(Operation::Nop, OperandSet::None)
+    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
     //     );
     // }
 
@@ -3644,7 +3644,7 @@ mod test {
         test_decoder!(
             &[0xCA, 0x55, 0x5C, 0x0D, 0xF2, 0x54], // RETF       0x5c55
             Instruction::new(
-                Operation::Ret,
+                Operation::RET,
                 OperandSet::Destination(Operand(OperandType::Immediate(0x5c55), OperandSize::Word))
             )
         );
@@ -3654,7 +3654,7 @@ mod test {
     fn test_cb() {
         test_decoder!(
             &[0xCB, 0xAD, 0xBD, 0x3C, 0x1B, 0x76], // RET
-            Instruction::new(Operation::Ret, OperandSet::None)
+            Instruction::new(Operation::RET, OperandSet::None)
         );
     }
 
@@ -3663,7 +3663,7 @@ mod test {
         test_decoder!(
             &[0xCC, 0xA8, 0xF6, 0xC1, 0xF2, 0x63], // INT3
             Instruction::new(
-                Operation::Int,
+                Operation::INT,
                 OperandSet::Destination(Operand(OperandType::Immediate(0x03), OperandSize::Byte),)
             )
         );
@@ -3674,7 +3674,7 @@ mod test {
         test_decoder!(
             &[0xCD, 0xD3, 0xC7, 0x24, 0xE6, 0xD3], // INT        0xd3
             Instruction::new(
-                Operation::Int,
+                Operation::INT,
                 OperandSet::Destination(Operand(OperandType::Immediate(0xd3), OperandSize::Byte))
             )
         );
@@ -3684,7 +3684,7 @@ mod test {
     fn test_ce() {
         test_decoder!(
             &[0xCE, 0x99, 0xB4, 0x5F, 0xB3, 0xBB], // INTO
-            Instruction::new(Operation::Into, OperandSet::None)
+            Instruction::new(Operation::INTO, OperandSet::None)
         );
     }
 
@@ -3692,7 +3692,7 @@ mod test {
     fn test_cf() {
         test_decoder!(
             &[0xCF, 0xF8, 0x83, 0xBF, 0x14, 0x20], // IRET
-            Instruction::new(Operation::Iret, OperandSet::None)
+            Instruction::new(Operation::IRET, OperandSet::None)
         );
     }
 
@@ -3701,7 +3701,7 @@ mod test {
         test_decoder!(
             &[0xD0, 0x27, 0x88, 0xE5, 0x3D, 0xAE], // SHL        byte ptr [BX],1
             Instruction::new(
-                Operation::Shl,
+                Operation::SHL,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(Segment::Ds, AddressingMode::Bx, Displacement::None),
@@ -3718,7 +3718,7 @@ mod test {
         test_decoder!(
             &[0xD1, 0xBA, 0x2A, 0xED, 0x9E, 0x85], // SAR        word ptr [BP + SI + 0xed2a],1
             Instruction::new(
-                Operation::Sar,
+                Operation::SAR,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -3739,7 +3739,7 @@ mod test {
         test_decoder!(
             &[0xD2, 0x5F, 0xB9, 0xF8, 0x38, 0x8C], // RCR        byte ptr [BX + -0x47],CL
             Instruction::new(
-                Operation::Rcr,
+                Operation::RCR,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -3760,7 +3760,7 @@ mod test {
         test_decoder!(
             &[0xD3, 0x31, 0x89, 0xDA, 0x29, 0xBC], // SHL        word ptr [BX + DI],CL
             Instruction::new(
-                Operation::Shl,
+                Operation::SHL,
                 OperandSet::DestinationAndSource(
                     Operand(
                         OperandType::Indirect(
@@ -3781,7 +3781,7 @@ mod test {
         test_decoder!(
             &[0xD4, 0xB6, 0x44, 0x8A, 0x0F, 0x70], // AAM        0xb6
             Instruction::new(
-                Operation::Aam,
+                Operation::AAM,
                 OperandSet::Destination(Operand(OperandType::Immediate(0xb6), OperandSize::Byte))
             )
         );
@@ -3792,7 +3792,7 @@ mod test {
         test_decoder!(
             &[0xD5, 0x00, 0x8D, 0x13, 0x97, 0x5E], // AAD        0x0
             Instruction::new(
-                Operation::Aad,
+                Operation::AAD,
                 OperandSet::Destination(Operand(OperandType::Immediate(0x0), OperandSize::Byte))
             )
         );
@@ -3802,7 +3802,7 @@ mod test {
     fn test_d6() {
         test_decoder!(
             &[0xD6, 0x8E, 0xF0, 0xAB, 0x5B, 0xD5], // SALC
-            Instruction::new(Operation::Salc, OperandSet::None)
+            Instruction::new(Operation::SALC, OperandSet::None)
         );
     }
 
@@ -3810,7 +3810,7 @@ mod test {
     fn test_d7() {
         test_decoder!(
             &[0xD7, 0x60, 0x21, 0x55, 0xF8, 0xFC], // XLAT       BX
-            Instruction::new(Operation::Xlat, OperandSet::None)
+            Instruction::new(Operation::XLAT, OperandSet::None)
         );
     }
 
@@ -3818,7 +3818,7 @@ mod test {
     fn test_d8() {
         test_decoder!(
             &[0xD8, 0x63, 0x73, 0xBE, 0xCF, 0x6A],
-            Instruction::new(Operation::Esc, OperandSet::None)
+            Instruction::new(Operation::ESC, OperandSet::None)
         );
     }
 
@@ -3826,7 +3826,7 @@ mod test {
     fn test_d9() {
         test_decoder!(
             &[0xD9, 0x65, 0xC5, 0xCF, 0x52, 0x78],
-            Instruction::new(Operation::Esc, OperandSet::None)
+            Instruction::new(Operation::ESC, OperandSet::None)
         );
     }
 
@@ -3834,7 +3834,7 @@ mod test {
     fn test_da() {
         test_decoder!(
             &[0xDA, 0x22, 0x03, 0xE1, 0xAD, 0x5C],
-            Instruction::new(Operation::Esc, OperandSet::None)
+            Instruction::new(Operation::ESC, OperandSet::None)
         );
     }
 
@@ -3842,7 +3842,7 @@ mod test {
     fn test_db() {
         test_decoder!(
             &[0xDB, 0x01, 0xF2, 0xDA, 0x33, 0xA0],
-            Instruction::new(Operation::Esc, OperandSet::None)
+            Instruction::new(Operation::ESC, OperandSet::None)
         );
     }
 
@@ -3850,7 +3850,7 @@ mod test {
     fn test_dc() {
         test_decoder!(
             &[0xDC, 0x1B, 0x4D, 0x1C, 0x13, 0x5B],
-            Instruction::new(Operation::Esc, OperandSet::None)
+            Instruction::new(Operation::ESC, OperandSet::None)
         );
     }
 
@@ -3858,7 +3858,7 @@ mod test {
     fn test_dd() {
         test_decoder!(
             &[0xDD, 0xA1, 0x35, 0xE8, 0x46, 0x10],
-            Instruction::new(Operation::Esc, OperandSet::None)
+            Instruction::new(Operation::ESC, OperandSet::None)
         );
     }
 
@@ -3866,7 +3866,7 @@ mod test {
     fn test_de() {
         test_decoder!(
             &[0xDE, 0x6F, 0x2D, 0x3A, 0x0B, 0x06],
-            Instruction::new(Operation::Esc, OperandSet::None)
+            Instruction::new(Operation::ESC, OperandSet::None)
         );
     }
 
@@ -3874,7 +3874,7 @@ mod test {
     fn test_df() {
         test_decoder!(
             &[0xDF, 0xB0, 0xDA, 0x49, 0xD1, 0x89],
-            Instruction::new(Operation::Esc, OperandSet::None)
+            Instruction::new(Operation::ESC, OperandSet::None)
         );
     }
 
@@ -3883,7 +3883,7 @@ mod test {
         test_decoder!(
             &[0xE0, 0x0B, 0xD9, 0xC2, 0x3F, 0x84], // LOOPNZ     LAB_0000_08d1
             Instruction::new(
-                Operation::Loopnz,
+                Operation::LOOPNZ,
                 OperandSet::Displacement(Displacement::Byte(0x0B))
             )
         );
@@ -3894,7 +3894,7 @@ mod test {
         test_decoder!(
             &[0xE1, 0xCB, 0x51, 0x61, 0x17, 0x3F], // LOOPZ      LAB_0000_089b
             Instruction::new(
-                Operation::Loopz,
+                Operation::LOOPZ,
                 OperandSet::Displacement(Displacement::Byte(-0x35))
             )
         );
@@ -3905,7 +3905,7 @@ mod test {
         test_decoder!(
             &[0xE2, 0x7F, 0x78, 0xC9, 0xEB, 0x5E], // LOOP       LAB_0000_0959
             Instruction::new(
-                Operation::Loop,
+                Operation::LOOP,
                 OperandSet::Displacement(Displacement::Byte(0x7F))
             )
         );
@@ -3916,7 +3916,7 @@ mod test {
         test_decoder!(
             &[0xE3, 0xBA, 0x46, 0x18, 0x67, 0xE6], // JCXZ       LAB_0000_089e
             Instruction::new(
-                Operation::Jcxz,
+                Operation::JCXZ,
                 OperandSet::Displacement(Displacement::Byte(-0x46))
             )
         );
@@ -3927,7 +3927,7 @@ mod test {
         test_decoder!(
             &[0xE4, 0x30, 0x0B, 0x13, 0x59, 0x89], // IN         AL,0x30
             Instruction::new(
-                Operation::In,
+                Operation::IN,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0x30), OperandSize::Byte),
@@ -3941,7 +3941,7 @@ mod test {
         test_decoder!(
             &[0xE5, 0x70, 0x7F, 0x82, 0x32, 0x05], // IN         AX,0x70
             Instruction::new(
-                Operation::In,
+                Operation::IN,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Immediate(0x70), OperandSize::Byte),
@@ -3955,7 +3955,7 @@ mod test {
         test_decoder!(
             &[0xE6, 0x82, 0xEA, 0x87, 0xA5, 0x0D], // OUT        0x82,AL
             Instruction::new(
-                Operation::Out,
+                Operation::OUT,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Immediate(0x82), OperandSize::Byte),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
@@ -3969,7 +3969,7 @@ mod test {
         test_decoder!(
             &[0xE7, 0x26, 0x43, 0x1F, 0x31, 0xAC], // OUT        0x26,AX
             Instruction::new(
-                Operation::Out,
+                Operation::OUT,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Immediate(0x26), OperandSize::Byte),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
@@ -3983,7 +3983,7 @@ mod test {
         test_decoder!(
             &[0xE8, 0xF6, 0x79, 0x84, 0x52, 0x0D], // CALL       SUB_0000_830d
             Instruction::new(
-                Operation::Call,
+                Operation::CALL,
                 OperandSet::Displacement(Displacement::Word(0x79F6))
             )
         );
@@ -3994,7 +3994,7 @@ mod test {
         test_decoder!(
             &[0xE9, 0x43, 0x51, 0xFB, 0xE1, 0x6D], // JMP        LAB_0000_5a64
             Instruction::new(
-                Operation::Jmp,
+                Operation::JMP,
                 OperandSet::Displacement(Displacement::Word(0x5143))
             )
         );
@@ -4004,7 +4004,7 @@ mod test {
     fn test_ea() {
         test_decoder!(
             &[0xEA, 0x78, 0xEB, 0x22, 0x1A, 0x7D], // JMPF       LAB_2000_8d98
-            Instruction::new(Operation::Jmp, OperandSet::SegmentAndOffset(0x1A22, 0xEB78))
+            Instruction::new(Operation::JMP, OperandSet::SegmentAndOffset(0x1A22, 0xEB78))
         );
     }
 
@@ -4013,7 +4013,7 @@ mod test {
         test_decoder!(
             &[0xEB, 0x5B, 0x6F, 0x21, 0x86, 0x92], // JMP        LAB_0000_098f
             Instruction::new(
-                Operation::Jmp,
+                Operation::JMP,
                 OperandSet::Displacement(Displacement::Byte(0x5B))
             )
         );
@@ -4024,7 +4024,7 @@ mod test {
         test_decoder!(
             &[0xEC, 0x48, 0xDE, 0x73, 0x50, 0xA1], // IN         AL,DX
             Instruction::new(
-                Operation::In,
+                Operation::IN,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -4038,7 +4038,7 @@ mod test {
         test_decoder!(
             &[0xED, 0x7E, 0x5F, 0xA3, 0x0A, 0x1C], // IN         AX,DX
             Instruction::new(
-                Operation::In,
+                Operation::IN,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
@@ -4052,7 +4052,7 @@ mod test {
         test_decoder!(
             &[0xEE, 0xF7, 0xFE, 0xEB, 0x15, 0x0D], // OUT        DX,AL
             Instruction::new(
-                Operation::Out,
+                Operation::OUT,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
@@ -4066,7 +4066,7 @@ mod test {
         test_decoder!(
             &[0xEF, 0xA7, 0xBA, 0xDB, 0xF1, 0x44], // OUT        DX,AX
             Instruction::new(
-                Operation::Out,
+                Operation::OUT,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::DlDx), OperandSize::Word),
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
@@ -4079,7 +4079,7 @@ mod test {
     fn test_f0() {
         test_decoder!(
             &[0xF0, 0x5A, 0x56, 0x20, 0x2E, 0xDD], // LOCK
-            Instruction::new(Operation::Lock, OperandSet::None)
+            Instruction::new(Operation::LOCK, OperandSet::None)
         );
     }
 
@@ -4088,7 +4088,7 @@ mod test {
         test_decoder!(
             &[0xF1, 0xFF, 0x3E, 0xCF, 0xDE, 0x32], // INT1
             Instruction::new(
-                Operation::Int,
+                Operation::INT,
                 OperandSet::Destination(Operand(OperandType::Immediate(1), OperandSize::Byte))
             )
         );
@@ -4098,7 +4098,7 @@ mod test {
     fn test_f2() {
         test_decoder!(
             &[0xF2, 0xA4, 0x98, 0xFF, 0xF8, 0x84], // REPNZ      MOVSB
-            Instruction::with_repeat(Repeat::NotEqual, Operation::Movsb, OperandSet::None)
+            Instruction::with_repeat(Repeat::NotEqual, Operation::MOVSB, OperandSet::None)
         );
     }
 
@@ -4106,7 +4106,7 @@ mod test {
     fn test_f3() {
         test_decoder!(
             &[0xF3, 0xA4, 0x85, 0x96, 0xD4, 0xFA], // REPZ       MOVSB
-            Instruction::with_repeat(Repeat::Equal, Operation::Movsb, OperandSet::None)
+            Instruction::with_repeat(Repeat::Equal, Operation::MOVSB, OperandSet::None)
         );
     }
 
@@ -4114,7 +4114,7 @@ mod test {
     fn test_f4() {
         test_decoder!(
             &[0xF4, 0x1A, 0xD5, 0x4C, 0xE3, 0x8E], // HLT
-            Instruction::new(Operation::Hlt, OperandSet::None)
+            Instruction::new(Operation::HLT, OperandSet::None)
         );
     }
 
@@ -4122,7 +4122,7 @@ mod test {
     fn test_f5() {
         test_decoder!(
             &[0xF5, 0x0D, 0x85, 0x19, 0x65, 0x6B], // CMC
-            Instruction::new(Operation::Cmc, OperandSet::None)
+            Instruction::new(Operation::CMC, OperandSet::None)
         );
     }
 
@@ -4131,7 +4131,7 @@ mod test {
         test_decoder!(
             &[0xF6, 0b11000000, 0xF0], // TEST  AL, 0xF0
             Instruction::new(
-                Operation::Test,
+                Operation::TEST,
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
                     Operand(OperandType::Immediate(0xF0), OperandSize::Byte)
@@ -4142,7 +4142,7 @@ mod test {
         test_decoder!(
             &[0xF6, 0xD0, 0x15, 0x36, 0x19, 0xAC], // NOT        AL
             Instruction::new(
-                Operation::Not,
+                Operation::NOT,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::AlAx),
                     OperandSize::Byte
@@ -4156,7 +4156,7 @@ mod test {
         test_decoder!(
             &[0xF7, 0x32, 0xF2, 0x81, 0xD5, 0x6C], // DIV        word ptr [BP + SI]
             Instruction::new(
-                Operation::Div,
+                Operation::DIV,
                 OperandSet::Destination(Operand(
                     OperandType::Indirect(Segment::Ds, AddressingMode::BpSi, Displacement::None),
                     OperandSize::Word
@@ -4169,7 +4169,7 @@ mod test {
     fn test_f8() {
         test_decoder!(
             &[0xF8, 0x1D, 0xE6, 0x81, 0x6F, 0xC5], // CLC
-            Instruction::new(Operation::Clc, OperandSet::None)
+            Instruction::new(Operation::CLC, OperandSet::None)
         );
     }
 
@@ -4177,7 +4177,7 @@ mod test {
     fn test_f9() {
         test_decoder!(
             &[0xF9, 0x83, 0x46, 0x2E, 0x06, 0x92], // STC
-            Instruction::new(Operation::Stc, OperandSet::None)
+            Instruction::new(Operation::STC, OperandSet::None)
         );
     }
 
@@ -4185,7 +4185,7 @@ mod test {
     fn test_fa() {
         test_decoder!(
             &[0xFA, 0x59, 0x38, 0x70, 0xC5, 0xAF], // CLI
-            Instruction::new(Operation::Cli, OperandSet::None)
+            Instruction::new(Operation::CLI, OperandSet::None)
         );
     }
 
@@ -4193,7 +4193,7 @@ mod test {
     fn test_fb() {
         test_decoder!(
             &[0xFB, 0xC0, 0xDE, 0x80, 0x87, 0x33], // STI
-            Instruction::new(Operation::Sti, OperandSet::None)
+            Instruction::new(Operation::STI, OperandSet::None)
         );
     }
 
@@ -4201,7 +4201,7 @@ mod test {
     fn test_fc() {
         test_decoder!(
             &[0xFC, 0xC7, 0x90, 0x30, 0x15, 0x1F], // CLD
-            Instruction::new(Operation::Cld, OperandSet::None)
+            Instruction::new(Operation::CLD, OperandSet::None)
         );
     }
 
@@ -4209,7 +4209,7 @@ mod test {
     fn test_fd() {
         test_decoder!(
             &[0xFD, 0x76, 0x1D, 0xDE, 0x72, 0xAD], // STD
-            Instruction::new(Operation::Std, OperandSet::None)
+            Instruction::new(Operation::STD, OperandSet::None)
         );
     }
 
@@ -4218,7 +4218,7 @@ mod test {
         test_decoder!(
             &[0xFE, 0x80, 0x0A, 0x3B, 0x0C, 0xA1], // INC        byte ptr [BX + SI + 0x3b0a]
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Indirect(
                         Segment::Ds,
@@ -4236,7 +4236,7 @@ mod test {
         test_decoder!(
             &[0xFF, 0xC3, 0x19, 0xB8, 0x3F, 0x23], // INC        BX
             Instruction::new(
-                Operation::Inc,
+                Operation::INC,
                 OperandSet::Destination(Operand(
                     OperandType::Register(Register::BlBx),
                     OperandSize::Word
