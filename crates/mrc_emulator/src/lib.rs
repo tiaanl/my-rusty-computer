@@ -1,3 +1,4 @@
+pub mod components;
 pub mod cpu;
 pub mod error;
 

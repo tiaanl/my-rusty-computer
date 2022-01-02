@@ -1,7 +1,7 @@
 use std::io::{Read, Seek, SeekFrom};
 
 /// Values for an entry in the relocation table.
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 #[repr(C, packed)]
 pub struct Relocation {
     pub segment: u16,
@@ -10,7 +10,7 @@ pub struct Relocation {
 
 /// Describes the first bytes in a DOS .EXE file.
 /// Pages are 512 bytes in size.
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 #[repr(C, packed)]
 pub struct MzHeader {
     pub id: u16,                 // EXE Signature (should = "MZ")
@@ -47,9 +47,13 @@ impl MzHeader {
     pub fn code_offset(&self) -> u16 {
         self.header_size_in_bytes()
     }
+
+    pub fn code_size(&self) -> u32 {
+        self.file_size_in_bytes() - self.header_size_in_bytes() as u32
+    }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ExeHeader {
     pub mz_header: MzHeader,
     pub relocation_table: Vec<Relocation>,

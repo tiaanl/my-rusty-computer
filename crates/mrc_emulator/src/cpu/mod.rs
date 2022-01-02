@@ -287,8 +287,8 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
     }
 
     pub fn tick(&mut self) -> Result<ExecuteResult> {
-        println!("state: {}", self.state);
-        _print_bus_bytes(self);
+        // println!("state: {}", self.state);
+        // _print_bus_bytes(self);
 
         let _start_cs = self.state.segments.cs;
         let _start_ip = self.state.ip;

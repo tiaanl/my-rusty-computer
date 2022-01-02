@@ -1,11 +1,11 @@
+pub mod cga;
 pub mod dma;
+pub mod keyboard;
 pub mod pic;
 pub mod pit;
-pub mod ram;
-pub mod rom;
 
-use mrc_emulator::{Bus, Port};
 use mrc_emulator::error::Result;
+use mrc_emulator::{Bus, Port};
 
 /// Temporary implementation for the NMI register
 #[allow(clippy::upper_case_acronyms)]
@@ -20,7 +20,11 @@ impl Bus<Port> for NMI {
     }
 
     fn write(&mut self, port: u16, value: u8) -> Result<()> {
-        log::info!("Writing to NMI port {:#06X} with value {:#04X}", port, value);
+        log::info!(
+            "Writing to NMI port {:#06X} with value {:#04X}",
+            port,
+            value
+        );
         Ok(())
     }
 }

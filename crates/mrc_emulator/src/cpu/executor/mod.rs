@@ -468,8 +468,31 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
         Operation::Int => match instruction.operands {
             OperandSet::Destination(Operand(OperandType::Immediate(index), OperandSize::Byte)) => {
-                // cpu.interrupt_controller.borrow().handle(index as u8, cpu);
                 log::info!("Calling interrupt {:02X}", index);
+
+                push(cpu, cpu.state.flags.bits)?;
+                push(cpu, cpu.state.segments.cs)?;
+                push(cpu, cpu.state.ip)?;
+
+                cpu.state.flags.set(Flags::INTERRUPT, false);
+                cpu.state.flags.set(Flags::TRAP, false);
+
+                // The very top of memory.
+                let idt = segment_and_offset(0x0000, 0x0000);
+                let addr = idt + 4u32 * index as u32;
+
+                let new_ip = word::bus_read(cpu, addr)?;
+                let new_cs = word::bus_read(cpu, addr + 2)?;
+
+                // If the far call points to 0000:0000 again, this is probably an invalid interrupt
+                // vector.
+                if new_ip == 0 && new_cs == 0 {
+                    // TODO: Probably not the best error to return here.
+                    return Err(Error::IllegalInstruction);
+                }
+
+                cpu.state.ip = new_ip;
+                cpu.state.segments.cs = new_cs;
             }
 
             _ => illegal_operands(instruction),
@@ -477,12 +500,8 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
         Operation::Iret => match instruction.operands {
             OperandSet::None => {
-                // TODO: Check stack limits
-                // TODO: Check code segment limits
-
                 cpu.state.ip = pop(cpu)?;
-                let cs = pop(cpu)?;
-                cpu.state.set_segment_value(Segment::Cs, cs);
+                cpu.state.segments.cs = pop(cpu)?;
                 cpu.state.flags.bits = pop(cpu)?;
             }
 

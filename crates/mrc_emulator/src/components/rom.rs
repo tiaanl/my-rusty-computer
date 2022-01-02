@@ -1,5 +1,5 @@
-use mrc_emulator::{Address, Bus};
-use mrc_emulator::error::{Error, Result};
+use crate::{Address, Bus};
+use crate::error::{Error, Result};
 
 pub struct ReadOnlyMemory {
     data: Vec<u8>,
