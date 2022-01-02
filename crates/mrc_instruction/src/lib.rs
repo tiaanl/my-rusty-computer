@@ -1,3 +1,6 @@
+//! This crate holds all the structs and constants to represent an instruction for the 8086
+//! microprocessor (and friends).
+
 mod address;
 mod instruction;
 

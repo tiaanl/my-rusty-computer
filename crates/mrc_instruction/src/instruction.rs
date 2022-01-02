@@ -408,7 +408,23 @@ pub enum Repeat {
     NotEqual,
 }
 
-/// Representation of a 8086 instruction.
+/// Representation of a 8086 (and friends) instruction.
+///
+/// ```rust
+/// use mrc_instruction::*;
+///
+/// // mov ax, [es:bx+si+8]
+/// let i = Instruction::new(
+///     Operation::MOV,
+///     OperandSet::DestinationAndSource(
+///         Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
+///         Operand(
+///             OperandType::Indirect(Segment::Es, AddressingMode::BxSi, Displacement::Byte(8)),
+///             OperandSize::Word,
+///         ),
+///     ),
+/// );
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Instruction {
     pub operation: Operation,
@@ -419,6 +435,7 @@ pub struct Instruction {
 }
 
 impl Instruction {
+    /// Create a new instruction with the given [Operation] and [OperandSet].
     pub fn new(operation: Operation, operands: OperandSet) -> Self {
         Self {
             operation,
@@ -429,6 +446,8 @@ impl Instruction {
         }
     }
 
+    /// Create a new instruction with the given [Operation] and [OperandSet], as well as a [Repeat]
+    /// flag.
     pub fn with_repeat(repeat: Repeat, operation: Operation, operands: OperandSet) -> Self {
         Self {
             operation,
@@ -439,6 +458,8 @@ impl Instruction {
         }
     }
 
+    /// Consumes this [Instruction] and returns a duplicate with the `address` set the the given
+    /// [Address] value.
     pub fn with_address(self, address: Address) -> Self {
         Self {
             address: Some(address),
