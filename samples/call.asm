@@ -8,7 +8,7 @@ start:
         call    add_two
 
 add_one:
-        inc     byte [count]
+        inc     byte [count]            ; increase the count
         ret
 
 add_two:
@@ -18,8 +18,7 @@ add_two:
         ret
 
 exit:
-        mov     ax, 4C00h
-        int     21h
+        mov     ax, 0x4C00
+        int     0x21
 
-count:
-        db      0x01
+count:  db      0x01                    ; stores a sample count
