@@ -1,17 +1,12 @@
-use crate::parser::instructions::parse_operand;
 use crate::parser::ParseResult;
-use crate::{parse_identifier, parse_register};
+use crate::{parse_identifier, parse_operand, parse_register};
 use mrc_instruction::{AddressingMode, Operand};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::multispace0;
 use nom::combinator::{map, recognize};
-use nom::sequence::{delimited, terminated, tuple};
+use nom::sequence::{delimited, tuple};
 use std::str::FromStr;
-
-pub(crate) fn parse_label(input: &str) -> ParseResult<&str> {
-    terminated(terminated(parse_identifier, multispace0), tag(":"))(input)
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum MaybeOperand {
@@ -56,12 +51,6 @@ pub(crate) fn parse_maybe_operand(input: &str) -> ParseResult<MaybeOperand> {
 mod tests {
     use super::*;
     use mrc_instruction::{OperandSize, OperandType, Register, Segment};
-
-    #[test]
-    fn label() {
-        assert_eq!(parse_label("test:"), Ok(("", "test")));
-        assert_eq!(parse_label("test :"), Ok(("", "test")));
-    }
 
     #[test]
     fn maybe_direct_indirect_operand() {

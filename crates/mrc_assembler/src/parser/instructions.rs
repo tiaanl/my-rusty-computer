@@ -1,8 +1,6 @@
 use crate::parser::ParseResult;
 use crate::{parse_identifier, parse_number, ParseError};
-use mrc_instruction::{
-    Operand, OperandSize, OperandType, Operation, Register, Segment, SizedRegister,
-};
+use mrc_instruction::{Operand, OperandSize, OperandType, Operation, Segment, SizedRegister};
 use nom::branch::alt;
 use nom::combinator::{map, map_res};
 use std::str::FromStr;
@@ -42,6 +40,7 @@ pub(crate) fn parse_operand(input: &str) -> ParseResult<Operand> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mrc_instruction::Register;
 
     #[test]
     fn operation() {

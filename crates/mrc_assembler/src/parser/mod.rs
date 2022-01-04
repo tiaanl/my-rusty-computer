@@ -1,6 +1,6 @@
 pub(crate) mod combinators;
 pub(crate) mod instructions;
-pub(crate) mod source;
+pub(crate) mod sources;
 
 pub(crate) enum ParseError {
     Unknown,
