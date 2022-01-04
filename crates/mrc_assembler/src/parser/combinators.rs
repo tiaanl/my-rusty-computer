@@ -1,12 +1,10 @@
 use crate::parser::{ParseError, ParseResult};
 use nom::branch::alt;
 use nom::bytes::complete::tag;
-use nom::character::complete::alpha1;
 use nom::character::complete::one_of;
-use nom::combinator::map;
 use nom::combinator::map_res;
 use nom::combinator::recognize;
-use nom::multi::many1;
+use nom::multi::{many0, many1};
 use nom::sequence::preceded;
 
 fn parse_number_with_radix(
@@ -63,7 +61,19 @@ pub(crate) fn parse_number(input: &str) -> ParseResult<i32> {
 }
 
 pub(crate) fn parse_identifier(input: &str) -> ParseResult<&str> {
-    alpha1(input)
+    fn first_char(input: &str) -> ParseResult<&str> {
+        recognize(many1(one_of(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_",
+        )))(input)
+    }
+
+    fn other_char(input: &str) -> ParseResult<&str> {
+        recognize(many0(one_of(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_1234567890",
+        )))(input)
+    }
+
+    recognize(preceded(first_char, other_char))(input)
 }
 
 #[cfg(test)]
@@ -109,5 +119,9 @@ mod tests {
     #[test]
     fn identifier() {
         assert_eq!(parse_identifier("hello, world!"), Ok((", world!", "hello")));
+        assert_eq!(parse_identifier("HELLO, WORLD!"), Ok((", WORLD!", "HELLO")));
+        assert_eq!(parse_identifier("_is_valid"), Ok(("", "_is_valid")));
+        assert_eq!(parse_identifier("isValid78"), Ok(("", "isValid78")));
+        assert!(parse_identifier("1notvalid").is_err());
     }
 }

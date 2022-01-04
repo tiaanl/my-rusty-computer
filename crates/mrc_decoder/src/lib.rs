@@ -38,10 +38,10 @@ impl TryFromByte<Register> for Register {
 impl TryFromByte<Self> for Segment {
     fn try_from_byte(byte: u8) -> Result<Self> {
         match byte {
-            0b00 => Ok(Self::Es),
-            0b01 => Ok(Self::Cs),
-            0b10 => Ok(Self::Ss),
-            0b11 => Ok(Self::Ds),
+            0b00 => Ok(Self::ES),
+            0b01 => Ok(Self::CS),
+            0b10 => Ok(Self::SS),
+            0b11 => Ok(Self::DS),
             _ => Err(Error::InvalidSegmentEncoding(byte)),
         }
     }

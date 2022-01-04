@@ -1,13 +1,14 @@
 mod parser;
 
 use crate::parser::combinators::{parse_identifier, parse_number};
+use crate::parser::instructions::{parse_operation, parse_register, parse_segment};
+use crate::parser::source::parse_label;
 use crate::parser::ParseError;
 use mrc_instruction::{
     Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
 };
 use nom::branch::alt;
 use nom::bytes::complete::tag;
-use nom::character::complete::alpha1;
 use nom::character::complete::alphanumeric1;
 use nom::character::complete::multispace0;
 use nom::character::complete::multispace1;
@@ -18,7 +19,7 @@ use nom::sequence::delimited;
 use nom::sequence::terminated;
 use nom::sequence::tuple;
 use nom::IResult;
-use std::{fmt::Formatter, str::FromStr};
+use std::fmt::Formatter;
 
 #[derive(Debug, PartialEq)]
 enum Token {
@@ -26,110 +27,12 @@ enum Token {
     Number(i32),
 }
 
-fn parse_operation(input: &str) -> IResult<&str, Operation> {
-    map_res(alpha1, |s| {
-        if let Ok(operation) = Operation::from_str(s) {
-            Ok(operation)
-        } else {
-            Err(ParseError::Unknown)
-        }
-    })(input)
-}
-
 fn parse_register_operand(input: &str) -> IResult<&str, Operand> {
-    map_res(alphanumeric1, |s| {
-        match String::from(s).to_lowercase().as_str() {
-            "ax" => Ok(Operand(
-                OperandType::Register(Register::AlAx),
-                OperandSize::Word,
-            )),
-            "bx" => Ok(Operand(
-                OperandType::Register(Register::BlBx),
-                OperandSize::Word,
-            )),
-            "cx" => Ok(Operand(
-                OperandType::Register(Register::ClCx),
-                OperandSize::Word,
-            )),
-            "dx" => Ok(Operand(
-                OperandType::Register(Register::DlDx),
-                OperandSize::Word,
-            )),
-            "bp" => Ok(Operand(
-                OperandType::Register(Register::ChBp),
-                OperandSize::Word,
-            )),
-            "sp" => Ok(Operand(
-                OperandType::Register(Register::AhSp),
-                OperandSize::Word,
-            )),
-            "si" => Ok(Operand(
-                OperandType::Register(Register::DhSi),
-                OperandSize::Word,
-            )),
-            "di" => Ok(Operand(
-                OperandType::Register(Register::BhDi),
-                OperandSize::Word,
-            )),
-            "al" => Ok(Operand(
-                OperandType::Register(Register::AlAx),
-                OperandSize::Byte,
-            )),
-            "bl" => Ok(Operand(
-                OperandType::Register(Register::BlBx),
-                OperandSize::Byte,
-            )),
-            "cl" => Ok(Operand(
-                OperandType::Register(Register::ClCx),
-                OperandSize::Byte,
-            )),
-            "dl" => Ok(Operand(
-                OperandType::Register(Register::DlDx),
-                OperandSize::Byte,
-            )),
-            "ah" => Ok(Operand(
-                OperandType::Register(Register::ChBp),
-                OperandSize::Byte,
-            )),
-            "bh" => Ok(Operand(
-                OperandType::Register(Register::AhSp),
-                OperandSize::Byte,
-            )),
-            "ch" => Ok(Operand(
-                OperandType::Register(Register::DhSi),
-                OperandSize::Byte,
-            )),
-            "dh" => Ok(Operand(
-                OperandType::Register(Register::BhDi),
-                OperandSize::Byte,
-            )),
-            _ => Err(ParseError::Unknown),
-        }
-    })(input)
+    map(parse_register, Operand::from)(input)
 }
 
 fn parse_segment_operand(input: &str) -> IResult<&str, Operand> {
-    map_res(alphanumeric1, |s| {
-        match String::from(s).to_lowercase().as_str() {
-            "cs" => Ok(Operand(
-                OperandType::Segment(Segment::Cs),
-                OperandSize::Word,
-            )),
-            "es" => Ok(Operand(
-                OperandType::Segment(Segment::Es),
-                OperandSize::Word,
-            )),
-            "ss" => Ok(Operand(
-                OperandType::Segment(Segment::Ss),
-                OperandSize::Word,
-            )),
-            "ds" => Ok(Operand(
-                OperandType::Segment(Segment::Ds),
-                OperandSize::Word,
-            )),
-            _ => Err(ParseError::Unknown),
-        }
-    })(input)
+    map(parse_segment, Operand::from)(input)
 }
 
 fn parse_number_operand(input: &str) -> IResult<&str, Operand> {
@@ -257,10 +160,6 @@ fn parse_instruction(input: &str) -> IResult<&str, Instruction> {
     res
 }
 
-fn parse_label(input: &str) -> IResult<&str, &str> {
-    terminated(terminated(parse_identifier, multispace0), tag(":"))(input)
-}
-
 fn parse_line(input: &str) -> IResult<&str, Line> {
     let res = terminated(
         alt((
@@ -320,7 +219,7 @@ mod tests {
                 "",
                 OperandSet::DestinationAndSource(
                     Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
-                    Operand(OperandType::Segment(Segment::Cs), OperandSize::Word),
+                    Operand(OperandType::Segment(Segment::CS), OperandSize::Word),
                 )
             )
         );
@@ -338,7 +237,7 @@ mod tests {
                     operation: Operation::MOV,
                     operands: OperandSet::DestinationAndSource(
                         Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
-                        Operand(OperandType::Segment(Segment::Cs), OperandSize::Word),
+                        Operand(OperandType::Segment(Segment::CS), OperandSize::Word),
                     ),
                     repeat: None,
                     lock: false,

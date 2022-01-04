@@ -1,4 +1,5 @@
 use crate::Address;
+use std::str::FromStr;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operation {
@@ -224,10 +225,11 @@ impl std::fmt::Display for Operation {
 }
 
 impl std::str::FromStr for Operation {
-    type Err = ();
+    type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use Operation::*;
+
         Ok(match s.to_string().to_lowercase().as_str() {
             "mov" => MOV,
             "push" => PUSH,
@@ -325,7 +327,7 @@ impl std::str::FromStr for Operation {
             "lock" => LOCK,
             "nop" => NOP,
             "salc" => SALC,
-            _ => return Err(()),
+            _ => return Err(s.to_string()),
         })
     }
 }
@@ -348,9 +350,10 @@ pub enum Register {
     BhDi,
 }
 
-struct RegisterDisplay<'a>(&'a Register, &'a OperandSize);
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SizedRegister(pub Register, pub OperandSize);
 
-impl std::fmt::Display for RegisterDisplay<'_> {
+impl std::fmt::Display for SizedRegister {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Register::*;
 
@@ -380,12 +383,43 @@ impl std::fmt::Display for RegisterDisplay<'_> {
     }
 }
 
+impl FromStr for SizedRegister {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use OperandSize::*;
+        use Register::*;
+
+        match s.to_lowercase().as_str() {
+            "al" => Ok(Self(AlAx, Byte)),
+            "cl" => Ok(Self(ClCx, Byte)),
+            "dl" => Ok(Self(DlDx, Byte)),
+            "bl" => Ok(Self(BlBx, Byte)),
+            "ah" => Ok(Self(AhSp, Byte)),
+            "ch" => Ok(Self(ChBp, Byte)),
+            "dh" => Ok(Self(DhSi, Byte)),
+            "bh" => Ok(Self(BhDi, Byte)),
+
+            "ax" => Ok(Self(AlAx, Word)),
+            "cx" => Ok(Self(ClCx, Word)),
+            "dx" => Ok(Self(DlDx, Word)),
+            "bx" => Ok(Self(BlBx, Word)),
+            "sp" => Ok(Self(AhSp, Word)),
+            "bp" => Ok(Self(ChBp, Word)),
+            "si" => Ok(Self(DhSi, Word)),
+            "di" => Ok(Self(BhDi, Word)),
+
+            _ => Err(s.to_string()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Segment {
-    Es,
-    Cs,
-    Ss,
-    Ds,
+    ES,
+    CS,
+    SS,
+    DS,
 }
 
 impl std::fmt::Display for Segment {
@@ -393,10 +427,24 @@ impl std::fmt::Display for Segment {
         use Segment::*;
 
         match self {
-            Es => write!(f, "es"),
-            Cs => write!(f, "cs"),
-            Ss => write!(f, "ss"),
-            Ds => write!(f, "ds"),
+            ES => write!(f, "es"),
+            CS => write!(f, "cs"),
+            SS => write!(f, "ss"),
+            DS => write!(f, "ds"),
+        }
+    }
+}
+
+impl FromStr for Segment {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "es" => Ok(Segment::ES),
+            "cs" => Ok(Segment::CS),
+            "ss" => Ok(Segment::SS),
+            "ds" => Ok(Segment::DS),
+            _ => Err(s.to_string()),
         }
     }
 }
@@ -426,6 +474,26 @@ impl std::fmt::Display for AddressingMode {
             Di => write!(f, "di"),
             Bp => write!(f, "bp"),
             Bx => write!(f, "bx"),
+        }
+    }
+}
+
+impl FromStr for AddressingMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use AddressingMode::*;
+
+        match s.to_lowercase().replace(' ', "").as_str() {
+            "bx+si" => Ok(BxSi),
+            "bx+di" => Ok(BxDi),
+            "bp+si" => Ok(BpSi),
+            "bp+di" => Ok(BpDi),
+            "si" => Ok(Si),
+            "di" => Ok(Di),
+            "Bp" => Ok(Bp),
+            "Bx" => Ok(Bx),
+            _ => Err(s.to_string()),
         }
     }
 }
@@ -463,15 +531,27 @@ pub enum OperandType {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Operand(pub OperandType, pub OperandSize);
 
+impl From<SizedRegister> for Operand {
+    fn from(sized_register: SizedRegister) -> Self {
+        Self(OperandType::Register(sized_register.0), sized_register.1)
+    }
+}
+
+impl From<Segment> for Operand {
+    fn from(segment: Segment) -> Self {
+        Self(OperandType::Segment(segment), OperandSize::Word)
+    }
+}
+
 impl std::fmt::Display for Operand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         macro_rules! print_segment_prefix {
             ($segment:expr) => {
                 match $segment {
-                    Segment::Es => write!(f, "es:")?,
-                    Segment::Cs => write!(f, "cs:")?,
-                    Segment::Ss => write!(f, "ss:")?,
-                    Segment::Ds => {}
+                    Segment::ES => write!(f, "es:")?,
+                    Segment::CS => write!(f, "cs:")?,
+                    Segment::SS => write!(f, "ss:")?,
+                    Segment::DS => {}
                 }
             };
         }
@@ -493,7 +573,7 @@ impl std::fmt::Display for Operand {
                 print_segment_prefix!(segment);
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
-            OperandType::Register(encoding) => write!(f, "{}", RegisterDisplay(encoding, &self.1))?,
+            OperandType::Register(encoding) => write!(f, "{}", SizedRegister(*encoding, self.1))?,
             OperandType::Segment(encoding) => write!(f, "{}", encoding)?,
             OperandType::Immediate(value) => match &self.1 {
                 OperandSize::Byte => write!(f, "{:#04X}", value)?,
@@ -546,7 +626,7 @@ pub enum Repeat {
 ///     OperandSet::DestinationAndSource(
 ///         Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
 ///         Operand(
-///             OperandType::Indirect(Segment::Es, AddressingMode::BxSi, Displacement::Byte(8)),
+///             OperandType::Indirect(Segment::ES, AddressingMode::BxSi, Displacement::Byte(8)),
 ///             OperandSize::Word,
 ///         ),
 ///     ),

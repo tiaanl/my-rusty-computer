@@ -58,17 +58,17 @@ impl RegisterOrMemory {
 impl From<RegisterOrMemory> for OperandType {
     fn from(register_or_memory: RegisterOrMemory) -> Self {
         match register_or_memory {
-            RegisterOrMemory::Direct(offset) => OperandType::Direct(Segment::Ds, offset),
+            RegisterOrMemory::Direct(offset) => OperandType::Direct(Segment::DS, offset),
             RegisterOrMemory::Indirect(encoding) => {
-                OperandType::Indirect(Segment::Ds, encoding, Displacement::None)
+                OperandType::Indirect(Segment::DS, encoding, Displacement::None)
             }
             RegisterOrMemory::DisplacementByte(encoding, displacement) => OperandType::Indirect(
-                Segment::Ds,
+                Segment::DS,
                 encoding,
                 Displacement::Byte(displacement as i8),
             ),
             RegisterOrMemory::DisplacementWord(encoding, displacement) => OperandType::Indirect(
-                Segment::Ds,
+                Segment::DS,
                 encoding,
                 Displacement::Word(displacement as i16),
             ),

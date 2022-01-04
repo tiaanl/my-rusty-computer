@@ -89,7 +89,7 @@ fn main() {
     let mut cpu = CPU::new(memory, io);
     cpu.jump_to(0x1000 + header.initial_cs, header.initial_ip);
     cpu.state
-        .set_segment_value(Segment::Ss, 0x1000 + header.initial_ss);
+        .set_segment_value(Segment::SS, 0x1000 + header.initial_ss);
     cpu.state
         .set_word_register_value(Register::AhSp, header.initial_sp);
 

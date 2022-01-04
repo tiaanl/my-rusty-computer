@@ -259,7 +259,7 @@ mod word {
 }
 
 fn push<D: Bus<Address>, I: Bus<Port>>(cpu: &mut CPU<D, I>, value: u16) -> Result<()> {
-    let ss = cpu.state.get_segment_value(Segment::Ss);
+    let ss = cpu.state.get_segment_value(Segment::SS);
     let mut sp = cpu.state.get_word_register_value(Register::AhSp);
 
     sp = sp.wrapping_sub(2);
@@ -271,7 +271,7 @@ fn push<D: Bus<Address>, I: Bus<Port>>(cpu: &mut CPU<D, I>, value: u16) -> Resul
 }
 
 fn pop<D: Bus<Address>, I: Bus<Port>>(cpu: &mut CPU<D, I>) -> Result<u16> {
-    let ss = cpu.state.get_segment_value(Segment::Ss);
+    let ss = cpu.state.get_segment_value(Segment::SS);
     let mut sp = cpu.state.get_word_register_value(Register::AhSp);
 
     let value = word::bus_read(cpu, segment_and_offset(ss, sp))?;
@@ -569,7 +569,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 displace_ip(&mut cpu.state, displacement)?;
             }
             OperandSet::SegmentAndOffset(segment, offset) => {
-                cpu.state.set_segment_value(Segment::Cs, *segment);
+                cpu.state.set_segment_value(Segment::CS, *segment);
                 cpu.state.ip = *offset;
             }
             _ => illegal_operands(instruction),
@@ -718,10 +718,10 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 _ => unreachable!(),
             };
 
-            let ds = cpu.state.get_segment_value(Segment::Ds);
+            let ds = cpu.state.get_segment_value(Segment::DS);
             let mut si = cpu.state.get_word_register_value(Register::DhSi);
 
-            let es = cpu.state.get_segment_value(Segment::Es);
+            let es = cpu.state.get_segment_value(Segment::ES);
             let mut di = cpu.state.get_word_register_value(Register::BhDi);
 
             let mut count = match instruction.repeat {

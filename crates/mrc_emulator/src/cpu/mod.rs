@@ -185,10 +185,10 @@ impl State {
         use Segment::*;
 
         match segment {
-            Es => self.segments.es,
-            Cs => self.segments.cs,
-            Ss => self.segments.ss,
-            Ds => self.segments.ds,
+            ES => self.segments.es,
+            CS => self.segments.cs,
+            SS => self.segments.ss,
+            DS => self.segments.ds,
         }
     }
 
@@ -196,10 +196,10 @@ impl State {
         use Segment::*;
 
         match segment {
-            Es => self.segments.es = value,
-            Cs => self.segments.cs = value,
-            Ss => self.segments.ss = value,
-            Ds => self.segments.ds = value,
+            ES => self.segments.es = value,
+            CS => self.segments.cs = value,
+            SS => self.segments.ss = value,
+            DS => self.segments.ds = value,
         }
     }
 }
@@ -337,7 +337,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
 
 fn _print_bus_bytes<D: Bus<Address>, I: Bus<Port>>(cpu: &CPU<D, I>) {
     print!("Bytes to decode: ");
-    let start = segment_and_offset(cpu.state.get_segment_value(Segment::Cs), cpu.state.ip);
+    let start = segment_and_offset(cpu.state.get_segment_value(Segment::CS), cpu.state.ip);
     for i in 0..5 {
         let addr = start + i;
 
