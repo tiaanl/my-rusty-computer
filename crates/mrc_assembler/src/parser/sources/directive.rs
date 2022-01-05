@@ -1,10 +1,8 @@
-use crate::{parse_identifier, parse_number, parser::ParseResult};
-use nom::{
-    character::complete::multispace1,
-    combinator::map_res,
-    sequence::{terminated, tuple},
-};
+use crate::{parse_identifier, parser::ParseResult};
+use nom::sequence::separated_pair;
+use nom::{character::complete::multispace1, combinator::map_res};
 use std::fmt::Formatter;
+use crate::parser::combinators::parse_number;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Directive {
@@ -23,7 +21,7 @@ impl std::fmt::Display for Directive {
 
 pub(crate) fn parse_directive(input: &str) -> ParseResult<Directive> {
     map_res(
-        tuple((terminated(parse_identifier, multispace1), parse_number)),
+        separated_pair(parse_identifier, multispace1, parse_number),
         |(s, v)| match String::from(s).to_lowercase().as_str() {
             "bits" => Ok(Directive::Bits(v as u16)),
             "org" => Ok(Directive::Org(v as u32)),

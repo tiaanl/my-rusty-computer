@@ -1,8 +1,14 @@
+use crate::parser::combinators::parse_number;
 use crate::parser::ParseResult;
-use crate::{parse_identifier, parse_number, ParseError};
-use mrc_instruction::{Operand, OperandSize, OperandType, Operation, Segment, SizedRegister};
+use crate::{parse_identifier, ParseError};
+use mrc_instruction::{
+    AddressingMode, Operand, OperandSize, OperandType, Operation, Segment, SizedRegister,
+};
 use nom::branch::alt;
-use nom::combinator::{map, map_res};
+use nom::bytes::complete::tag;
+use nom::character::complete::multispace0;
+use nom::combinator::{map, map_res, recognize};
+use nom::sequence::{delimited, separated_pair};
 use std::str::FromStr;
 
 pub(crate) fn parse_operation(input: &str) -> ParseResult<Operation> {
@@ -23,18 +29,21 @@ pub(crate) fn parse_segment(input: &str) -> ParseResult<Segment> {
     })(input)
 }
 
-pub(crate) fn parse_operand(input: &str) -> ParseResult<Operand> {
-    alt((
-        map(parse_register, |SizedRegister(register, size)| {
-            Operand(OperandType::Register(register), size)
-        }),
-        map(parse_segment, |segment| {
-            Operand(OperandType::Segment(segment), OperandSize::Word)
-        }),
-        map(parse_number, |number| {
-            Operand(OperandType::Immediate(number as u16), OperandSize::Word)
-        }),
-    ))(input)
+pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> {
+    map_res(
+        alt((
+            recognize(separated_pair(
+                parse_register,
+                delimited(multispace0, tag("+"), multispace0),
+                parse_register,
+            )),
+            parse_identifier,
+        )),
+        |res| match AddressingMode::from_str(res) {
+            Ok(addressing_mode) => Ok(addressing_mode),
+            Err(_) => Err(ParseError::InvalidAddressingMode),
+        },
+    )(input)
 }
 
 #[cfg(test)]
@@ -67,24 +76,18 @@ mod tests {
     }
 
     #[test]
-    fn operand() {
+    fn addressing_mode() {
         assert_eq!(
-            parse_operand("bl",),
-            Ok((
-                "",
-                Operand(OperandType::Register(Register::BlBx), OperandSize::Byte)
-            ))
+            parse_addressing_mode("si"),
+            Ok(("", AddressingMode::Si))
         );
         assert_eq!(
-            parse_operand("cs",),
-            Ok((
-                "",
-                Operand(OperandType::Segment(Segment::CS), OperandSize::Word)
-            ))
+            parse_addressing_mode("bp+di"),
+            Ok(("", AddressingMode::BpDi))
         );
         assert_eq!(
-            parse_operand("17",),
-            Ok(("", Operand(OperandType::Immediate(17), OperandSize::Word)))
+            parse_addressing_mode("bx + si"),
+            Ok(("", AddressingMode::BxSi))
         );
     }
 }

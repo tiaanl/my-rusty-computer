@@ -10,6 +10,8 @@ pub(crate) enum ParseError {
     InvalidOperation,
     InvalidRegister,
     InvalidSegment,
+    InvalidAddressingMode,
+    InvalidOperandSize,
 }
 
 impl nom::error::FromExternalError<&str, ParseError> for ParseError {

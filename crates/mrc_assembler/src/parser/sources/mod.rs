@@ -1,12 +1,14 @@
-mod directive;
-mod operand;
+pub mod directive;
+pub mod instruction;
 
-pub(crate) use directive::{parse_directive, Directive};
-
-use crate::parser::sources::operand::MaybeOperand;
-use crate::{parse_identifier, parser::ParseResult};
-use mrc_instruction::Displacement;
-use nom::character::complete::multispace1;
+use crate::parser::sources::directive::{parse_directive, Directive};
+use crate::parser::sources::instruction::{parse_source_instruction, SourceInstruction};
+use crate::{parse_identifier, ParseResult};
+use nom::bytes::complete::{take_till, take_until};
+use nom::character::complete::{alphanumeric0, alphanumeric1, multispace1, one_of};
+use nom::combinator::{eof, recognize};
+use nom::multi::many1;
+use nom::sequence::preceded;
 use nom::{
     branch::alt, bytes::complete::tag, character::complete::multispace0, combinator::map,
     sequence::terminated,
@@ -17,24 +19,16 @@ fn parse_label(input: &str) -> ParseResult<&str> {
     terminated(terminated(parse_identifier, multispace0), tag(":"))(input)
 }
 
-#[derive(Clone, Debug, PartialEq)]
-enum MaybeOperandSet {
-    None,
-    Destination(MaybeOperand),
-    DestinationAndSource(MaybeOperand, MaybeOperand),
-    Displacement(Displacement),
-    SegmentAndOffset(u16, u16),
-}
-
-fn parse_maybe_operand_set(input: &str) -> ParseResult<MaybeOperandSet> {
-    map(multispace1, |_| MaybeOperandSet::None)(input)
+fn parse_comment(input: &str) -> ParseResult<&str> {
+    recognize(preceded(tag(";"), take_till(|c| c == '\n')))(input)
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Line {
     Directive(Directive),
     Label(String),
-    //Instruction(Instruction),
+    Instruction(SourceInstruction),
+    Comment(String),
 }
 
 impl std::fmt::Display for Line {
@@ -42,7 +36,8 @@ impl std::fmt::Display for Line {
         match self {
             Line::Directive(directive) => write!(f, "{}", directive),
             Line::Label(label) => write!(f, "{}:", label),
-            // Line::Instruction(instruction) => write!(f, "{}", instruction),
+            Line::Instruction(instruction) => write!(f, "{:?}", instruction),
+            Line::Comment(comment) => write!(f, "{}", comment),
         }
     }
 }
@@ -50,9 +45,10 @@ impl std::fmt::Display for Line {
 pub(crate) fn parse_line(input: &str) -> ParseResult<Line> {
     terminated(
         alt((
-            map(parse_label, |s| Line::Label(s.to_string())),
+            map(parse_label, |label| Line::Label(label.to_string())),
             map(parse_directive, Line::Directive),
-            // map(parse_instruction, Line::Instruction),
+            map(parse_source_instruction, Line::Instruction),
+            map(parse_comment, |comment| Line::Comment(comment.to_string())),
         )),
         multispace0,
     )(input)
@@ -61,7 +57,6 @@ pub(crate) fn parse_line(input: &str) -> ParseResult<Line> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mrc_instruction::{Operand, OperandSize, OperandType, Register};
 
     #[test]
     fn label() {
@@ -70,22 +65,14 @@ mod tests {
     }
 
     #[test]
-    fn maybe_operand_set() {
+    fn comment() {
         assert_eq!(
-            parse_maybe_operand_set("ax, bx"),
-            Ok((
-                "",
-                MaybeOperandSet::DestinationAndSource(
-                    MaybeOperand::Full(Operand(
-                        OperandType::Register(Register::AlAx),
-                        OperandSize::Word
-                    )),
-                    MaybeOperand::Full(Operand(
-                        OperandType::Register(Register::BlBx),
-                        OperandSize::Word
-                    ))
-                )
-            ))
+            parse_comment("; this is a comment"),
+            Ok(("", "; this is a comment"))
+        );
+        assert_eq!(
+            parse_comment("; this is a comment\nother stuff"),
+            Ok(("\nother stuff", "; this is a comment"))
         );
     }
 
