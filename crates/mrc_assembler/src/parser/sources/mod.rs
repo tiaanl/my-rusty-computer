@@ -1,22 +1,23 @@
-pub mod directive;
-pub mod instruction;
+pub(crate) mod directive;
+pub(crate) mod instruction;
 
-use crate::parser::sources::directive::{parse_directive, Directive};
-use crate::parser::sources::instruction::{parse_source_instruction, SourceInstruction};
-use crate::{parse_identifier, ParseResult};
-use nom::bytes::complete::{take_till, take_until};
-use nom::character::complete::{alphanumeric0, alphanumeric1, multispace1, one_of};
-use nom::combinator::{eof, recognize};
-use nom::multi::many1;
-use nom::sequence::preceded;
+use crate::{
+    parse_identifier,
+    parser::sources::{
+        directive::{parse_directive, Directive},
+        instruction::{parse_source_instruction, SourceInstruction},
+    },
+    ParseResult,
+};
 use nom::{
-    branch::alt, bytes::complete::tag, character::complete::multispace0, combinator::map,
-    sequence::terminated,
+    branch::alt, bytes::complete::tag, bytes::complete::take_till,
+    character::complete::multispace0, character::complete::space0, combinator::map,
+    combinator::recognize, sequence::preceded, sequence::terminated,
 };
 use std::fmt::Formatter;
 
 fn parse_label(input: &str) -> ParseResult<&str> {
-    terminated(terminated(parse_identifier, multispace0), tag(":"))(input)
+    terminated(terminated(parse_identifier, space0), tag(":"))(input)
 }
 
 fn parse_comment(input: &str) -> ParseResult<&str> {
@@ -24,7 +25,7 @@ fn parse_comment(input: &str) -> ParseResult<&str> {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Line {
+pub(crate) enum Line {
     Directive(Directive),
     Label(String),
     Instruction(SourceInstruction),

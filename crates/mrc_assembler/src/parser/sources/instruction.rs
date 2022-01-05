@@ -1,23 +1,28 @@
-use crate::parser::combinators::parse_number;
-use crate::parser::instructions::{parse_addressing_mode, parse_operation, parse_segment};
-use crate::{parse_identifier, parse_register, ParseError, ParseResult};
+use crate::{
+    parse_identifier, parse_register,
+    parser::{
+        combinators::parse_number,
+        instructions::{parse_addressing_mode, parse_operation, parse_segment},
+    },
+    ParseError, ParseResult,
+};
 use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take_till, take_until, take_while};
-use nom::character::complete::{line_ending, multispace0, multispace1, space0, space1};
-use nom::combinator::{map, map_res, opt, recognize, success};
-use nom::multi::many0;
-use nom::sequence::{delimited, pair, separated_pair, terminated, tuple};
-use std::str::FromStr;
+use nom::{
+    branch::alt,
+    bytes::complete::tag,
+    character::complete::space0,
+    combinator::{map, map_res},
+    sequence::{delimited, separated_pair, terminated},
+};
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ValueOrLabel {
+pub(crate) enum ValueOrLabel {
     Value(i32),
     Label(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SourceOperand {
+pub(crate) enum SourceOperand {
     Direct(ValueOrLabel, Option<OperandSize>),
     Indirect(AddressingMode, Option<OperandSize>),
     Register(SizedRegister),
@@ -27,16 +32,16 @@ pub enum SourceOperand {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SourceOperandSet {
+pub(crate) enum SourceOperandSet {
     None,
     Destination(SourceOperand),
     DestinationAndSource(SourceOperand, SourceOperand),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SourceInstruction {
-    pub operation: Operation,
-    pub operands: SourceOperandSet,
+pub(crate) struct SourceInstruction {
+    pub(crate) operation: Operation,
+    pub(crate) operand_set: SourceOperandSet,
 }
 
 fn parse_operand_size(input: &str) -> ParseResult<OperandSize> {
@@ -60,14 +65,14 @@ fn parse_source_direct_operand(input: &str) -> ParseResult<SourceOperand> {
     fn inner(input: &str) -> ParseResult<ValueOrLabel> {
         delimited(
             tag("["),
-            delimited(multispace0, parse_value_or_label, multispace0),
+            delimited(space0, parse_value_or_label, space0),
             tag("]"),
         )(input)
     }
 
     alt((
         map(
-            separated_pair(parse_operand_size, multispace1, inner),
+            separated_pair(parse_operand_size, space0, inner),
             |(operand_size, value_or_label)| {
                 SourceOperand::Direct(value_or_label, Some(operand_size))
             },
@@ -82,14 +87,14 @@ fn parse_source_indirect_operand(input: &str) -> ParseResult<SourceOperand> {
     fn inner(input: &str) -> ParseResult<AddressingMode> {
         delimited(
             tag("["),
-            delimited(multispace0, parse_addressing_mode, multispace0),
+            delimited(space0, parse_addressing_mode, space0),
             tag("]"),
         )(input)
     }
 
     alt((
         map(
-            separated_pair(parse_operand_size, multispace1, inner),
+            separated_pair(parse_operand_size, space0, inner),
             |(operand_size, addressing_mode)| {
                 SourceOperand::Indirect(addressing_mode, Some(operand_size))
             },
@@ -139,22 +144,20 @@ fn parse_source_operand_set(input: &str) -> ParseResult<SourceOperandSet> {
 }
 
 pub(crate) fn parse_source_instruction(input: &str) -> ParseResult<SourceInstruction> {
-    alt((
-        map(
-            terminated(terminated(parse_operation, space0), line_ending),
-            |operation| SourceInstruction {
-                operation,
-                operands: SourceOperandSet::None,
-            },
-        ),
-        map(
-            separated_pair(parse_operation, space1, parse_source_operand_set),
-            |(operation, operands)| SourceInstruction {
-                operation,
-                operands,
-            },
-        ),
-    ))(input)
+    let (input, operation) = terminated(parse_operation, space0)(input)?;
+
+    let (input, operand_set) = match parse_source_operand_set(input) {
+        Ok((input, operand_set)) => (input, operand_set),
+        Err(_) => (input, SourceOperandSet::None),
+    };
+
+    Ok((
+        input,
+        SourceInstruction {
+            operation,
+            operand_set,
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -295,7 +298,7 @@ mod tests {
                 "",
                 SourceInstruction {
                     operation: Operation::MOV,
-                    operands: SourceOperandSet::DestinationAndSource(
+                    operand_set: SourceOperandSet::DestinationAndSource(
                         SourceOperand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
                         SourceOperand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
                     )

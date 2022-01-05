@@ -1,14 +1,13 @@
-use crate::parser::combinators::parse_number;
 use crate::parser::ParseResult;
 use crate::{parse_identifier, ParseError};
-use mrc_instruction::{
-    AddressingMode, Operand, OperandSize, OperandType, Operation, Segment, SizedRegister,
+use mrc_instruction::{AddressingMode, Operation, Segment, SizedRegister};
+use nom::{
+    branch::alt,
+    bytes::complete::tag,
+    character::complete::space0,
+    combinator::{map_res, recognize},
+    sequence::{delimited, separated_pair},
 };
-use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::multispace0;
-use nom::combinator::{map, map_res, recognize};
-use nom::sequence::{delimited, separated_pair};
 use std::str::FromStr;
 
 pub(crate) fn parse_operation(input: &str) -> ParseResult<Operation> {
@@ -34,7 +33,7 @@ pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> 
         alt((
             recognize(separated_pair(
                 parse_register,
-                delimited(multispace0, tag("+"), multispace0),
+                delimited(space0, tag("+"), space0),
                 parse_register,
             )),
             parse_identifier,
@@ -49,7 +48,7 @@ pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mrc_instruction::Register;
+    use mrc_instruction::{OperandSize, Register};
 
     #[test]
     fn operation() {
@@ -77,10 +76,7 @@ mod tests {
 
     #[test]
     fn addressing_mode() {
-        assert_eq!(
-            parse_addressing_mode("si"),
-            Ok(("", AddressingMode::Si))
-        );
+        assert_eq!(parse_addressing_mode("si"), Ok(("", AddressingMode::Si)));
         assert_eq!(
             parse_addressing_mode("bp+di"),
             Ok(("", AddressingMode::BpDi))

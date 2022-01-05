@@ -1,8 +1,7 @@
-#![allow(unused)]
-
-pub(crate) mod parser;
+mod parser;
 
 use crate::parser::{sources::parse_line, ParseResult};
+use mrc_instruction::Instruction;
 use nom::{character::complete::multispace0, multi::many1, sequence::preceded};
 use parser::{
     combinators::parse_identifier, instructions::parse_register, sources::Line, ParseError,
@@ -12,12 +11,17 @@ fn parse_source(input: &str) -> ParseResult<Vec<Line>> {
     preceded(multispace0, many1(parse_line))(input)
 }
 
+pub fn parse(input: &str) -> Vec<Instruction> {
+    parse_source(input).unwrap();
+    vec![]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::parser::sources::directive::Directive;
     use crate::parser::sources::instruction::{
-        ValueOrLabel, SourceInstruction, SourceOperand, SourceOperandSet,
+        SourceInstruction, SourceOperand, SourceOperandSet, ValueOrLabel,
     };
     use mrc_instruction::{OperandSize, Operation, Register, Segment, SizedRegister};
 
@@ -65,7 +69,7 @@ mod tests {
                     // mov     ax, cs
                     Line::Instruction(SourceInstruction {
                         operation: Operation::MOV,
-                        operands: SourceOperandSet::DestinationAndSource(
+                        operand_set: SourceOperandSet::DestinationAndSource(
                             SourceOperand::Register(SizedRegister(
                                 Register::AlAx,
                                 OperandSize::Word
@@ -76,7 +80,7 @@ mod tests {
                     // mov     ds, ax
                     Line::Instruction(SourceInstruction {
                         operation: Operation::MOV,
-                        operands: SourceOperandSet::DestinationAndSource(
+                        operand_set: SourceOperandSet::DestinationAndSource(
                             SourceOperand::Segment(Segment::DS),
                             SourceOperand::Register(SizedRegister(
                                 Register::AlAx,
@@ -87,14 +91,14 @@ mod tests {
                     // call    add_one
                     Line::Instruction(SourceInstruction {
                         operation: Operation::CALL,
-                        operands: SourceOperandSet::Destination(SourceOperand::Immediate(
+                        operand_set: SourceOperandSet::Destination(SourceOperand::Immediate(
                             ValueOrLabel::Label("add_one".to_string())
                         ))
                     }),
                     // call    add_two
                     Line::Instruction(SourceInstruction {
                         operation: Operation::CALL,
-                        operands: SourceOperandSet::Destination(SourceOperand::Immediate(
+                        operand_set: SourceOperandSet::Destination(SourceOperand::Immediate(
                             ValueOrLabel::Label("add_two".to_string())
                         ))
                     }),
@@ -103,7 +107,7 @@ mod tests {
                     // inc     byte [count]
                     Line::Instruction(SourceInstruction {
                         operation: Operation::INC,
-                        operands: SourceOperandSet::Destination(SourceOperand::Direct(
+                        operand_set: SourceOperandSet::Destination(SourceOperand::Direct(
                             ValueOrLabel::Label("count".to_string()),
                             Some(OperandSize::Byte)
                         )),
@@ -113,14 +117,14 @@ mod tests {
                     // ret
                     Line::Instruction(SourceInstruction {
                         operation: Operation::RET,
-                        operands: SourceOperandSet::None
+                        operand_set: SourceOperandSet::None
                     }),
                     // add_two:
                     Line::Label("add_two".to_string()),
                     // mov     al, [count]
                     Line::Instruction(SourceInstruction {
                         operation: Operation::MOV,
-                        operands: SourceOperandSet::DestinationAndSource(
+                        operand_set: SourceOperandSet::DestinationAndSource(
                             SourceOperand::Register(SizedRegister(
                                 Register::AlAx,
                                 OperandSize::Byte
@@ -131,7 +135,7 @@ mod tests {
                     // add     al, 2
                     Line::Instruction(SourceInstruction {
                         operation: Operation::ADD,
-                        operands: SourceOperandSet::DestinationAndSource(
+                        operand_set: SourceOperandSet::DestinationAndSource(
                             SourceOperand::Register(SizedRegister(
                                 Register::AlAx,
                                 OperandSize::Byte
@@ -142,7 +146,7 @@ mod tests {
                     // mov     [count], al
                     Line::Instruction(SourceInstruction {
                         operation: Operation::MOV,
-                        operands: SourceOperandSet::DestinationAndSource(
+                        operand_set: SourceOperandSet::DestinationAndSource(
                             SourceOperand::Direct(ValueOrLabel::Label("count".to_string()), None),
                             SourceOperand::Register(SizedRegister(
                                 Register::AlAx,
@@ -153,14 +157,14 @@ mod tests {
                     // ret
                     Line::Instruction(SourceInstruction {
                         operation: Operation::RET,
-                        operands: SourceOperandSet::None,
+                        operand_set: SourceOperandSet::None,
                     }),
                     // exit:
                     Line::Label("exit".to_string()),
                     // mov     ax, 0x4C00
                     Line::Instruction(SourceInstruction {
                         operation: Operation::MOV,
-                        operands: SourceOperandSet::DestinationAndSource(
+                        operand_set: SourceOperandSet::DestinationAndSource(
                             SourceOperand::Register(SizedRegister(
                                 Register::AlAx,
                                 OperandSize::Word
@@ -171,7 +175,7 @@ mod tests {
                     // int     0x21
                     Line::Instruction(SourceInstruction {
                         operation: Operation::INT,
-                        operands: SourceOperandSet::Destination(SourceOperand::Immediate(
+                        operand_set: SourceOperandSet::Destination(SourceOperand::Immediate(
                             ValueOrLabel::Value(0x21)
                         ),),
                     }),
