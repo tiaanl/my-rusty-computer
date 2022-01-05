@@ -1,11 +1,12 @@
+use crate::parser::combinators::trim;
 use crate::parser::ParseResult;
 use crate::{parse_identifier, ParseError};
 use mrc_instruction::{AddressingMode, Operation, Segment, SizedRegister};
 use nom::{
     branch::alt,
-    character::complete::{char, space0},
+    character::complete::char,
     combinator::{map_res, recognize},
-    sequence::{delimited, separated_pair},
+    sequence::separated_pair,
 };
 use std::str::FromStr;
 
@@ -32,7 +33,7 @@ pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> 
         alt((
             recognize(separated_pair(
                 parse_register,
-                delimited(space0, char('+'), space0),
+                trim(char('+')),
                 parse_register,
             )),
             parse_identifier,

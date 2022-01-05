@@ -1,3 +1,4 @@
+use crate::parser::combinators::trim;
 use crate::{
     parse_identifier, parse_register,
     parser::{
@@ -66,11 +67,7 @@ fn parse_source_direct_operand(input: &str) -> ParseResult<SourceOperand> {
         separated_pair(
             opt(parse_operand_size),
             space0,
-            delimited(
-                char('['),
-                delimited(space0, parse_value_or_label, space0),
-                char(']'),
-            ),
+            delimited(char('['), trim(parse_value_or_label), char(']')),
         ),
         |(operand_size, value_or_label)| SourceOperand::Direct(value_or_label, operand_size),
     ),))(input)
@@ -78,11 +75,7 @@ fn parse_source_direct_operand(input: &str) -> ParseResult<SourceOperand> {
 
 fn parse_source_indirect_operand(input: &str) -> ParseResult<SourceOperand> {
     fn inner(input: &str) -> ParseResult<AddressingMode> {
-        delimited(
-            char('['),
-            delimited(space0, parse_addressing_mode, space0),
-            char(']'),
-        )(input)
+        delimited(char('['), trim(parse_addressing_mode), char(']'))(input)
     }
 
     alt((
@@ -124,11 +117,7 @@ fn parse_source_operand_set(input: &str) -> ParseResult<SourceOperandSet> {
     alt((
         // DestinationAndSource
         map(
-            separated_pair(
-                parse_source_operand,
-                delimited(space0, char(','), space0),
-                parse_source_operand,
-            ),
+            separated_pair(parse_source_operand, trim(char(',')), parse_source_operand),
             |(destination, source)| SourceOperandSet::DestinationAndSource(destination, source),
         ),
         // Destination

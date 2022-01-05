@@ -1,4 +1,6 @@
 use crate::parser::{ParseError, ParseResult};
+use nom::character::complete::space0;
+use nom::sequence::delimited;
 use nom::{
     branch::alt,
     bytes::complete::tag_no_case,
@@ -6,7 +8,19 @@ use nom::{
     combinator::{map_res, recognize},
     multi::{many0, many1},
     sequence::preceded,
+    IResult,
 };
+
+pub(crate) fn trim<
+    'i,
+    I: Fn(&'i str) -> IResult<&'i str, O, E>,
+    O,
+    E: nom::error::ParseError<&'i str>,
+>(
+    inner: I,
+) -> impl FnMut(&'i str) -> IResult<&'i str, O, E> {
+    delimited(space0, inner, space0)
+}
 
 fn parse_number_with_radix(
     input: &str,
