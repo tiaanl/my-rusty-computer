@@ -1,17 +1,12 @@
-use std::fmt::{Display, Formatter};
+mod executor;
 
+pub use crate::cpu::executor::{execute, ExecuteResult};
+
+use crate::{error::Result, segment_and_offset, Address, Bus, Port};
 use bitflags::bitflags;
-
 use mrc_decoder::decode_instruction;
 use mrc_instruction::{Register, Segment};
-
-use crate::{segment_and_offset, Address};
-use crate::Bus;
-pub use crate::cpu::executor::{execute, ExecuteResult};
-use crate::error::Result;
-use crate::Port;
-
-mod executor;
+use std::fmt::{Display, Formatter};
 
 bitflags! {
     pub struct Flags : u16 {
@@ -345,8 +340,8 @@ fn _print_bus_bytes<D: Bus<Address>, I: Bus<Port>>(cpu: &CPU<D, I>) {
             Ok(byte) => byte,
             Err(err) => {
                 log::error!("Could not read from bus: {}", err);
-                break
-            },
+                break;
+            }
         };
 
         print!("{:02X} ", byte);

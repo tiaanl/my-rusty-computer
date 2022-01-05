@@ -1,5 +1,5 @@
-use crate::{Address, Bus};
 use crate::error::{Error, Result};
+use crate::{Address, Bus};
 
 pub struct ReadOnlyMemory {
     data: Vec<u8>,

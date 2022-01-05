@@ -1,4 +1,4 @@
-use mrc_emulator::{Bus, error::Result, Port};
+use mrc_emulator::{error::Result, Bus, Port};
 
 /// Based on Intel 8259A programmable interrupt controller.
 #[derive(Default)]
