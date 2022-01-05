@@ -1,3 +1,4 @@
+mod lexer;
 mod parser;
 
 use crate::parser::{sources::parse_line, ParseResult};
