@@ -1,6 +1,7 @@
-use crate::parser::combinators::trim;
-use crate::parser::ParseResult;
-use crate::{parse_identifier, ParseError};
+use crate::{
+    parse_identifier,
+    parser::{combinators::trim, ParseResult},
+};
 use mrc_instruction::{AddressingMode, Operation, Segment, SizedRegister};
 use nom::{
     branch::alt,
@@ -11,21 +12,15 @@ use nom::{
 use std::str::FromStr;
 
 pub(crate) fn parse_operation(input: &str) -> ParseResult<Operation> {
-    map_res(parse_identifier, |res| {
-        Operation::from_str(res).map_err(|_| ParseError::InvalidOperation)
-    })(input)
+    map_res(parse_identifier, |res| Operation::from_str(res))(input)
 }
 
 pub(crate) fn parse_register(input: &str) -> ParseResult<SizedRegister> {
-    map_res(parse_identifier, |res| {
-        SizedRegister::from_str(res).map_err(|_| ParseError::InvalidRegister)
-    })(input)
+    map_res(parse_identifier, |res| SizedRegister::from_str(res))(input)
 }
 
 pub(crate) fn parse_segment(input: &str) -> ParseResult<Segment> {
-    map_res(parse_identifier, |res| {
-        Segment::from_str(res).map_err(|_| ParseError::InvalidSegment)
-    })(input)
+    map_res(parse_identifier, |res| Segment::from_str(res))(input)
 }
 
 pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> {
@@ -38,10 +33,7 @@ pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> 
             )),
             parse_identifier,
         )),
-        |res| match AddressingMode::from_str(res) {
-            Ok(addressing_mode) => Ok(addressing_mode),
-            Err(_) => Err(ParseError::InvalidAddressingMode),
-        },
+        |res| AddressingMode::from_str(res),
     )(input)
 }
 

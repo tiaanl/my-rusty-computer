@@ -1,4 +1,4 @@
-use crate::parser::{ParseError, ParseResult};
+use crate::parser::ParseResult;
 use nom::character::complete::space0;
 use nom::sequence::delimited;
 use nom::{
@@ -11,14 +11,11 @@ use nom::{
     IResult,
 };
 
-pub(crate) fn trim<
-    'i,
+pub(crate) fn trim<'i, I, O, E>(inner: I) -> impl FnMut(&'i str) -> IResult<&'i str, O, E>
+where
     I: Fn(&'i str) -> IResult<&'i str, O, E>,
-    O,
     E: nom::error::ParseError<&'i str>,
->(
-    inner: I,
-) -> impl FnMut(&'i str) -> IResult<&'i str, O, E> {
+{
     delimited(space0, inner, space0)
 }
 
@@ -29,13 +26,9 @@ fn parse_number_with_radix(
 ) -> ParseResult<i32> {
     alt((
         map_res(preceded(char('-'), digits), |res| {
-            i32::from_str_radix(res, radix)
-                .map(|n| -n)
-                .map_err(|_| ParseError::InvalidNumberFormat)
+            i32::from_str_radix(res, radix).map(|n| -n)
         }),
-        map_res(digits, |res| {
-            i32::from_str_radix(res, radix).map_err(|_| ParseError::InvalidNumberFormat)
-        }),
+        map_res(digits, |res| i32::from_str_radix(res, radix)),
     ))(input)
 }
 

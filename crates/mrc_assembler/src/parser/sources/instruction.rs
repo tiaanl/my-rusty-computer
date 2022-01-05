@@ -1,11 +1,10 @@
-use crate::parser::combinators::trim;
 use crate::{
     parse_identifier, parse_register,
     parser::{
-        combinators::parse_number,
+        combinators::{parse_number, trim},
         instructions::{parse_addressing_mode, parse_operation, parse_segment},
     },
-    ParseError, ParseResult,
+    ParseResult,
 };
 use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
 use nom::combinator::opt;
@@ -49,7 +48,7 @@ fn parse_operand_size(input: &str) -> ParseResult<OperandSize> {
     map_res(parse_identifier, |res| match res.to_lowercase().as_str() {
         "byte" => Ok(OperandSize::Byte),
         "word" => Ok(OperandSize::Word),
-        _ => Err(ParseError::InvalidOperandSize),
+        _ => Err(()),
     })(input)
 }
 

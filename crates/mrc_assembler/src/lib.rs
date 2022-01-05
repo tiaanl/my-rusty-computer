@@ -4,9 +4,7 @@ mod parser;
 use crate::parser::{sources::parse_line, ParseResult};
 use mrc_instruction::Instruction;
 use nom::{character::complete::multispace0, multi::many1, sequence::preceded};
-use parser::{
-    combinators::parse_identifier, instructions::parse_register, sources::Line, ParseError,
-};
+use parser::{combinators::parse_identifier, instructions::parse_register, sources::Line};
 
 fn parse_source(input: &str) -> ParseResult<Vec<Line>> {
     preceded(multispace0, many1(parse_line))(input)
