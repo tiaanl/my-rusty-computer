@@ -9,8 +9,7 @@ use crate::{
 use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    character::complete::space0,
+    character::complete::{char, space0},
     combinator::{map, map_res},
     sequence::{delimited, separated_pair, terminated},
 };
@@ -64,9 +63,9 @@ fn parse_value_or_label(input: &str) -> ParseResult<ValueOrLabel> {
 fn parse_source_direct_operand(input: &str) -> ParseResult<SourceOperand> {
     fn inner(input: &str) -> ParseResult<ValueOrLabel> {
         delimited(
-            tag("["),
+            char('['),
             delimited(space0, parse_value_or_label, space0),
-            tag("]"),
+            char(']'),
         )(input)
     }
 
@@ -86,9 +85,9 @@ fn parse_source_direct_operand(input: &str) -> ParseResult<SourceOperand> {
 fn parse_source_indirect_operand(input: &str) -> ParseResult<SourceOperand> {
     fn inner(input: &str) -> ParseResult<AddressingMode> {
         delimited(
-            tag("["),
+            char('['),
             delimited(space0, parse_addressing_mode, space0),
-            tag("]"),
+            char(']'),
         )(input)
     }
 
@@ -133,7 +132,7 @@ fn parse_source_operand_set(input: &str) -> ParseResult<SourceOperandSet> {
         map(
             separated_pair(
                 parse_source_operand,
-                delimited(space0, tag(","), space0),
+                delimited(space0, char(','), space0),
                 parse_source_operand,
             ),
             |(destination, source)| SourceOperandSet::DestinationAndSource(destination, source),

@@ -1,11 +1,12 @@
 use crate::parser::{ParseError, ParseResult};
-use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::one_of;
-use nom::combinator::map_res;
-use nom::combinator::recognize;
-use nom::multi::{many0, many1};
-use nom::sequence::preceded;
+use nom::{
+    branch::alt,
+    bytes::complete::tag_no_case,
+    character::complete::{char, one_of},
+    combinator::{map_res, recognize},
+    multi::{many0, many1},
+    sequence::preceded,
+};
 
 fn parse_number_with_radix(
     input: &str,
@@ -13,7 +14,7 @@ fn parse_number_with_radix(
     radix: u32,
 ) -> ParseResult<i32> {
     alt((
-        map_res(preceded(tag("-"), digits), |res| {
+        map_res(preceded(char('-'), digits), |res| {
             i32::from_str_radix(res, radix)
                 .map(|n| -n)
                 .map_err(|_| ParseError::InvalidNumberFormat)
@@ -26,7 +27,7 @@ fn parse_number_with_radix(
 
 fn parse_binary_number(input: &str) -> ParseResult<i32> {
     fn digits(input: &str) -> ParseResult<&str> {
-        preceded(alt((tag("0b"), tag("0B"))), recognize(many1(one_of("01"))))(input)
+        preceded(tag_no_case("0b"), recognize(many1(one_of("01"))))(input)
     }
 
     parse_number_with_radix(input, digits, 2)
@@ -43,7 +44,7 @@ fn parse_decimal_number(input: &str) -> ParseResult<i32> {
 fn parse_hexadecimal_number(input: &str) -> ParseResult<i32> {
     fn digits(input: &str) -> ParseResult<&str> {
         preceded(
-            alt((tag("0x"), tag("0X"))),
+            tag_no_case("0x"),
             recognize(many1(one_of("0123456789abcdefABCDEF"))),
         )(input)
     }

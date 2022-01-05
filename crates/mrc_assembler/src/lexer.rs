@@ -1,10 +1,11 @@
-use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::{alpha1, alphanumeric0, line_ending, one_of, space0};
-use nom::combinator::{map, map_res, recognize};
-use nom::multi::many1;
-use nom::sequence::{pair, preceded, terminated};
-use nom::IResult;
+use nom::{
+    branch::alt,
+    character::complete::{alpha1, alphanumeric0, char, line_ending, one_of, space0},
+    combinator::{map, map_res, recognize},
+    multi::many1,
+    sequence::{pair, preceded, terminated},
+    IResult,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 enum Token<'a> {
@@ -25,13 +26,13 @@ fn number_with_radix(
     radix: u32,
 ) -> IResult<&str, i32> {
     alt((
-        map_res(preceded(tag("-"), digits), |res| {
+        map_res(preceded(char('-'), digits), |res| {
             i32::from_str_radix(res, radix)
                 .map(|n| -n)
                 .map_err(|_| nom::Err::Error(()))
         }),
         map_res(digits, |res| {
-            i32::from_str_radix(res, radix).map_err(|err| nom::Err::Error(err))
+            i32::from_str_radix(res, radix).map_err(nom::Err::Error)
         }),
     ))(input)
 }

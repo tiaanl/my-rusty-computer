@@ -10,18 +10,20 @@ use crate::{
     ParseResult,
 };
 use nom::{
-    branch::alt, bytes::complete::tag, bytes::complete::take_till,
-    character::complete::multispace0, character::complete::space0, combinator::map,
-    combinator::recognize, sequence::preceded, sequence::terminated,
+    branch::alt,
+    bytes::complete::take_till,
+    character::{complete::char, complete::multispace0, complete::space0},
+    combinator::{map, recognize},
+    sequence::{preceded, terminated},
 };
 use std::fmt::Formatter;
 
 fn parse_label(input: &str) -> ParseResult<&str> {
-    terminated(terminated(parse_identifier, space0), tag(":"))(input)
+    terminated(terminated(parse_identifier, space0), char(':'))(input)
 }
 
 fn parse_comment(input: &str) -> ParseResult<&str> {
-    recognize(preceded(tag(";"), take_till(|c| c == '\n')))(input)
+    recognize(preceded(char(';'), take_till(|c| c == '\n')))(input)
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -3,8 +3,7 @@ use crate::{parse_identifier, ParseError};
 use mrc_instruction::{AddressingMode, Operation, Segment, SizedRegister};
 use nom::{
     branch::alt,
-    bytes::complete::tag,
-    character::complete::space0,
+    character::complete::{char, space0},
     combinator::{map_res, recognize},
     sequence::{delimited, separated_pair},
 };
@@ -33,7 +32,7 @@ pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> 
         alt((
             recognize(separated_pair(
                 parse_register,
-                delimited(space0, tag("+"), space0),
+                delimited(space0, char('+'), space0),
                 parse_register,
             )),
             parse_identifier,
