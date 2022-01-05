@@ -7,6 +7,7 @@ use crate::{
     ParseError, ParseResult,
 };
 use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
+use nom::combinator::opt;
 use nom::{
     branch::alt,
     character::complete::{char, space0},
@@ -61,25 +62,18 @@ fn parse_value_or_label(input: &str) -> ParseResult<ValueOrLabel> {
 }
 
 fn parse_source_direct_operand(input: &str) -> ParseResult<SourceOperand> {
-    fn inner(input: &str) -> ParseResult<ValueOrLabel> {
-        delimited(
-            char('['),
-            delimited(space0, parse_value_or_label, space0),
-            char(']'),
-        )(input)
-    }
-
-    alt((
-        map(
-            separated_pair(parse_operand_size, space0, inner),
-            |(operand_size, value_or_label)| {
-                SourceOperand::Direct(value_or_label, Some(operand_size))
-            },
+    alt((map(
+        separated_pair(
+            opt(parse_operand_size),
+            space0,
+            delimited(
+                char('['),
+                delimited(space0, parse_value_or_label, space0),
+                char(']'),
+            ),
         ),
-        map(inner, |value_or_label| {
-            SourceOperand::Direct(value_or_label, None)
-        }),
-    ))(input)
+        |(operand_size, value_or_label)| SourceOperand::Direct(value_or_label, operand_size),
+    ),))(input)
 }
 
 fn parse_source_indirect_operand(input: &str) -> ParseResult<SourceOperand> {

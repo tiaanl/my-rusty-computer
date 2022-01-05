@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use nom::{
     branch::alt,
     character::complete::{alpha1, alphanumeric0, char, line_ending, one_of, space0},
