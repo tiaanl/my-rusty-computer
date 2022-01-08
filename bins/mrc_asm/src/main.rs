@@ -1,8 +1,8 @@
-use mrc_assembler::lexer::{tokenize, TokenKind};
 use std::path::Path;
 use structopt::StructOpt;
 
-fn parse_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+fn parse_file<P: AsRef<Path>>(_path: P) -> std::io::Result<()> {
+    /*
     let data = std::fs::read_to_string(path)?;
 
     let tokens = tokenize(data.as_str());
@@ -18,6 +18,7 @@ fn parse_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
         }
     }
     println!("{} tokens", count);
+    */
 
     Ok(())
 }

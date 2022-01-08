@@ -1,11 +1,12 @@
 pub(crate) mod directive;
 pub(crate) mod instruction;
 
+use crate::source::SourceInstruction;
 use crate::{
     parse_identifier,
     parser::sources::{
         directive::{parse_directive, Directive},
-        instruction::{parse_source_instruction, SourceInstruction},
+        instruction::parse_source_instruction,
     },
     ParseResult,
 };

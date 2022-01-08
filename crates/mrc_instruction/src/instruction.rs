@@ -633,17 +633,15 @@ pub enum Repeat {
 /// );
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Instruction<T = ()> {
+pub struct Instruction {
     pub operation: Operation,
     pub operands: OperandSet,
     pub repeat: Option<Repeat>,
     pub lock: bool,
     pub address: Option<Address>,
-
-    pub extra: T,
 }
 
-impl<T: Default> Instruction<T> {
+impl Instruction {
     /// Create a new instruction with the given [Operation] and [OperandSet].
     pub fn new(operation: Operation, operands: OperandSet) -> Self {
         Self {
@@ -652,8 +650,6 @@ impl<T: Default> Instruction<T> {
             repeat: None,
             lock: false,
             address: None,
-
-            extra: T::default(),
         }
     }
 
@@ -666,8 +662,6 @@ impl<T: Default> Instruction<T> {
             repeat: Some(repeat),
             lock: false,
             address: None,
-
-            extra: T::default(),
         }
     }
 
