@@ -1,6 +1,8 @@
+pub(crate) mod input;
 mod lexer;
 mod parser;
 pub(crate) mod source;
+mod tokenizer;
 
 use crate::parser::{sources::parse_line, ParseResult};
 use mrc_instruction::Instruction;

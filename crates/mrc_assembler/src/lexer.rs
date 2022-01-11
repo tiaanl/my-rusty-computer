@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::input::{Input, Location};
 use nom::{
     branch::alt,
     bytes::complete::tag_no_case,
@@ -9,51 +10,6 @@ use nom::{
     sequence::{pair, preceded},
     IResult,
 };
-use std::fmt::Formatter;
-
-#[derive(Clone, Copy)]
-struct Location {
-    line: usize,
-    col: usize,
-}
-
-impl Location {
-    fn new(line: usize, col: usize) -> Self {
-        Self { line, col }
-    }
-}
-
-impl Default for Location {
-    fn default() -> Self {
-        Self { line: 1, col: 1 }
-    }
-}
-
-struct Input<'s> {
-    location: Location,
-    slice: &'s str,
-}
-
-impl<'s> Input<'s> {
-    fn new(slice: &'s str) -> Self {
-        Self {
-            location: Location::default(),
-            slice,
-        }
-    }
-}
-
-impl<'s> std::fmt::Display for Input<'s> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "({}:{}) {}",
-            self.location.line,
-            self.location.col,
-            &self.slice[..10],
-        )
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum PunctuationKind {
@@ -66,20 +22,34 @@ pub(crate) enum PunctuationKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum TokenKind<'a> {
+pub(crate) enum TokenKind<'t> {
     NewLine,
-    Identifier(&'a str),
+    Identifier(&'t str),
     Number(i32),
     Punctuation(PunctuationKind),
 }
 
-pub(crate) struct Token<'a> {
+#[derive(Debug, PartialEq)]
+pub(crate) struct Token<'t> {
     location: Location,
-    token: TokenKind<'a>,
+    token: TokenKind<'t>,
 }
 
-fn new_line(input: &str) -> IResult<&str, TokenKind> {
-    map(line_ending, |_| TokenKind::NewLine)(input)
+impl<'t> Token<'t> {
+    pub(crate) fn new(token: TokenKind<'t>) -> Self {
+        Self {
+            location: Location::default(),
+            token,
+        }
+    }
+
+    pub(crate) fn with_location(token: TokenKind<'t>, location: Location) -> Self {
+        Self { location, token }
+    }
+}
+
+fn new_line<'t>(input: Input<'t>) -> IResult<Input<'t>, Token<'t>> {
+    map(line_ending, |_| Token::new(TokenKind::NewLine))(input)
 }
 
 fn punctuation(input: &str) -> IResult<&str, TokenKind> {
@@ -96,9 +66,9 @@ fn punctuation(input: &str) -> IResult<&str, TokenKind> {
     ))(input)
 }
 
-fn identifier(input: &str) -> IResult<&str, TokenKind> {
-    map(recognize(pair(alpha1, alphanumeric0)), |res| {
-        TokenKind::Identifier(res)
+fn identifier<'t>(input: Input<'t>) -> IResult<Input, Token<'t>> {
+    map(recognize(pair(alpha1, alphanumeric0)), |res: Input| {
+        Token::new(TokenKind::Identifier(res.slice))
     })(input)
 }
 
@@ -161,7 +131,7 @@ enum ParseError {
 fn tokenize(input: &str) -> IResult<&str, Vec<TokenKind>> {
     let input = Input::new(input);
 
-    identifier(input);
+    let _r = identifier(input).unwrap();
 
     todo!()
 }
@@ -172,9 +142,23 @@ mod tests {
 
     #[test]
     fn parse_new_line() {
-        assert_eq!(new_line("\n"), Ok(("", TokenKind::NewLine))); // Unix-style
-        assert_eq!(new_line("\r\n"), Ok(("", TokenKind::NewLine))); // Windows-style
-        assert_eq!(new_line("\n\r"), Ok(("\r", TokenKind::NewLine))); // \r is invalid
+        // Unix-style
+        assert_eq!(
+            new_line(Input::new("\n")),
+            Ok((Input::new(""), Token::new(TokenKind::NewLine)))
+        );
+
+        // Windows-style
+        assert_eq!(
+            new_line(Input::new("\r\n")),
+            Ok((Input::new(""), Token::new(TokenKind::NewLine)))
+        );
+
+        // \r is invalid
+        assert_eq!(
+            new_line(Input::new("\n\r")),
+            Ok((Input::new("\r"), Token::new(TokenKind::NewLine)))
+        );
     }
 
     #[test]
@@ -198,9 +182,15 @@ mod tests {
 
     #[test]
     fn parse_identifier() {
-        assert_eq!(identifier("mov"), Ok(("", TokenKind::Identifier("mov"))));
-        assert_eq!(identifier("pow2"), Ok(("", TokenKind::Identifier("pow2"))));
-        assert!(identifier("2invalid").is_err());
+        assert_eq!(
+            identifier(Input::new("mov")),
+            Ok((Input::new(""), Token::new(TokenKind::Identifier("mov"))))
+        );
+        assert_eq!(
+            identifier(Input::new("pow2")),
+            Ok((Input::new(""), Token::new(TokenKind::Identifier("pow2"))))
+        );
+        assert!(identifier(Input::new("2invalid")).is_err());
     }
 
     #[test]
@@ -212,44 +202,44 @@ mod tests {
         assert_eq!(number("0b10"), Ok(("", TokenKind::Number(2))));
     }
 
-    #[test]
-    fn parse_strcmp() {
-        let source = String::from_utf8_lossy(include_bytes!("../../../samples/strcmp.asm"));
-        let (rest, tokens) = tokenize(source.as_ref()).unwrap();
-        println!("{:?}", rest);
-        println!("{:?}", tokens);
-    }
-
-    #[test]
-    fn tokenizing() {
-        assert_eq!(
-            tokenize(
-                r"push cs
-                pop ds
-                mov byte [bx:si + 8], cl"
-            ),
-            Ok((
-                "",
-                vec![
-                    TokenKind::Identifier("push"),
-                    TokenKind::Identifier("cs"),
-                    TokenKind::NewLine,
-                    TokenKind::Identifier("pop"),
-                    TokenKind::Identifier("ds"),
-                    TokenKind::NewLine,
-                    TokenKind::Identifier("mov"),
-                    TokenKind::Identifier("byte"),
-                    TokenKind::Punctuation(PunctuationKind::LeftBracket),
-                    TokenKind::Identifier("bx"),
-                    TokenKind::Punctuation(PunctuationKind::Colon),
-                    TokenKind::Identifier("si"),
-                    TokenKind::Punctuation(PunctuationKind::Plus),
-                    TokenKind::Number(8),
-                    TokenKind::Punctuation(PunctuationKind::RightBracket),
-                    TokenKind::Punctuation(PunctuationKind::Comma),
-                    TokenKind::Identifier("cl"),
-                ]
-            ))
-        );
-    }
+    // #[test]
+    // fn parse_strcmp() {
+    //     let source = String::from_utf8_lossy(include_bytes!("../../../samples/strcmp.asm"));
+    //     let (rest, tokens) = tokenize(source.as_ref()).unwrap();
+    //     println!("{:?}", rest);
+    //     println!("{:?}", tokens);
+    // }
+    //
+    // #[test]
+    // fn tokenizing() {
+    //     assert_eq!(
+    //         tokenize(
+    //             r"push cs
+    //             pop ds
+    //             mov byte [bx:si + 8], cl"
+    //         ),
+    //         Ok((
+    //             "",
+    //             vec![
+    //                 TokenKind::Identifier("push"),
+    //                 TokenKind::Identifier("cs"),
+    //                 TokenKind::NewLine,
+    //                 TokenKind::Identifier("pop"),
+    //                 TokenKind::Identifier("ds"),
+    //                 TokenKind::NewLine,
+    //                 TokenKind::Identifier("mov"),
+    //                 TokenKind::Identifier("byte"),
+    //                 TokenKind::Punctuation(PunctuationKind::LeftBracket),
+    //                 TokenKind::Identifier("bx"),
+    //                 TokenKind::Punctuation(PunctuationKind::Colon),
+    //                 TokenKind::Identifier("si"),
+    //                 TokenKind::Punctuation(PunctuationKind::Plus),
+    //                 TokenKind::Number(8),
+    //                 TokenKind::Punctuation(PunctuationKind::RightBracket),
+    //                 TokenKind::Punctuation(PunctuationKind::Comma),
+    //                 TokenKind::Identifier("cl"),
+    //             ]
+    //         ))
+    //     );
+    // }
 }
