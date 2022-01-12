@@ -1,8 +1,8 @@
-use crate::{
-    parse_identifier,
-    parser::{combinators::trim, ParseResult},
-};
+use crate::parser::Span;
+use crate::{parse_identifier, parser::ParseResult};
 use mrc_instruction::{AddressingMode, Operation, Segment, SizedRegister};
+use nom::character::complete::space0;
+use nom::sequence::delimited;
 use nom::{
     branch::alt,
     character::complete::char,
@@ -11,29 +11,33 @@ use nom::{
 };
 use std::str::FromStr;
 
-pub(crate) fn parse_operation(input: &str) -> ParseResult<Operation> {
-    map_res(parse_identifier, |res| Operation::from_str(res))(input)
+pub(crate) fn parse_operation(input: Span) -> ParseResult<Operation> {
+    map_res(parse_identifier, |span| {
+        Operation::from_str(span.fragment())
+    })(input)
 }
 
-pub(crate) fn parse_register(input: &str) -> ParseResult<SizedRegister> {
-    map_res(parse_identifier, |res| SizedRegister::from_str(res))(input)
+pub(crate) fn parse_register(input: Span) -> ParseResult<SizedRegister> {
+    map_res(parse_identifier, |span| {
+        SizedRegister::from_str(span.fragment())
+    })(input)
 }
 
-pub(crate) fn parse_segment(input: &str) -> ParseResult<Segment> {
-    map_res(parse_identifier, |res| Segment::from_str(res))(input)
+pub(crate) fn parse_segment(input: Span) -> ParseResult<Segment> {
+    map_res(parse_identifier, |span| Segment::from_str(span.fragment()))(input)
 }
 
-pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> {
+pub(crate) fn parse_addressing_mode(input: Span) -> ParseResult<AddressingMode> {
     map_res(
         alt((
             recognize(separated_pair(
                 parse_register,
-                trim(char('+')),
+                delimited(space0, char('+'), space0),
                 parse_register,
             )),
             parse_identifier,
         )),
-        |res| AddressingMode::from_str(res),
+        |span| AddressingMode::from_str(span.fragment()),
     )(input)
 }
 
@@ -41,41 +45,57 @@ pub(crate) fn parse_addressing_mode(input: &str) -> ParseResult<AddressingMode> 
 mod tests {
     use super::*;
     use mrc_instruction::{OperandSize, Register};
+    use crate::test_span;
 
     #[test]
     fn operation() {
-        assert_eq!(parse_operation("mov"), Ok(("", Operation::MOV)));
-        assert_eq!(parse_operation("Add"), Ok(("", Operation::ADD)));
+        test_span!(parse_operation, "mov", 1, 1, "", Operation::MOV);
+        test_span!(parse_operation, "Add", 1, 1, "", Operation::ADD);
     }
 
     #[test]
     fn register() {
         assert_eq!(
-            parse_register("ax"),
-            Ok(("", SizedRegister(Register::AlAx, OperandSize::Word)))
+            parse_register(Span::new("ax")),
+            Ok((
+                Span::new(""),
+                SizedRegister(Register::AlAx, OperandSize::Word)
+            ))
         );
         assert_eq!(
-            parse_register("Bl"),
-            Ok(("", SizedRegister(Register::BlBx, OperandSize::Byte)))
+            parse_register(Span::new("Bl")),
+            Ok((
+                Span::new(""),
+                SizedRegister(Register::BlBx, OperandSize::Byte)
+            ))
         );
     }
 
     #[test]
     fn segment() {
-        assert_eq!(parse_segment("cs"), Ok(("", Segment::CS)));
-        assert_eq!(parse_segment("Ds"), Ok(("", Segment::DS)));
+        assert_eq!(
+            parse_segment(Span::new("cs")),
+            Ok((Span::new(""), Segment::CS))
+        );
+        assert_eq!(
+            parse_segment(Span::new("Ds")),
+            Ok((Span::new(""), Segment::DS))
+        );
     }
 
     #[test]
     fn addressing_mode() {
-        assert_eq!(parse_addressing_mode("si"), Ok(("", AddressingMode::Si)));
         assert_eq!(
-            parse_addressing_mode("bp+di"),
-            Ok(("", AddressingMode::BpDi))
+            parse_addressing_mode(Span::new("si")),
+            Ok((Span::new(""), AddressingMode::Si))
         );
         assert_eq!(
-            parse_addressing_mode("bx + si"),
-            Ok(("", AddressingMode::BxSi))
+            parse_addressing_mode(Span::new("bp+di")),
+            Ok((Span::new(""), AddressingMode::BpDi))
+        );
+        assert_eq!(
+            parse_addressing_mode(Span::new("bx + si")),
+            Ok((Span::new(""), AddressingMode::BxSi))
         );
     }
 }

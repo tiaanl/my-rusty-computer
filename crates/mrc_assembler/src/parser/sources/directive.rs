@@ -1,8 +1,13 @@
 use crate::{
     parse_identifier,
-    parser::{combinators::parse_number, ParseResult},
+    parser::{tokens::parse_number, ParseResult, Span},
 };
-use nom::{character::complete::space1, combinator::map_res, sequence::separated_pair};
+use nom::combinator::cut;
+use nom::error::ParseError;
+use nom::{
+    character::complete::{multispace0, space1},
+    sequence::terminated,
+};
 use std::fmt::Formatter;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -20,24 +25,48 @@ impl std::fmt::Display for Directive {
     }
 }
 
-pub(crate) fn parse_directive(input: &str) -> ParseResult<Directive> {
-    map_res(
-        separated_pair(parse_identifier, space1, parse_number),
-        |(s, v)| match String::from(s).to_lowercase().as_str() {
-            "bits" => Ok(Directive::Bits(v as u16)),
-            "org" => Ok(Directive::Org(v as u32)),
-            _ => Err(()),
-        },
-    )(input)
+pub(crate) fn parse_directive(input: Span) -> ParseResult<Directive> {
+    let (input, identifier) = terminated(parse_identifier, space1)(input)?;
+
+    let (input, value) = cut(terminated(parse_number, multispace0))(input)?;
+
+    let directive = match *identifier.fragment() {
+        "bits" => Directive::Bits(value as u16),
+        "org" => Directive::Org(value as u32),
+        _ => {
+            return Err(nom::Err::Error(nom::error::Error::from_error_kind(
+                input,
+                nom::error::ErrorKind::Eof,
+            )))
+        }
+    };
+
+    Ok((input, directive))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::span_at;
 
     #[test]
     fn directive() {
-        assert_eq!(parse_directive("bits 10"), Ok(("", Directive::Bits(10))));
-        assert_eq!(parse_directive("org 0x0100"), Ok(("", Directive::Org(256))));
+        assert_eq!(
+            parse_directive(Span::new("bits 10")),
+            Ok((span_at!(7, 1, ""), Directive::Bits(10)))
+        );
+        assert_eq!(
+            parse_directive(Span::new("org 0x0100")),
+            Ok((span_at!(10, 1, ""), Directive::Org(256)))
+        );
+
+        // Invalid argument to directive should be a failure.
+        assert_eq!(
+            parse_directive(Span::new("bits abc")),
+            Err(nom::Err::Failure(nom::error::Error::from_error_kind(
+                span_at!(5, 1, "abc"),
+                nom::error::ErrorKind::OneOf
+            )))
+        );
     }
 }

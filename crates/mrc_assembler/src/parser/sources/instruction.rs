@@ -1,10 +1,11 @@
+use crate::parser::Span;
 use crate::{
-    source::{SourceInstruction, SourceOperand, SourceOperandSet, SourceValueOrLabel},
     parse_identifier, parse_register,
     parser::{
-        combinators::{parse_number, trim},
+        tokens::parse_number,
         instructions::{parse_addressing_mode, parse_operation, parse_segment},
     },
+    source::{SourceInstruction, SourceOperand, SourceOperandSet, SourceValueOrLabel},
     ParseResult,
 };
 use mrc_instruction::{AddressingMode, OperandSize};
@@ -15,7 +16,7 @@ use nom::{
     sequence::{delimited, separated_pair, terminated},
 };
 
-fn parse_operand_size(input: &str) -> ParseResult<OperandSize> {
+fn parse_operand_size(input: Span) -> ParseResult<OperandSize> {
     map_res(parse_identifier, |res| match res.to_lowercase().as_str() {
         "byte" => Ok(OperandSize::Byte),
         "word" => Ok(OperandSize::Word),
@@ -23,29 +24,35 @@ fn parse_operand_size(input: &str) -> ParseResult<OperandSize> {
     })(input)
 }
 
-fn parse_value_or_label(input: &str) -> ParseResult<SourceValueOrLabel> {
+fn parse_value_or_label(input: Span) -> ParseResult<SourceValueOrLabel> {
     alt((
         map(parse_number, SourceValueOrLabel::Value),
-        map(parse_identifier, |label| {
-            SourceValueOrLabel::Label(label.to_string())
-        }),
+        map(parse_identifier, |span| SourceValueOrLabel::Label(span.fragment().to_string())),
     ))(input)
 }
 
-fn parse_source_direct_operand(input: &str) -> ParseResult<SourceOperand> {
+fn parse_source_direct_operand(input: Span) -> ParseResult<SourceOperand> {
     alt((map(
         separated_pair(
             opt(parse_operand_size),
             space0,
-            delimited(char('['), trim(parse_value_or_label), char(']')),
+            delimited(
+                char('['),
+                delimited(space0, parse_value_or_label, space0),
+                char(']'),
+            ),
         ),
         |(operand_size, value_or_label)| SourceOperand::Direct(value_or_label, operand_size),
     ),))(input)
 }
 
-fn parse_source_indirect_operand(input: &str) -> ParseResult<SourceOperand> {
-    fn inner(input: &str) -> ParseResult<AddressingMode> {
-        delimited(char('['), trim(parse_addressing_mode), char(']'))(input)
+fn parse_source_indirect_operand(input: Span) -> ParseResult<SourceOperand> {
+    fn inner(input: Span) -> ParseResult<AddressingMode> {
+        delimited(
+            char('['),
+            delimited(space0, parse_addressing_mode, space0),
+            char(']'),
+        )(input)
     }
 
     alt((
@@ -61,19 +68,19 @@ fn parse_source_indirect_operand(input: &str) -> ParseResult<SourceOperand> {
     ))(input)
 }
 
-fn parse_source_register_operand(input: &str) -> ParseResult<SourceOperand> {
+fn parse_source_register_operand(input: Span) -> ParseResult<SourceOperand> {
     map(parse_register, SourceOperand::Register)(input)
 }
 
-fn parse_source_segment_operand(input: &str) -> ParseResult<SourceOperand> {
+fn parse_source_segment_operand(input: Span) -> ParseResult<SourceOperand> {
     map(parse_segment, SourceOperand::Segment)(input)
 }
 
-fn parse_source_immediate_operand(input: &str) -> ParseResult<SourceOperand> {
+fn parse_source_immediate_operand(input: Span) -> ParseResult<SourceOperand> {
     map(parse_value_or_label, SourceOperand::Immediate)(input)
 }
 
-fn parse_source_operand(input: &str) -> ParseResult<SourceOperand> {
+fn parse_source_operand(input: Span) -> ParseResult<SourceOperand> {
     alt((
         parse_source_register_operand,
         parse_source_segment_operand,
@@ -83,11 +90,15 @@ fn parse_source_operand(input: &str) -> ParseResult<SourceOperand> {
     ))(input)
 }
 
-fn parse_source_operand_set(input: &str) -> ParseResult<SourceOperandSet> {
+fn parse_source_operand_set(input: Span) -> ParseResult<SourceOperandSet> {
     alt((
         // DestinationAndSource
         map(
-            separated_pair(parse_source_operand, trim(char(',')), parse_source_operand),
+            separated_pair(
+                parse_source_operand,
+                delimited(space0, char(','), space0),
+                parse_source_operand,
+            ),
             |(destination, source)| SourceOperandSet::DestinationAndSource(destination, source),
         ),
         // Destination
@@ -95,7 +106,7 @@ fn parse_source_operand_set(input: &str) -> ParseResult<SourceOperandSet> {
     ))(input)
 }
 
-pub(crate) fn parse_source_instruction(input: &str) -> ParseResult<SourceInstruction> {
+pub(crate) fn parse_source_instruction(input: Span) -> ParseResult<SourceInstruction> {
     let (input, operation) = terminated(parse_operation, space0)(input)?;
 
     let (input, operand_set) = match parse_source_operand_set(input) {
@@ -114,46 +125,55 @@ mod tests {
     #[test]
     fn source_direct_operand() {
         assert_eq!(
-            parse_source_direct_operand("[addr]"),
+            parse_source_direct_operand(Span::new("[addr]")),
             Ok((
-                "",
+                Span::new(""),
                 SourceOperand::Direct(SourceValueOrLabel::Label("addr".to_string()), None)
             ))
         );
         assert_eq!(
-            parse_source_direct_operand("[ addr  ]"),
+            parse_source_direct_operand(Span::new("[ addr  ]")),
             Ok((
-                "",
+                Span::new(""),
                 SourceOperand::Direct(SourceValueOrLabel::Label("addr".to_string()), None)
             ))
         );
         assert_eq!(
-            parse_source_direct_operand("[some_addr ]"),
+            parse_source_direct_operand(Span::new("[some_addr ]")),
             Ok((
-                "",
+                Span::new(""),
                 SourceOperand::Direct(SourceValueOrLabel::Label("some_addr".to_string()), None)
             ))
         );
         assert_eq!(
-            parse_source_direct_operand("[0x1000]"),
-            Ok(("", SourceOperand::Direct(SourceValueOrLabel::Value(0x1000), None),))
+            parse_source_direct_operand(Span::new("[0x1000]")),
+            Ok((
+                Span::new(""),
+                SourceOperand::Direct(SourceValueOrLabel::Value(0x1000), None),
+            ))
         );
     }
 
     #[test]
     fn source_indirect_operand() {
         assert_eq!(
-            parse_source_indirect_operand("[bx+si]"),
-            Ok(("", SourceOperand::Indirect(AddressingMode::BxSi, None)))
-        );
-        assert_eq!(
-            parse_source_indirect_operand("[ bp + di ]"),
-            Ok(("", SourceOperand::Indirect(AddressingMode::BpDi, None)))
-        );
-        assert_eq!(
-            parse_source_indirect_operand("byte [ bp + di ]"),
+            parse_source_indirect_operand(Span::new("[bx+si]")),
             Ok((
-                "",
+                Span::new(""),
+                SourceOperand::Indirect(AddressingMode::BxSi, None)
+            ))
+        );
+        assert_eq!(
+            parse_source_indirect_operand(Span::new("[ bp + di ]")),
+            Ok((
+                Span::new(""),
+                SourceOperand::Indirect(AddressingMode::BpDi, None)
+            ))
+        );
+        assert_eq!(
+            parse_source_indirect_operand(Span::new("byte [ bp + di ]")),
+            Ok((
+                Span::new(""),
                 SourceOperand::Indirect(AddressingMode::BpDi, Some(OperandSize::Byte))
             ))
         );
@@ -162,43 +182,49 @@ mod tests {
     #[test]
     fn source_operand() {
         assert_eq!(
-            parse_source_operand("ax"),
+            parse_source_operand(Span::new("ax")),
             Ok((
-                "",
+                Span::new(""),
                 SourceOperand::Register(SizedRegister(Register::AlAx, OperandSize::Word))
             ))
         );
 
         assert_eq!(
-            parse_source_operand("cs"),
-            Ok(("", SourceOperand::Segment(Segment::CS)))
+            parse_source_operand(Span::new("cs")),
+            Ok((Span::new(""), SourceOperand::Segment(Segment::CS)))
         );
 
         assert_eq!(
-            parse_source_operand("42"),
-            Ok(("", SourceOperand::Immediate(SourceValueOrLabel::Value(42))))
-        );
-
-        assert_eq!(
-            parse_source_operand("[addr]"),
+            parse_source_operand(Span::new("42")),
             Ok((
-                "",
+                Span::new(""),
+                SourceOperand::Immediate(SourceValueOrLabel::Value(42))
+            ))
+        );
+
+        assert_eq!(
+            parse_source_operand(Span::new("[addr]")),
+            Ok((
+                Span::new(""),
                 SourceOperand::Direct(SourceValueOrLabel::Label("addr".to_string()), None)
             ))
         );
 
         assert_eq!(
-            parse_source_operand("[bx+si]"),
-            Ok(("", SourceOperand::Indirect(AddressingMode::BxSi, None)))
+            parse_source_operand(Span::new("[bx+si]")),
+            Ok((
+                Span::new(""),
+                SourceOperand::Indirect(AddressingMode::BxSi, None)
+            ))
         );
     }
 
     #[test]
     fn source_operand_set() {
         assert_eq!(
-            parse_source_operand_set("ax, bx"),
+            parse_source_operand_set(Span::new("ax, bx")),
             Ok((
-                "",
+                Span::new(""),
                 SourceOperandSet::DestinationAndSource(
                     SourceOperand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
                     SourceOperand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
@@ -207,9 +233,9 @@ mod tests {
         );
 
         assert_eq!(
-            parse_source_operand_set("ax"),
+            parse_source_operand_set(Span::new("ax")),
             Ok((
-                "",
+                Span::new(""),
                 SourceOperandSet::Destination(SourceOperand::Register(SizedRegister(
                     Register::AlAx,
                     OperandSize::Word
@@ -218,17 +244,17 @@ mod tests {
         );
 
         assert_eq!(
-            parse_source_operand_set("[si]"),
+            parse_source_operand_set(Span::new("[si]")),
             Ok((
-                "",
+                Span::new(""),
                 SourceOperandSet::Destination(SourceOperand::Indirect(AddressingMode::Si, None))
             ))
         );
 
         assert_eq!(
-            parse_source_operand_set("func"),
+            parse_source_operand_set(Span::new("func")),
             Ok((
-                "",
+                Span::new(""),
                 SourceOperandSet::Destination(SourceOperand::Immediate(SourceValueOrLabel::Label(
                     "func".to_string()
                 )))
@@ -239,9 +265,9 @@ mod tests {
     #[test]
     fn source_instruction() {
         assert_eq!(
-            parse_source_instruction("mov ax, bx"),
+            parse_source_instruction(Span::new("mov ax, bx")),
             Ok((
-                "",
+                Span::new(""),
                 SourceInstruction::new(
                     Operation::MOV,
                     SourceOperandSet::DestinationAndSource(

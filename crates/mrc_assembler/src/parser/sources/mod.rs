@@ -1,6 +1,7 @@
 pub(crate) mod directive;
 pub(crate) mod instruction;
 
+use crate::parser::Span;
 use crate::source::SourceInstruction;
 use crate::{
     parse_identifier,
@@ -19,11 +20,16 @@ use nom::{
 };
 use std::fmt::Formatter;
 
-fn parse_label(input: &str) -> ParseResult<&str> {
+// #[derive(Debug)]
+// pub(crate) enum CodeError {
+//     UnexpectedToken,
+// }
+
+fn parse_label(input: Span) -> ParseResult<Span> {
     terminated(terminated(parse_identifier, space0), char(':'))(input)
 }
 
-fn parse_comment(input: &str) -> ParseResult<&str> {
+fn parse_comment(input: Span) -> ParseResult<Span> {
     recognize(preceded(char(';'), take_till(|c| c == '\n')))(input)
 }
 
@@ -35,7 +41,7 @@ pub(crate) enum Line {
     Comment(String),
 }
 
-impl std::fmt::Display for Line {
+impl<'a> std::fmt::Display for Line {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Line::Directive(directive) => write!(f, "{}", directive),
@@ -46,7 +52,7 @@ impl std::fmt::Display for Line {
     }
 }
 
-pub(crate) fn parse_line(input: &str) -> ParseResult<Line> {
+pub(crate) fn parse_line(input: Span) -> ParseResult<Line> {
     terminated(
         alt((
             map(parse_label, |label| Line::Label(label.to_string())),
@@ -61,34 +67,45 @@ pub(crate) fn parse_line(input: &str) -> ParseResult<Line> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{span_at, test_span};
 
     #[test]
     fn label() {
-        assert_eq!(parse_label("test:"), Ok(("", "test")));
-        assert_eq!(parse_label("test :"), Ok(("", "test")));
+        assert_eq!(
+            parse_label(Span::new("test:")),
+            Ok((Span::new(""), Span::new("test")))
+        );
+        assert_eq!(
+            parse_label(Span::new("test :")),
+            Ok((Span::new(""), Span::new("test")))
+        );
     }
 
     #[test]
     fn comment() {
-        assert_eq!(
-            parse_comment("; this is a comment"),
-            Ok(("", "; this is a comment"))
+        test_span!(
+            parse_comment,
+            "; this is a comment",
+            19,
+            1,
+            "",
+            Span::new("; this is a comment")
         );
         assert_eq!(
-            parse_comment("; this is a comment\nother stuff"),
-            Ok(("\nother stuff", "; this is a comment"))
+            parse_comment(Span::new("; this is a comment\nother stuff")),
+            Ok((Span::new("\nother stuff"), Span::new("; this is a comment")))
         );
     }
 
     #[test]
     fn line() {
+        // assert_eq!(
+        //     parse_line(Span::new("start:")),
+        //     Ok((Span::new(""), Line::Label("start".to_string())))
+        // );
         assert_eq!(
-            parse_line("start:"),
-            Ok(("", Line::Label("start".to_string())))
-        );
-        assert_eq!(
-            parse_line("org 100"),
-            Ok(("", Line::Directive(Directive::Org(100))))
+            parse_line(Span::new("org 100")),
+            Ok((span_at!(7, 1, ""), Line::Directive(Directive::Org(100))))
         );
     }
 }
