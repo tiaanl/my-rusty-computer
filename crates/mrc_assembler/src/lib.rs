@@ -1,10 +1,11 @@
 mod parser;
 pub(crate) mod source;
+pub(crate) mod tokenizer;
 
 use crate::parser::{sources::parse_line, ParseResult, Span};
 use mrc_instruction::Instruction;
 use nom::{character::complete::multispace0, multi::many1, sequence::preceded};
-use parser::{tokens::parse_identifier, instructions::parse_register, sources::Line};
+use parser::{instructions::parse_register, sources::Line, tokens::parse_identifier};
 
 fn parse_source(input: Span) -> ParseResult<Vec<Line>> {
     preceded(multispace0, many1(parse_line))(input)
