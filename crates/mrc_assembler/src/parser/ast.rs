@@ -335,6 +335,15 @@ mod parse {
                     )
                 )
             );
+
+            // TODO: This should be an error!
+            // assert_eq!(
+            //     instruction(Span::new("mov ax bx")),
+            //     Err(nom::Err::Error(nom::error::Error::from_error_kind(
+            //         Span::new(""),
+            //         nom::error::ErrorKind::Eof
+            //     )))
+            // );
         }
 
         #[test]
@@ -410,10 +419,11 @@ mod parse {
     }
 }
 
-use crate::{ast, parser::Span};
+use crate::{
+    ast,
+    parser::{ParseResult, Span},
+};
 
-pub fn parse(input: &str) -> Result<Vec<ast::Line>, ()> {
+pub fn parse(input: &str) -> ParseResult<Vec<ast::Line>> {
     parse::program(Span::new(input))
-        .map_err(|_| ())
-        .map(|(_, lines)| lines)
 }
