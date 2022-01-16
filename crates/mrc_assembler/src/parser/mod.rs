@@ -1,10 +1,9 @@
+pub(crate) mod ast;
+pub(crate) mod base;
 pub(crate) mod instructions;
 pub(crate) mod sources;
-pub(crate) mod tokens;
 
-use nom_locate::LocatedSpan;
-
-pub(crate) type Span<'a> = LocatedSpan<&'a str>;
+pub(crate) type Span<'a> = nom_locate::LocatedSpan<&'a str>;
 
 #[macro_export]
 macro_rules! span_at {
@@ -13,10 +12,10 @@ macro_rules! span_at {
     }};
 }
 
-pub(crate) type ParseResult<'s, T> = nom::IResult<Span<'s>, T>;
+pub type ParseResult<'s, T> = nom::IResult<Span<'s>, T>;
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     #[macro_export]
     macro_rules! test_span {
         ($fn:ident,$input:expr,$offset:expr,$line:expr,$rest:expr,$output:expr) => {{

@@ -2,7 +2,7 @@ pub(crate) mod directive;
 pub(crate) mod instruction;
 
 use crate::{
-    parse_identifier,
+    identifier,
     parser::{
         sources::{
             directive::{parse_directive, Directive},
@@ -10,7 +10,7 @@ use crate::{
         },
         Span,
     },
-    source::SourceInstruction,
+    ast::Instruction,
     ParseResult,
 };
 use nom::{
@@ -28,7 +28,7 @@ use std::fmt::Formatter;
 // }
 
 fn parse_label(input: Span) -> ParseResult<Span> {
-    terminated(terminated(parse_identifier, space0), char(':'))(input)
+    terminated(terminated(identifier, space0), char(':'))(input)
 }
 
 fn parse_comment(input: Span) -> ParseResult<Span> {
@@ -39,7 +39,7 @@ fn parse_comment(input: Span) -> ParseResult<Span> {
 pub(crate) enum Line {
     Directive(Directive),
     Label(String),
-    Instruction(SourceInstruction),
+    Instruction(Instruction),
     Comment(String),
 }
 

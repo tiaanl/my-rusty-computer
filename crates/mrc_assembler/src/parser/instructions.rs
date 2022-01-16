@@ -1,5 +1,5 @@
 use crate::parser::Span;
-use crate::{parse_identifier, parser::ParseResult};
+use crate::{identifier, parser::ParseResult};
 use mrc_instruction::{AddressingMode, Operation, Segment, SizedRegister};
 use nom::character::complete::space0;
 use nom::sequence::delimited;
@@ -12,19 +12,19 @@ use nom::{
 use std::str::FromStr;
 
 pub(crate) fn parse_operation(input: Span) -> ParseResult<Operation> {
-    map_res(parse_identifier, |span| {
+    map_res(identifier, |span| {
         Operation::from_str(span.fragment())
     })(input)
 }
 
 pub(crate) fn parse_register(input: Span) -> ParseResult<SizedRegister> {
-    map_res(parse_identifier, |span| {
+    map_res(identifier, |span| {
         SizedRegister::from_str(span.fragment())
     })(input)
 }
 
 pub(crate) fn parse_segment(input: Span) -> ParseResult<Segment> {
-    map_res(parse_identifier, |span| Segment::from_str(span.fragment()))(input)
+    map_res(identifier, |span| Segment::from_str(span.fragment()))(input)
 }
 
 pub(crate) fn parse_addressing_mode(input: Span) -> ParseResult<AddressingMode> {
@@ -35,7 +35,7 @@ pub(crate) fn parse_addressing_mode(input: Span) -> ParseResult<AddressingMode> 
                 delimited(space0, char('+'), space0),
                 parse_register,
             )),
-            parse_identifier,
+            identifier,
         )),
         |span| AddressingMode::from_str(span.fragment()),
     )(input)
@@ -44,8 +44,8 @@ pub(crate) fn parse_addressing_mode(input: Span) -> ParseResult<AddressingMode> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mrc_instruction::{OperandSize, Register};
     use crate::test_span;
+    use mrc_instruction::{OperandSize, Register};
 
     #[test]
     fn operation() {

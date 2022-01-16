@@ -37,13 +37,13 @@ pub enum TokenKind<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct Token<'a> {
-    column: usize,
-    line: usize,
-    token: TokenKind<'a>,
+    pub column: usize,
+    pub line: usize,
+    pub token: TokenKind<'a>,
 }
 
 impl<'a> Token<'a> {
-    fn new(column: usize, line: usize, token: TokenKind<'a>) -> Self {
+    pub fn new(column: usize, line: usize, token: TokenKind<'a>) -> Self {
         Self {
             column,
             line,
@@ -54,6 +54,7 @@ impl<'a> Token<'a> {
 
 mod parse {
     use super::*;
+    use nom::multi::many0;
     use nom::{
         branch::alt,
         bytes::complete::{tag_no_case, take},
@@ -80,9 +81,9 @@ mod parse {
     }
 
     fn parse_comment(input: Span) -> TokenResult {
-        let (input, comment) = input.split_at_position_complete(|c| c == '\n')?;
+        let (_, _) = char(';')(input)?;
 
-        println!("{:#?} {:#?}", &input, &comment);
+        let (input, comment) = input.split_at_position_complete(|c| c == '\n')?;
 
         Ok((
             input,
@@ -196,15 +197,15 @@ mod parse {
     fn parse_token(input: Span) -> TokenResult {
         alt((
             parse_comment,
-            // parse_literal,
-            // parse_punctuation,
-            // parse_new_line,
-            // parse_identifier,
+            parse_literal,
+            parse_punctuation,
+            parse_new_line,
+            parse_identifier,
         ))(input)
     }
 
     pub fn tokenize(input: &'_ str) -> IResult<Span, Vec<Token<'_>>> {
-        preceded(space0, many1(terminated(parse_token, space0)))(Span::new(input))
+        many0(terminated(parse_token, space0))(Span::new(input))
     }
 
     #[cfg(test)]
@@ -258,6 +259,6 @@ mod tests {
     #[test]
     fn test_tokenize() {
         // println!("{:#?}", tokenize("This is a\nsentence.").unwrap());
-        println!("{:#?}", tokenize(";mov ax, bx").unwrap());
+        println!("{:#?}", tokenize("mov ax, bx").unwrap());
     }
 }

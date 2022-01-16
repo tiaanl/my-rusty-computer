@@ -1,6 +1,6 @@
 use crate::{
-    parse_identifier,
-    parser::{tokens::parse_number, ParseResult, Span},
+    identifier,
+    parser::{base::number, ParseResult, Span},
 };
 use nom::combinator::cut;
 use nom::error::ParseError;
@@ -26,9 +26,9 @@ impl std::fmt::Display for Directive {
 }
 
 pub(crate) fn parse_directive(input: Span) -> ParseResult<Directive> {
-    let (input, identifier) = terminated(parse_identifier, space1)(input)?;
+    let (input, identifier) = terminated(identifier, space1)(input)?;
 
-    let (input, value) = cut(terminated(parse_number, multispace0))(input)?;
+    let (input, value) = cut(terminated(number, multispace0))(input)?;
 
     let directive = match *identifier.fragment() {
         "bits" => Directive::Bits(value as u16),

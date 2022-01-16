@@ -491,8 +491,8 @@ impl FromStr for AddressingMode {
             "bp+di" => Ok(BpDi),
             "si" => Ok(Si),
             "di" => Ok(Di),
-            "Bp" => Ok(Bp),
-            "Bx" => Ok(Bx),
+            "bp" => Ok(Bp),
+            "bx" => Ok(Bx),
             _ => Err(s.to_string()),
         }
     }
