@@ -238,7 +238,7 @@ mod parse {
     }
 }
 
-pub fn tokenize<'a>(input: &'a str) -> Result<Vec<Token<'a>>, Error> {
+pub fn tokenize(input: &str) -> Result<Vec<Token>, Error> {
     let (_, tokens) = parse::tokenize(input).map_err(|err| {
         match err {
             Err::Incomplete(err) => eprintln!("Incomplete: {:?}", err),

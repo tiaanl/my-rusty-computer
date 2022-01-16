@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Parsers for AST nodes.
 
 use crate::{
@@ -6,30 +7,26 @@ use crate::{
     ParseResult, Span,
 };
 use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
-use nom::bytes::complete::take;
-use nom::combinator::cut;
-use nom::sequence::pair;
 use nom::{
     branch::alt,
+    bytes::complete::take,
     character::complete::{char, multispace0, space0, space1},
     combinator::{map, map_res, opt, recognize},
     error::ParseError,
     multi::many0,
-    sequence::{delimited, preceded, terminated, tuple},
+    sequence::{delimited, pair, preceded, terminated, tuple},
 };
 use std::str::FromStr;
 
-// #[derive(Debug)]
-// enum SyntaxError {
-//     Unknown,
-// }
-
 fn value_or_label(input: Span) -> ParseResult<ast::ValueOrLabel> {
     alt((
-        map(delimited(char('\''), take(1usize), char('\'')), |res: Span| {
-            let c = res.chars().nth(0).unwrap();
-            ast::ValueOrLabel::Value(c as i32)
-        }),
+        map(
+            delimited(char('\''), take(1usize), char('\'')),
+            |res: Span| {
+                let c = res.chars().next().unwrap();
+                ast::ValueOrLabel::Value(c as i32)
+            },
+        ),
         map(number, ast::ValueOrLabel::Value),
         map(identifier, |res| {
             ast::ValueOrLabel::Label(res.fragment().to_string())
@@ -69,7 +66,7 @@ fn segment_operand(input: Span) -> ParseResult<ast::Operand> {
 }
 
 fn immediate_operand(input: Span) -> ParseResult<ast::Operand> {
-    map(value_or_label, |res| ast::Operand::Immediate(res))(input)
+    map(value_or_label, ast::Operand::Immediate)(input)
 }
 
 fn operand_size(input: Span) -> ParseResult<OperandSize> {
@@ -98,9 +95,9 @@ fn direct_or_indirect(input: Span) -> ParseResult<DirectOrIndirect> {
                 )),
                 |res| AddressingMode::from_str(res.fragment()),
             ),
-            |addressing_mode| DirectOrIndirect::Indirect(addressing_mode),
+            DirectOrIndirect::Indirect,
         ),
-        map(value_or_label, |res| DirectOrIndirect::Direct(res)),
+        map(value_or_label, DirectOrIndirect::Direct),
     ))(input)
 }
 
@@ -190,7 +187,7 @@ fn line(input: Span) -> ParseResult<ast::Line> {
     ))(input)
 }
 
-fn program(input: Span) -> ParseResult<Vec<ast::Line>> {
+pub fn program(input: Span) -> ParseResult<Vec<ast::Line>> {
     preceded(multispace0, many0(line))(input)
 }
 
@@ -198,8 +195,6 @@ fn program(input: Span) -> ParseResult<Vec<ast::Line>> {
 mod tests {
     use super::*;
     use mrc_instruction::{AddressingMode, OperandSize, Register};
-    use nom::error::Error;
-    use nom::Err;
 
     #[test]
     fn parse_value_or_label() {
@@ -406,29 +401,7 @@ mod tests {
                 ret
             ";
 
-        match program(Span::new(source)) {
-            Ok((_, program)) => program.iter().for_each(|l| println!("{}", l)),
-            Err(err) => {
-                eprintln!("{:#?}", err);
-                match err {
-                    Err::Incomplete(_) => {}
-                    Err::Error(_) => {
-                        println!("error");
-                    }
-                    Err::Failure(err) => {
-                        let input = err.input as Span;
-
-                        print!("Error parsing code at: ");
-                        print!("{}:{} ", input.location_line(), input.get_column());
-                        let fragment = if input.fragment().len() > 50 {
-                            &input.fragment()[..50]
-                        } else {
-                            &input.fragment()
-                        };
-                        println!("{:?}", input.fragment());
-                    }
-                }
-            }
-        }
+        let p = program(Span::new(source));
+        println!("{:#?}", p);
     }
 }
