@@ -1,4 +1,6 @@
 #![allow(dead_code)]
+// TODO: Needs updating
+//! ```text
 //! Grammar:
 //!
 //!   ::=   defined as
@@ -8,7 +10,7 @@
 //!   |     if left is not valid, use right
 //!   CAP   type of token
 //!
-//! <program>       := <instruction> {, <instruction>}
+//! <program>       ::= <instruction> {, <instruction>}
 //! <instruction>   ::= <operation>, <operand_set>
 //! <operand_set>   ::= {<operand>, {<operand>}}
 //! <operand>       ::= <immediate> | <register> | <segment> | <direct> | <indirect>
@@ -17,6 +19,7 @@
 //! <segment>       ::= es, cs, ss, ds
 //! <direct>        ::= IDENT | NUM
 //! <indirect>      ::= "[" <addressing-mode> "]"
+//! ```
 
 use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
 use std::fmt::Formatter;
