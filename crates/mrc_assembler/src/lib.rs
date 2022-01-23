@@ -1,4 +1,4 @@
-pub mod ast;
+pub mod lines;
 mod parser;
 
-pub use parser::ast::parse;
+pub use parser::lines::parse_lines;

@@ -25,12 +25,12 @@ use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegi
 use std::fmt::Formatter;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ValueOrLabel {
+pub enum ValueOrLabel<'s> {
     Value(i32),
-    Label(String),
+    Label(&'s str),
 }
 
-impl std::fmt::Display for ValueOrLabel {
+impl<'s> std::fmt::Display for ValueOrLabel<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ValueOrLabel::Value(value) => write!(f, "{:#6x}", value),
@@ -40,15 +40,15 @@ impl std::fmt::Display for ValueOrLabel {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Operand {
+pub enum Operand<'s> {
     Indirect(AddressingMode, Option<OperandSize>, Option<Segment>),
-    Direct(ValueOrLabel, Option<OperandSize>, Option<Segment>),
+    Direct(ValueOrLabel<'s>, Option<OperandSize>, Option<Segment>),
     Register(SizedRegister),
     Segment(Segment),
-    Immediate(ValueOrLabel),
+    Immediate(ValueOrLabel<'s>),
 }
 
-impl std::fmt::Display for Operand {
+impl<'s> std::fmt::Display for Operand<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Operand::Indirect(addressing_mode, operand_size, segment_override) => {
@@ -87,13 +87,13 @@ impl std::fmt::Display for Operand {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum OperandSet {
-    DestinationAndSource(Operand, Operand),
-    Destination(Operand),
+pub enum OperandSet<'s> {
+    DestinationAndSource(Operand<'s>, Operand<'s>),
+    Destination(Operand<'s>),
     None,
 }
 
-impl std::fmt::Display for OperandSet {
+impl<'s> std::fmt::Display for OperandSet<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             OperandSet::DestinationAndSource(destination, source) => {
@@ -106,19 +106,19 @@ impl std::fmt::Display for OperandSet {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Instruction {
+pub struct Instruction<'s> {
     operation: Operation,
-    operand_set: OperandSet,
+    operand_set: OperandSet<'s>,
 }
 
-impl std::fmt::Display for Instruction {
+impl<'s> std::fmt::Display for Instruction<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}", self.operation, self.operand_set)
     }
 }
 
-impl Instruction {
-    pub fn new(operation: Operation, operand_set: OperandSet) -> Self {
+impl<'s> Instruction<'s> {
+    pub fn new(operation: Operation, operand_set: OperandSet<'s>) -> Self {
         Self {
             operation,
             operand_set,
@@ -127,12 +127,12 @@ impl Instruction {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum Line {
-    Label(String),
-    Instruction(Instruction),
+pub enum Line<'s> {
+    Label(&'s str),
+    Instruction(Instruction<'s>),
 }
 
-impl std::fmt::Display for Line {
+impl<'s> std::fmt::Display for Line<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Line::Label(label) => write!(f, "{}:", label),

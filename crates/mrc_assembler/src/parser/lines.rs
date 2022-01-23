@@ -1,9 +1,8 @@
 #![allow(dead_code)]
-//! Parsers for AST nodes.
 
 mod parse {
     use crate::{
-        ast,
+        lines,
         parser::{
             base::{identifier, number},
             ParseResult, Span,
@@ -21,33 +20,33 @@ mod parse {
     };
     use std::str::FromStr;
 
-    fn value_or_label(input: Span) -> ParseResult<ast::ValueOrLabel> {
+    fn value_or_label(input: Span) -> ParseResult<lines::ValueOrLabel> {
         alt((
             map(
                 delimited(char('\''), take(1usize), char('\'')),
                 |res: Span| {
                     let c = res.chars().next().unwrap();
-                    ast::ValueOrLabel::Value(c as i32)
+                    lines::ValueOrLabel::Value(c as i32)
                 },
             ),
-            map(number, ast::ValueOrLabel::Value),
+            map(number, lines::ValueOrLabel::Value),
             map(identifier, |res| {
-                ast::ValueOrLabel::Label(res.fragment().to_string())
+                lines::ValueOrLabel::Label(*res.fragment())
             }),
         ))(input)
     }
 
-    fn label(input: Span) -> ParseResult<String> {
+    fn label(input: Span) -> ParseResult<&str> {
         map(
             terminated(terminated(identifier, space0), char(':')),
-            |res| res.fragment().to_string(),
+            |res| *res.fragment(),
         )(input)
     }
 
-    fn register_operand(input: Span) -> ParseResult<ast::Operand> {
+    fn register_operand(input: Span) -> ParseResult<lines::Operand> {
         map_res(identifier, |res| {
             match SizedRegister::from_str(res.fragment()) {
-                Ok(sized_register) => Ok(ast::Operand::Register(sized_register)),
+                Ok(sized_register) => Ok(lines::Operand::Register(sized_register)),
                 Err(_) => Err(nom::Err::Error(nom::error::Error::from_error_kind(
                     input,
                     nom::error::ErrorKind::Eof,
@@ -56,11 +55,11 @@ mod parse {
         })(input)
     }
 
-    fn segment_operand(input: Span) -> ParseResult<ast::Operand> {
+    fn segment_operand(input: Span) -> ParseResult<lines::Operand> {
         let (input, segment) = identifier(input)?;
 
         match Segment::from_str(segment.fragment()) {
-            Ok(segment) => Ok((input, ast::Operand::Segment(segment))),
+            Ok(segment) => Ok((input, lines::Operand::Segment(segment))),
             Err(_) => Err(nom::Err::Error(nom::error::Error::from_error_kind(
                 input,
                 nom::error::ErrorKind::Eof,
@@ -68,8 +67,8 @@ mod parse {
         }
     }
 
-    fn immediate_operand(input: Span) -> ParseResult<ast::Operand> {
-        map(value_or_label, ast::Operand::Immediate)(input)
+    fn immediate_operand(input: Span) -> ParseResult<lines::Operand> {
+        map(value_or_label, lines::Operand::Immediate)(input)
     }
 
     fn operand_size(input: Span) -> ParseResult<OperandSize> {
@@ -83,8 +82,8 @@ mod parse {
         })(input)
     }
 
-    enum DirectOrIndirect {
-        Direct(ast::ValueOrLabel),
+    enum DirectOrIndirect<'s> {
+        Direct(lines::ValueOrLabel<'s>),
         Indirect(AddressingMode),
     }
 
@@ -104,7 +103,7 @@ mod parse {
         ))(input)
     }
 
-    fn direct_or_indirect_operand(input: Span) -> ParseResult<ast::Operand> {
+    fn direct_or_indirect_operand(input: Span) -> ParseResult<lines::Operand> {
         map(
             tuple((
                 opt(terminated(operand_size, space1)),
@@ -123,16 +122,16 @@ mod parse {
             )),
             |(maybe_operand_size, segment_override, direct_or_indirect)| match direct_or_indirect {
                 DirectOrIndirect::Direct(value_or_label) => {
-                    ast::Operand::Direct(value_or_label, maybe_operand_size, segment_override)
+                    lines::Operand::Direct(value_or_label, maybe_operand_size, segment_override)
                 }
                 DirectOrIndirect::Indirect(addressing_mode) => {
-                    ast::Operand::Indirect(addressing_mode, maybe_operand_size, segment_override)
+                    lines::Operand::Indirect(addressing_mode, maybe_operand_size, segment_override)
                 }
             },
         )(input)
     }
 
-    fn operand(input: Span) -> ParseResult<ast::Operand> {
+    fn operand(input: Span) -> ParseResult<lines::Operand> {
         alt((
             direct_or_indirect_operand,
             register_operand,
@@ -141,7 +140,7 @@ mod parse {
         ))(input)
     }
 
-    fn operand_set(input: Span) -> ParseResult<ast::OperandSet> {
+    fn operand_set(input: Span) -> ParseResult<lines::OperandSet> {
         map_res(
             tuple((
                 opt(operand),
@@ -149,10 +148,10 @@ mod parse {
             )),
             |res| match res {
                 (Some(destination), Some((_, source))) => {
-                    Ok(ast::OperandSet::DestinationAndSource(destination, source))
+                    Ok(lines::OperandSet::DestinationAndSource(destination, source))
                 }
-                (Some(destination), None) => Ok(ast::OperandSet::Destination(destination)),
-                (None, None) => Ok(ast::OperandSet::None),
+                (Some(destination), None) => Ok(lines::OperandSet::Destination(destination)),
+                (None, None) => Ok(lines::OperandSet::None),
                 _ => Err(nom::Err::Error(nom::error::Error::from_error_kind(
                     input,
                     nom::error::ErrorKind::Eof,
@@ -161,7 +160,7 @@ mod parse {
         )(input)
     }
 
-    fn instruction(input: Span) -> ParseResult<ast::Instruction> {
+    fn instruction(input: Span) -> ParseResult<lines::Instruction> {
         fn operation(input: Span) -> ParseResult<Operation> {
             map_res(identifier, |res| {
                 Operation::from_str(res.fragment()).map_err(|_| {
@@ -175,22 +174,22 @@ mod parse {
 
         map(
             tuple((operation, opt(space1), operand_set)),
-            |(operation, _, operand_set)| ast::Instruction::new(operation, operand_set),
+            |(operation, _, operand_set)| lines::Instruction::new(operation, operand_set),
         )(input)
     }
 
-    fn line(input: Span) -> ParseResult<ast::Line> {
+    fn line(input: Span) -> ParseResult<lines::Line> {
         alt((
             map(terminated(label, opt(multispace0)), |label| {
-                ast::Line::Label(label)
+                lines::Line::Label(label)
             }),
             map(terminated(instruction, opt(multispace0)), |instruction| {
-                ast::Line::Instruction(instruction)
+                lines::Line::Instruction(instruction)
             }),
         ))(input)
     }
 
-    pub fn program(input: Span) -> ParseResult<Vec<ast::Line>> {
+    pub fn program(input: Span) -> ParseResult<Vec<lines::Line>> {
         preceded(multispace0, many0(line))(input)
     }
 
@@ -203,11 +202,11 @@ mod parse {
         fn parse_value_or_label() {
             assert_eq!(
                 value_or_label(Span::new("0xB800")).unwrap().1,
-                ast::ValueOrLabel::Value(0xB800)
+                lines::ValueOrLabel::Value(0xB800)
             );
             assert_eq!(
                 value_or_label(Span::new("label")).unwrap().1,
-                ast::ValueOrLabel::Label("label".to_string())
+                lines::ValueOrLabel::Label("label")
             );
         }
 
@@ -215,22 +214,26 @@ mod parse {
         fn parse_direct_or_indirect_operand() {
             assert_eq!(
                 direct_or_indirect_operand(Span::new("[10]")).unwrap().1,
-                ast::Operand::Direct(ast::ValueOrLabel::Value(10), None, None)
+                lines::Operand::Direct(lines::ValueOrLabel::Value(10), None, None)
             );
 
             assert_eq!(
                 direct_or_indirect_operand(Span::new("byte [10]"))
                     .unwrap()
                     .1,
-                ast::Operand::Direct(ast::ValueOrLabel::Value(10), Some(OperandSize::Byte), None)
+                lines::Operand::Direct(
+                    lines::ValueOrLabel::Value(10),
+                    Some(OperandSize::Byte),
+                    None
+                )
             );
 
             assert_eq!(
                 direct_or_indirect_operand(Span::new("byte cs:[10]"))
                     .unwrap()
                     .1,
-                ast::Operand::Direct(
-                    ast::ValueOrLabel::Value(10),
+                lines::Operand::Direct(
+                    lines::ValueOrLabel::Value(10),
                     Some(OperandSize::Byte),
                     Some(Segment::CS)
                 )
@@ -240,8 +243,8 @@ mod parse {
                 direct_or_indirect_operand(Span::new("byte [test]"))
                     .unwrap()
                     .1,
-                ast::Operand::Direct(
-                    ast::ValueOrLabel::Label("test".to_string()),
+                lines::Operand::Direct(
+                    lines::ValueOrLabel::Label("test"),
                     Some(OperandSize::Byte),
                     None
                 )
@@ -249,13 +252,13 @@ mod parse {
 
             assert_eq!(
                 direct_or_indirect_operand(Span::new("[si]")).unwrap().1,
-                ast::Operand::Indirect(AddressingMode::Si, None, None)
+                lines::Operand::Indirect(AddressingMode::Si, None, None)
             );
             assert_eq!(
                 direct_or_indirect_operand(Span::new("byte [bx+si]"))
                     .unwrap()
                     .1,
-                ast::Operand::Indirect(AddressingMode::BxSi, Some(OperandSize::Byte), None)
+                lines::Operand::Indirect(AddressingMode::BxSi, Some(OperandSize::Byte), None)
             );
         }
 
@@ -264,32 +267,32 @@ mod parse {
             // Immediate
             assert_eq!(
                 operand(Span::new("label")).unwrap().1,
-                ast::Operand::Immediate(ast::ValueOrLabel::Label("label".to_string()))
+                lines::Operand::Immediate(lines::ValueOrLabel::Label("label"))
             );
 
             // Register
             assert_eq!(
                 operand(Span::new("ax")).unwrap().1,
-                ast::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word))
+                lines::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word))
             );
 
             // Segment
             assert_eq!(
                 operand(Span::new("cs")).unwrap().1,
-                ast::Operand::Segment(Segment::CS)
+                lines::Operand::Segment(Segment::CS)
             );
 
             // Direct
             assert_eq!(
                 operand(Span::new("[0xB800]")).unwrap().1,
-                ast::Operand::Direct(ast::ValueOrLabel::Value(0xB800), None, None)
+                lines::Operand::Direct(lines::ValueOrLabel::Value(0xB800), None, None)
             );
 
             // Direct
             assert_eq!(
                 operand(Span::new("word [label]")).unwrap().1,
-                ast::Operand::Direct(
-                    ast::ValueOrLabel::Label("label".to_string()),
+                lines::Operand::Direct(
+                    lines::ValueOrLabel::Label("label"),
                     Some(OperandSize::Word),
                     None
                 )
@@ -298,7 +301,7 @@ mod parse {
             // Indirect
             assert_eq!(
                 operand(Span::new("[bx+si]")).unwrap().1,
-                ast::Operand::Indirect(AddressingMode::BxSi, None, None),
+                lines::Operand::Indirect(AddressingMode::BxSi, None, None),
             );
         }
 
@@ -306,32 +309,35 @@ mod parse {
         fn parse_operand_set() {
             assert_eq!(
                 operand_set(Span::new("ax, [bx+si]")).unwrap().1,
-                ast::OperandSet::DestinationAndSource(
-                    ast::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                    ast::Operand::Indirect(AddressingMode::BxSi, None, None),
+                lines::OperandSet::DestinationAndSource(
+                    lines::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                    lines::Operand::Indirect(AddressingMode::BxSi, None, None),
                 )
             );
 
             assert_eq!(
                 operand_set(Span::new("ax")).unwrap().1,
-                ast::OperandSet::Destination(ast::Operand::Register(SizedRegister(
+                lines::OperandSet::Destination(lines::Operand::Register(SizedRegister(
                     Register::AlAx,
                     OperandSize::Word
                 )))
             );
 
-            assert_eq!(operand_set(Span::new("")).unwrap().1, ast::OperandSet::None);
+            assert_eq!(
+                operand_set(Span::new("")).unwrap().1,
+                lines::OperandSet::None
+            );
         }
 
         #[test]
         fn parse_instruction() {
             assert_eq!(
                 instruction(Span::new("mov ax, bx")).unwrap().1,
-                ast::Instruction::new(
+                lines::Instruction::new(
                     Operation::MOV,
-                    ast::OperandSet::DestinationAndSource(
-                        ast::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                        ast::Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word))
+                    lines::OperandSet::DestinationAndSource(
+                        lines::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                        lines::Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word))
                     )
                 )
             );
@@ -355,16 +361,16 @@ mod parse {
         fn parse_line() {
             assert_eq!(
                 line(Span::new("label:\n")).unwrap().1,
-                ast::Line::Label(String::from("label"))
+                lines::Line::Label("label")
             );
 
             assert_eq!(
                 line(Span::new("mov ax, bx:\n")).unwrap().1,
-                ast::Line::Instruction(ast::Instruction::new(
+                lines::Line::Instruction(lines::Instruction::new(
                     Operation::MOV,
-                    ast::OperandSet::DestinationAndSource(
-                        ast::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                        ast::Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
+                    lines::OperandSet::DestinationAndSource(
+                        lines::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                        lines::Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
                     )
                 ))
             );
@@ -420,10 +426,10 @@ mod parse {
 }
 
 use crate::{
-    ast,
+    lines,
     parser::{ParseResult, Span},
 };
 
-pub fn parse(input: &str) -> ParseResult<Vec<ast::Line>> {
+pub fn parse_lines(input: &str) -> ParseResult<Vec<lines::Line>> {
     parse::program(Span::new(input))
 }
