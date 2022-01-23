@@ -127,9 +127,17 @@ impl<'s> Instruction<'s> {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct Const<'s> {
+    pub name: &'s str,
+    // TODO: This should have more variants.
+    pub value: i32,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Line<'s> {
     Label(&'s str),
     Instruction(Instruction<'s>),
+    Const(Const<'s>),
 }
 
 impl<'s> std::fmt::Display for Line<'s> {
@@ -137,6 +145,7 @@ impl<'s> std::fmt::Display for Line<'s> {
         match self {
             Line::Label(label) => write!(f, "{}:", label),
             Line::Instruction(instruction) => write!(f, "    {}", instruction),
+            Line::Const(c) => write!(f, "{} equ {}", c.name, c.value),
         }
     }
 }

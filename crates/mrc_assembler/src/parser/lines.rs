@@ -9,6 +9,8 @@ mod parse {
         },
     };
     use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
+    use nom::bytes::complete::tag_no_case;
+    use nom::sequence::separated_pair;
     use nom::{
         branch::alt,
         bytes::complete::take,
@@ -178,8 +180,25 @@ mod parse {
         )(input)
     }
 
+    fn r#const(input: Span) -> ParseResult<lines::Const> {
+        map(
+            separated_pair(
+                identifier,
+                delimited(space1, tag_no_case("equ"), space1),
+                number,
+            ),
+            |(name, value)| lines::Const {
+                name: name.fragment(),
+                value,
+            },
+        )(input)
+    }
+
     fn line(input: Span) -> ParseResult<lines::Line> {
         alt((
+            map(terminated(r#const, opt(multispace0)), |c| {
+                lines::Line::Const(c)
+            }),
             map(terminated(label, opt(multispace0)), |label| {
                 lines::Line::Label(label)
             }),
@@ -355,6 +374,17 @@ mod parse {
         #[test]
         fn parse_label() {
             assert_eq!(label(Span::new("label:")).unwrap().1, "label".to_string());
+        }
+
+        #[test]
+        fn parse_const() {
+            assert_eq!(
+                r#const(Span::new("address equ 0x0A")).unwrap().1,
+                lines::Const {
+                    name: "address",
+                    value: 10,
+                }
+            );
         }
 
         #[test]
