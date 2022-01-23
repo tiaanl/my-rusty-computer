@@ -9,16 +9,15 @@ mod parse {
         },
     };
     use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
-    use nom::bytes::complete::tag_no_case;
-    use nom::sequence::separated_pair;
     use nom::{
         branch::alt,
-        bytes::complete::take,
+        bytes::{complete::tag_no_case, complete::take},
         character::complete::{char, multispace0, space0, space1},
-        combinator::{map, map_res, opt, recognize},
+        combinator::{cut, map, map_res, opt, recognize},
         error::ParseError,
         multi::many0,
-        sequence::{delimited, pair, preceded, terminated, tuple},
+        sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
+        FindSubstring, Slice,
     };
     use std::str::FromStr;
 
@@ -163,21 +162,20 @@ mod parse {
     }
 
     fn instruction(input: Span) -> ParseResult<lines::Instruction> {
-        fn operation(input: Span) -> ParseResult<Operation> {
-            map_res(identifier, |res| {
-                Operation::from_str(res.fragment()).map_err(|_| {
-                    nom::Err::Error(nom::error::Error::from_error_kind(
-                        input,
-                        nom::error::ErrorKind::Eof,
-                    ))
-                })
-            })(input)
-        }
+        let (input, operation) = map_res(identifier, |res| {
+            Operation::from_str(res.fragment()).map_err(|_| {
+                nom::Err::Error(nom::error::Error::from_error_kind(
+                    input,
+                    nom::error::ErrorKind::Eof,
+                ))
+            })
+        })(input)?;
 
-        map(
-            tuple((operation, opt(space1), operand_set)),
-            |(operation, _, operand_set)| lines::Instruction::new(operation, operand_set),
-        )(input)
+        // If we pass this point, we should return a failure is we don't get an operand set.
+
+        let (input, operand_set) = cut(preceded(opt(space1), operand_set))(input)?;
+
+        Ok((input, lines::Instruction::new(operation, operand_set)))
     }
 
     fn r#const(input: Span) -> ParseResult<lines::Const> {
@@ -194,8 +192,28 @@ mod parse {
         )(input)
     }
 
+    fn comment<'s>(input: Span<'s>) -> ParseResult<&'s str> {
+        let (temp, _) = char(';')(input)?;
+
+        let mut split = match temp.find_substring("\r\n") {
+            None => match temp.find_substring("\n") {
+                None => temp.len(),
+                Some(pos) => pos,
+            },
+            Some(pos) => pos,
+        };
+
+        // Increment the split to compensate for the char we consumed earlier.
+        split += 1;
+
+        Ok((input.slice(split..), input.slice(0..split).fragment()))
+    }
+
     fn line(input: Span) -> ParseResult<lines::Line> {
         alt((
+            map(terminated(comment, opt(multispace0)), |comment| {
+                lines::Line::Comment(comment)
+            }),
             map(terminated(r#const, opt(multispace0)), |c| {
                 lines::Line::Const(c)
             }),
@@ -384,6 +402,17 @@ mod parse {
                     name: "address",
                     value: 10,
                 }
+            );
+        }
+
+        #[test]
+        fn parse_comment() {
+            assert_eq!(comment(Span::new("; comment")).unwrap().1, "; comment");
+            assert_eq!(
+                comment(Span::new("; first comment\n  ; another comment  "))
+                    .unwrap()
+                    .1,
+                "; first comment"
             );
         }
 

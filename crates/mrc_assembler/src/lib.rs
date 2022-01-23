@@ -1,4 +1,2 @@
 pub mod lines;
-mod parser;
-
-pub use parser::lines::parse_lines;
+pub mod parser;

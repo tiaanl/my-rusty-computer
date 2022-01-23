@@ -5,7 +5,7 @@
         push    di
 
 loop_strcmp_loop1:
-        mov     al, byte cs:[si]
+        mov     al, byte cs:[si]        ; set al to the first byte of the source string
         inc     si
         cmp     al, bl
         jg      loop_strcmp_great

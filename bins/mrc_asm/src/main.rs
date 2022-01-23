@@ -1,26 +1,23 @@
 use std::path::Path;
 use structopt::StructOpt;
 
-fn parse_file<P: AsRef<Path>>(_path: P) -> std::io::Result<()> {
-    /*
-    let data = std::fs::read_to_string(path)?;
-
-    let tokens = tokenize(data.as_str());
-    let mut count = 0usize;
-    for token in tokens
-        .into_iter()
-        .filter(|t| t.kind != TokenKind::Whitespace && t.kind != TokenKind::LineComment)
-    {
-        println!("{:?}", token);
-        count += 1;
-        if count == 10 {
-            break;
+fn parse_file<P: AsRef<Path> + std::fmt::Display>(path: P) {
+    let data = match std::fs::read_to_string(path.as_ref()) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("Could not parse file: {} ({})", path, err);
+            return;
         }
-    }
-    println!("{} tokens", count);
-    */
+    };
 
-    Ok(())
+    match mrc_assembler::parser::parse_lines(data.as_str()) {
+        Ok(lines) => {
+            for line in lines.1.iter() {
+                println!("{}", line);
+            }
+        }
+        Err(err) => eprintln!("error: {:?}", err),
+    }
 }
 
 #[derive(StructOpt)]
@@ -40,6 +37,6 @@ fn main() {
 
     // We can unwrap here, because `min_values` is set to at least 1.
     for file in opts.sources {
-        parse_file(file).unwrap();
+        parse_file(file);
     }
 }

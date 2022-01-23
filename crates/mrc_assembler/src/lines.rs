@@ -138,6 +138,7 @@ pub enum Line<'s> {
     Label(&'s str),
     Instruction(Instruction<'s>),
     Const(Const<'s>),
+    Comment(&'s str),
 }
 
 impl<'s> std::fmt::Display for Line<'s> {
@@ -146,6 +147,7 @@ impl<'s> std::fmt::Display for Line<'s> {
             Line::Label(label) => write!(f, "{}:", label),
             Line::Instruction(instruction) => write!(f, "    {}", instruction),
             Line::Const(c) => write!(f, "{} equ {}", c.name, c.value),
+            Line::Comment(comment) => write!(f, "{}", comment),
         }
     }
 }
