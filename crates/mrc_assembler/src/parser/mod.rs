@@ -1,5 +1,5 @@
-pub(crate) mod lines;
 pub(crate) mod base;
+pub(crate) mod lines;
 
 pub use lines::parse_lines;
 

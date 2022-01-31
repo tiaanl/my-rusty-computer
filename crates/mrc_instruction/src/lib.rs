@@ -3,10 +3,13 @@
 
 mod address;
 mod instruction;
+mod operation;
 
 pub use address::Address;
 
 pub use instruction::{
     AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandType,
-    Operation, Register, Repeat, Segment, SizedRegister,
+    Register, Repeat, Segment, SizedRegister,
 };
+
+pub use operation::Operation;
