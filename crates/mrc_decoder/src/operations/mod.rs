@@ -1,7 +1,7 @@
 use crate::errors::Result;
 use crate::{Error, Modrm, TryFromByte};
 use mrc_instruction::{
-    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register, Segment,
+    Instruction, Operand, OperandSet, OperandSize, OperandKind, Operation, Register, Segment,
 };
 
 // x x x x x x d w | mod reg r/m
@@ -19,7 +19,7 @@ pub(crate) fn register_memory_and_register_to_either<It: Iterator<Item = u8>>(
     };
     let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
-    let destination = Operand(OperandType::Register(modrm.register), operand_size);
+    let destination = Operand(OperandKind::Register(modrm.register), operand_size);
     let source = Operand(modrm.register_or_memory.into(), operand_size);
 
     Ok(Instruction::new(
@@ -55,8 +55,8 @@ pub(crate) fn immediate_to_accumulator<It: Iterator<Item = u8>>(
     Ok(Instruction::new(
         operation,
         OperandSet::DestinationAndSource(
-            Operand(OperandType::Register(Register::AlAx), operand_size),
-            Operand(OperandType::Immediate(immediate), operand_size),
+            Operand(OperandKind::Register(Register::AlAx), operand_size),
+            Operand(OperandKind::Immediate(immediate), operand_size),
         ),
     ))
 }
@@ -71,7 +71,7 @@ pub(crate) fn push_pop_segment<It: Iterator<Item = u8>>(
             _ => Operation::POP,
         },
         OperandSet::Destination(Operand(
-            OperandType::Segment(Segment::try_from_byte(op_code >> 3 & 0b111)?),
+            OperandKind::Segment(Segment::try_from_byte(op_code >> 3 & 0b111)?),
             OperandSize::Word,
         )),
     ))

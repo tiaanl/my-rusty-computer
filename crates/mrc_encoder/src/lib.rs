@@ -1,5 +1,5 @@
 use mrc_instruction::{
-    Instruction, Operand, OperandSet, OperandSize, OperandType, Operation, Register,
+    Instruction, Operand, OperandSet, OperandSize, OperandKind, Operation, Register,
 };
 
 pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, bool> {
@@ -7,8 +7,8 @@ pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, bool> {
         Operation::ADD => match instruction.operands {
             // Immediate to Accumulator 0000010w data data if w e 1
             OperandSet::DestinationAndSource(
-                Operand(OperandType::Register(Register::AlAx), destination_operand_size),
-                Operand(OperandType::Immediate(value), source_operand_size),
+                Operand(OperandKind::Register(Register::AlAx), destination_operand_size),
+                Operand(OperandKind::Immediate(value), source_operand_size),
             ) if destination_operand_size == source_operand_size => {
                 let op_code = set_op_code_size_bit(0b00000100, destination_operand_size);
                 let mut bytes = vec![op_code];
@@ -23,7 +23,7 @@ pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, bool> {
             // Immediate to Register/Memory 1 0 0 0 0 0 s w mod 0 0 0 r/m data data if s: w e 01
             OperandSet::DestinationAndSource(
                 Operand(_, destination_operand_size),
-                Operand(OperandType::Immediate(value), source_operand_size),
+                Operand(OperandKind::Immediate(value), source_operand_size),
             ) if destination_operand_size == source_operand_size => {
                 let op_code = set_op_code_size_bit(0b10000000, destination_operand_size);
 
@@ -67,8 +67,8 @@ mod test {
         let result = encode_instruction(&Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand(OperandType::Register(Register::AlAx), OperandSize::Byte),
-                Operand(OperandType::Immediate(0x10), OperandSize::Byte),
+                Operand(OperandKind::Register(Register::AlAx), OperandSize::Byte),
+                Operand(OperandKind::Immediate(0x10), OperandSize::Byte),
             ),
         ));
         assert!(result.is_ok());
@@ -77,8 +77,8 @@ mod test {
         let result = encode_instruction(&Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
-                Operand(OperandType::Immediate(0x1020), OperandSize::Word),
+                Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
+                Operand(OperandKind::Immediate(0x1020), OperandSize::Word),
             ),
         ));
         assert!(result.is_ok());

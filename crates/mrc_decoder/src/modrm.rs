@@ -1,6 +1,6 @@
 use crate::errors::Result;
 use crate::{it_read_byte, it_read_word, Error, TryFromByte};
-use mrc_instruction::{AddressingMode, Displacement, OperandType, Register, Segment};
+use mrc_instruction::{AddressingMode, Displacement, OperandKind, Register, Segment};
 
 impl TryFromByte<Self> for AddressingMode {
     fn try_from_byte(byte: u8) -> Result<Self> {
@@ -55,24 +55,24 @@ impl RegisterOrMemory {
     }
 }
 
-impl From<RegisterOrMemory> for OperandType {
+impl From<RegisterOrMemory> for OperandKind {
     fn from(register_or_memory: RegisterOrMemory) -> Self {
         match register_or_memory {
-            RegisterOrMemory::Direct(offset) => OperandType::Direct(Segment::DS, offset),
+            RegisterOrMemory::Direct(offset) => OperandKind::Direct(Segment::DS, offset),
             RegisterOrMemory::Indirect(encoding) => {
-                OperandType::Indirect(Segment::DS, encoding, Displacement::None)
+                OperandKind::Indirect(Segment::DS, encoding, Displacement::None)
             }
-            RegisterOrMemory::DisplacementByte(encoding, displacement) => OperandType::Indirect(
+            RegisterOrMemory::DisplacementByte(encoding, displacement) => OperandKind::Indirect(
                 Segment::DS,
                 encoding,
                 Displacement::Byte(displacement as i8),
             ),
-            RegisterOrMemory::DisplacementWord(encoding, displacement) => OperandType::Indirect(
+            RegisterOrMemory::DisplacementWord(encoding, displacement) => OperandKind::Indirect(
                 Segment::DS,
                 encoding,
                 Displacement::Word(displacement as i16),
             ),
-            RegisterOrMemory::Register(encoding) => OperandType::Register(encoding),
+            RegisterOrMemory::Register(encoding) => OperandKind::Register(encoding),
         }
     }
 }

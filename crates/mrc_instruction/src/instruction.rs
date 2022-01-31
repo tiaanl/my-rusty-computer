@@ -1,121 +1,14 @@
-use crate::Operation;
+use crate::{Operation, Register, Segment, SizedRegister};
 use std::str::FromStr;
+
+pub trait SizedData {
+    fn size() -> Option<OperandSize>;
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum OperandSize {
     Byte,
     Word,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Register {
-    AlAx,
-    ClCx,
-    DlDx,
-    BlBx,
-    AhSp,
-    ChBp,
-    DhSi,
-    BhDi,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SizedRegister(pub Register, pub OperandSize);
-
-impl std::fmt::Display for SizedRegister {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Register::*;
-
-        match self.1 {
-            OperandSize::Byte => match self.0 {
-                AlAx => write!(f, "al"),
-                ClCx => write!(f, "cl"),
-                DlDx => write!(f, "dl"),
-                BlBx => write!(f, "bl"),
-                AhSp => write!(f, "ah"),
-                ChBp => write!(f, "ch"),
-                DhSi => write!(f, "dh"),
-                BhDi => write!(f, "bh"),
-            },
-
-            OperandSize::Word => match self.0 {
-                AlAx => write!(f, "ax"),
-                ClCx => write!(f, "cx"),
-                DlDx => write!(f, "dx"),
-                BlBx => write!(f, "bx"),
-                AhSp => write!(f, "sp"),
-                ChBp => write!(f, "bp"),
-                DhSi => write!(f, "si"),
-                BhDi => write!(f, "di"),
-            },
-        }
-    }
-}
-
-impl FromStr for SizedRegister {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        use OperandSize::*;
-        use Register::*;
-
-        match s.to_lowercase().as_str() {
-            "al" => Ok(Self(AlAx, Byte)),
-            "cl" => Ok(Self(ClCx, Byte)),
-            "dl" => Ok(Self(DlDx, Byte)),
-            "bl" => Ok(Self(BlBx, Byte)),
-            "ah" => Ok(Self(AhSp, Byte)),
-            "ch" => Ok(Self(ChBp, Byte)),
-            "dh" => Ok(Self(DhSi, Byte)),
-            "bh" => Ok(Self(BhDi, Byte)),
-
-            "ax" => Ok(Self(AlAx, Word)),
-            "cx" => Ok(Self(ClCx, Word)),
-            "dx" => Ok(Self(DlDx, Word)),
-            "bx" => Ok(Self(BlBx, Word)),
-            "sp" => Ok(Self(AhSp, Word)),
-            "bp" => Ok(Self(ChBp, Word)),
-            "si" => Ok(Self(DhSi, Word)),
-            "di" => Ok(Self(BhDi, Word)),
-
-            _ => Err(s.to_string()),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Segment {
-    ES,
-    CS,
-    SS,
-    DS,
-}
-
-impl std::fmt::Display for Segment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Segment::*;
-
-        match self {
-            ES => write!(f, "es"),
-            CS => write!(f, "cs"),
-            SS => write!(f, "ss"),
-            DS => write!(f, "ds"),
-        }
-    }
-}
-
-impl FromStr for Segment {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "es" => Ok(Segment::ES),
-            "cs" => Ok(Segment::CS),
-            "ss" => Ok(Segment::SS),
-            "ds" => Ok(Segment::DS),
-            _ => Err(s.to_string()),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -189,7 +82,7 @@ impl std::fmt::Display for Displacement {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum OperandType {
+pub enum OperandKind {
     Direct(Segment, u16),
     Indirect(Segment, AddressingMode, Displacement),
     Register(Register),
@@ -198,17 +91,17 @@ pub enum OperandType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Operand(pub OperandType, pub OperandSize);
+pub struct Operand(pub OperandKind, pub OperandSize);
 
 impl From<SizedRegister> for Operand {
     fn from(sized_register: SizedRegister) -> Self {
-        Self(OperandType::Register(sized_register.0), sized_register.1)
+        Self(OperandKind::Register(sized_register.0), sized_register.1)
     }
 }
 
 impl From<Segment> for Operand {
     fn from(segment: Segment) -> Self {
-        Self(OperandType::Segment(segment), OperandSize::Word)
+        Self(OperandKind::Segment(segment), OperandSize::Word)
     }
 }
 
@@ -226,7 +119,7 @@ impl std::fmt::Display for Operand {
         }
 
         match &self.0 {
-            OperandType::Direct(segment, displacement) => {
+            OperandKind::Direct(segment, displacement) => {
                 match self.1 {
                     OperandSize::Byte => write!(f, "byte ")?,
                     OperandSize::Word => write!(f, "word ")?,
@@ -234,7 +127,7 @@ impl std::fmt::Display for Operand {
                 print_segment_prefix!(segment);
                 write!(f, "[{:#06x}]", displacement)?;
             }
-            OperandType::Indirect(segment, encoding, displacement) => {
+            OperandKind::Indirect(segment, encoding, displacement) => {
                 match self.1 {
                     OperandSize::Byte => write!(f, "byte ")?,
                     OperandSize::Word => write!(f, "word ")?,
@@ -242,9 +135,9 @@ impl std::fmt::Display for Operand {
                 print_segment_prefix!(segment);
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
-            OperandType::Register(encoding) => write!(f, "{}", SizedRegister(*encoding, self.1))?,
-            OperandType::Segment(encoding) => write!(f, "{}", encoding)?,
-            OperandType::Immediate(value) => match &self.1 {
+            OperandKind::Register(encoding) => write!(f, "{}", SizedRegister(*encoding, self.1))?,
+            OperandKind::Segment(encoding) => write!(f, "{}", encoding)?,
+            OperandKind::Immediate(value) => match &self.1 {
                 OperandSize::Byte => write!(f, "{:#04X}", value)?,
                 OperandSize::Word => write!(f, "{:#06X}", value)?,
             },
@@ -293,9 +186,9 @@ pub enum Repeat {
 /// let i = Instruction::new(
 ///     Operation::MOV,
 ///     OperandSet::DestinationAndSource(
-///         Operand(OperandType::Register(Register::AlAx), OperandSize::Word),
+///         Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
 ///         Operand(
-///             OperandType::Indirect(Segment::ES, AddressingMode::BxSi, Displacement::Byte(8)),
+///             OperandKind::Indirect(Segment::ES, AddressingMode::BxSi, Displacement::Byte(8)),
 ///             OperandSize::Word,
 ///         ),
 ///     ),
