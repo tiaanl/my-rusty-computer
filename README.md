@@ -1,24 +1,13 @@
 # My Rusty Computer
-8086 emulator
+This project aims to emulate a 1980's era IBM PC-XT computer.  The biggest motivation is for education.  It explains to a developer how a computer works on a hardware level.
 
-# Modules
+## Modules
+The project consists of several modules (crates) that deals with specific parts of making the target computer operate.
 
-## instructions
-
-Contains a definition of an instruction for the 8086 architecture.
-
-## decoder
-
-Decodes bytes into an instruction.
-
-## disassembler
-
-Prints out assembly code for instructions.
-
-## Getting started
-
-### Tests
-```cargo test```
-
-### Run the demo
-```cargo run```
+- [assembler](crates/mrc_assembler)
+- [decoder](crates/mrc_decoder)
+- [dos](crates/mrc_dos)
+- [emulator](crates/mrc_emulator)
+- [encoder](crates/mrc_encoder)
+- [instruction](crates/mrc_instruction)
+- [screen](crates/mrc_screen)
