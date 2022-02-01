@@ -87,10 +87,12 @@ pub enum Operation {
     JNO,    // Jump on not overflow
     JNS,    // Jump on not sign
     LOOP,   // Loop CX times
-    LOOPZ,  // Loop while zero/equal (alias LOOPE)
-    LOOPNZ, // Loop while not zero/equal (alias LOOPNE)
+    LOOPE,  // Loop while zero/equal (alias LOOPZ)
+    LOOPNE, // Loop while not zero/equal (alias LOOPNZ)
     JCXZ,   // Jump on CX zero
     INT,    // Interrupt
+    INT1,   // Interrupt 1
+    INT3,   // Interrupt 3
     INTO,   // Interrupt on overflow
     IRET,   // Interrupt return
 
@@ -197,10 +199,12 @@ impl std::fmt::Display for Operation {
                 JNO => "jno",
                 JNS => "jns",
                 LOOP => "loop",
-                LOOPZ => "loopz",
-                LOOPNZ => "loopnz",
+                LOOPE => "loopz",
+                LOOPNE => "loopnz",
                 JCXZ => "jcxz",
                 INT => "int",
+                INT1 => "int1",
+                INT3 => "int3",
                 INTO => "into",
                 IRET => "iret",
                 CLC => "clc",
@@ -256,6 +260,8 @@ impl std::str::FromStr for Operation {
             "in" => IN,
             "inc" => INC,
             "int" => INT,
+            "int1" => INT1,
+            "int3" => INT3,
             "into" => INTO,
             "iret" => IRET,
             "ja" => JNBE,
@@ -295,10 +301,10 @@ impl std::str::FromStr for Operation {
             "lodsb" => LODSB,
             "lodsw" => LODSW,
             "loop" => LOOP,
-            "loope" => LOOPZ,
-            "loopne" => LOOPNZ,
-            "loopnz" => LOOPNZ,
-            "loopz" => LOOPZ,
+            "loope" => LOOPE,
+            "loopne" => LOOPNE,
+            "loopnz" => LOOPNE,
+            "loopz" => LOOPE,
             "mov" => MOV,
             "movsb" => MOVSB,
             "movsw" => MOVSW,
