@@ -4,7 +4,15 @@ mod decode;
 mod errors;
 mod modrm;
 
+#[cfg(feature = "alternate-decoder")]
+mod decode2;
+
+#[cfg(not(feature = "alternate-decoder"))]
 pub use decode::decode_instruction;
+
+#[cfg(feature = "alternate-decoder")]
+pub use decode2::decode_instruction;
+
 pub use errors::{Error, Result};
 pub use modrm::Modrm;
 use mrc_instruction::{OperandSize, Register, Segment};
