@@ -1,4 +1,5 @@
 use crate::{Operation, Register, Segment, SizedRegister};
+use std::fmt::Formatter;
 use std::str::FromStr;
 
 pub trait SizedData {
@@ -82,12 +83,27 @@ impl std::fmt::Display for Displacement {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Immediate {
+    Byte(u8),
+    Word(u16),
+}
+
+impl std::fmt::Display for Immediate {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Immediate::Byte(value) => write!(f, "{:#04X}", value),
+            Immediate::Word(value) => write!(f, "{:#06X}", value),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum OperandKind {
     Direct(Segment, u16),
     Indirect(Segment, AddressingMode, Displacement),
     Register(Register),
     Segment(Segment),
-    Immediate(u16),
+    Immediate(Immediate),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -137,10 +153,7 @@ impl std::fmt::Display for Operand {
             }
             OperandKind::Register(encoding) => write!(f, "{}", SizedRegister(*encoding, self.1))?,
             OperandKind::Segment(encoding) => write!(f, "{}", encoding)?,
-            OperandKind::Immediate(value) => match &self.1 {
-                OperandSize::Byte => write!(f, "{:#04X}", value)?,
-                OperandSize::Word => write!(f, "{:#06X}", value)?,
-            },
+            OperandKind::Immediate(value) => write!(f, "{}", value)?,
         }
         Ok(())
     }
@@ -224,6 +237,9 @@ impl Instruction {
 
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:<10} {}", self.operation, &self.operands)
+        match self.operands {
+            OperandSet::None => write!(f, "{:<10}", self.operation),
+            _ => write!(f, "{:<10} {}", self.operation, &self.operands),
+        }
     }
 }

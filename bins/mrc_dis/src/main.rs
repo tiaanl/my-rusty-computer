@@ -43,35 +43,6 @@ impl Display for SegmentAndOffset {
     }
 }
 
-struct Data {
-    data: Vec<u8>,
-    current_position: u32,
-}
-
-impl Data {
-    fn from_buffer(buffer: Vec<u8>) -> Self {
-        Self {
-            data: buffer,
-            current_position: 0,
-        }
-    }
-}
-
-impl Iterator for Data {
-    type Item = u8;
-
-    #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.data.get(self.current_position as usize) {
-            Some(byte) => {
-                self.current_position += 1;
-                Some(*byte)
-            }
-            None => None,
-        }
-    }
-}
-
 struct Section<'a> {
     addr: SegmentAndOffset,
     data: &'a [u8],
@@ -102,15 +73,16 @@ impl<'a> Iterator for SectionIterator<'a> {
     }
 }
 
+const BYTES_TO_PRINT: usize = 7;
+
 fn print_instruction(addr: SegmentAndOffset, bytes: &[u8], instruction: &Instruction) {
-    let bytes_to_print = 5;
     let mut b: String = bytes
         .iter()
-        .take(bytes_to_print)
+        .take(BYTES_TO_PRINT)
         .map(|b| format!("{:02X} ", b))
         .collect();
 
-    for _ in bytes.len()..5 {
+    for _ in bytes.len()..BYTES_TO_PRINT {
         b.push_str("   ");
     }
 
@@ -118,7 +90,11 @@ fn print_instruction(addr: SegmentAndOffset, bytes: &[u8], instruction: &Instruc
 }
 
 fn print_data_byte(addr: SegmentAndOffset, byte: u8) {
-    println!("{}  {:02X}               db {:02X}", addr, byte, byte);
+    print!("{}  {:02X}", addr, byte);
+    for _ in 0..BYTES_TO_PRINT {
+        print!("   ");
+    }
+    println!("db {:02X}", byte);
 }
 
 fn print_section(section: &Section) {
@@ -145,20 +121,23 @@ fn print_section(section: &Section) {
     }
 }
 
-fn load_data(binary: &str) -> Result<Data, std::io::Error> {
+fn load_data(binary: &str) -> Result<Vec<u8>, std::io::Error> {
     let mut file = std::fs::File::open(binary)?;
     let mut buffer: Vec<u8> = Vec::new();
     let _ = file.read_to_end(&mut buffer)?;
 
-    Ok(Data::from_buffer(buffer))
+    Ok(buffer)
 }
 
-fn disassemble(binary: &str, format: BinaryFormat) -> Result<(), std::io::Error> {
+fn disassemble(binary: &str, format: BinaryFormat, entry: u32) -> Result<(), std::io::Error> {
     let data = load_data(binary)?;
 
     match format {
         BinaryFormat::Raw => {
-            let section = Section::new(segment_and_offset(0, 0), data.data.as_slice());
+            let section = Section::new(
+                segment_and_offset(0, 0),
+                &data.as_slice()[(entry as usize)..],
+            );
 
             print_section(&section);
         }
@@ -194,6 +173,10 @@ struct Opt {
     /// The binary file to disassemble
     binary: String,
 
+    /// Starting point from the beginning of the file
+    #[structopt(short, long)]
+    entry: Option<u32>,
+
     /// The format of the binary file
     #[structopt(short, long)]
     format: Option<BinaryFormat>,
@@ -216,18 +199,22 @@ fn detect_format(path: &str) -> BinaryFormat {
 }
 
 #[cfg(test)]
-#[test]
-fn test_detect_format() {
-    let tests = [
-        ("test.com", BinaryFormat::Com),    // Com
-        ("program.exe", BinaryFormat::Exe), // Exe
-        ("test.rom", BinaryFormat::Raw),    // Raw
-        ("TEST.EXE", BinaryFormat::Exe),    // Case-sensitivity
-        ("rom", BinaryFormat::Raw),         // no extension
-    ];
+mod tests {
+    use super::*;
 
-    for (path, expected) in tests {
-        assert_eq!(detect_format(path), expected);
+    #[test]
+    fn test_detect_format() {
+        let tests = [
+            ("test.com", BinaryFormat::Com),    // Com
+            ("program.exe", BinaryFormat::Exe), // Exe
+            ("test.rom", BinaryFormat::Raw),    // Raw
+            ("TEST.EXE", BinaryFormat::Exe),    // Case-sensitivity
+            ("rom", BinaryFormat::Raw),         // no extension
+        ];
+
+        for (path, expected) in tests {
+            assert_eq!(detect_format(path), expected);
+        }
     }
 }
 
@@ -240,7 +227,7 @@ fn main() {
         detect_format(opts.binary.as_str())
     };
 
-    if let Err(err) = disassemble(opts.binary.as_str(), format) {
+    if let Err(err) = disassemble(opts.binary.as_str(), format, opts.entry.unwrap_or(0)) {
         eprintln!("{}", err);
     }
 }

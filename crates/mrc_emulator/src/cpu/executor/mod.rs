@@ -5,10 +5,7 @@ use crate::error::{Error, Result};
 use crate::Bus;
 use crate::Port;
 use crate::{segment_and_offset, Address};
-use mrc_instruction::{
-    AddressingMode, Displacement, Instruction, Operand, OperandSet, OperandSize, OperandKind,
-    Operation, Register, Repeat, Segment,
-};
+use mrc_instruction::{AddressingMode, Displacement, Immediate, Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation, Register, Repeat, Segment};
 
 pub mod operations;
 
@@ -80,6 +77,7 @@ fn indirect_address_for<D: Bus<Address>, I: Bus<Port>>(
 
 mod byte {
     use super::*;
+    use mrc_instruction::Immediate;
 
     pub fn bus_read<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
@@ -120,7 +118,10 @@ mod byte {
                 Ok(0)
             }
 
-            OperandKind::Immediate(value) => Ok(*value as u8),
+            OperandKind::Immediate(Immediate::Byte(value)) => Ok(*value as u8),
+            OperandKind::Immediate(Immediate::Word(_)) => {
+                unreachable!("word immediate in byte function not expected")
+            }
         }
     }
 
@@ -167,6 +168,7 @@ mod byte {
 
 mod word {
     use super::*;
+    use mrc_instruction::Immediate;
 
     pub fn bus_read<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
@@ -244,7 +246,10 @@ mod word {
 
             OperandKind::Register(register) => Ok(cpu.state.get_word_register_value(*register)),
             OperandKind::Segment(segment) => Ok(cpu.state.get_segment_value(*segment)),
-            OperandKind::Immediate(value) => Ok(*value),
+            OperandKind::Immediate(Immediate::Byte(_)) => {
+                unreachable!("Byte value in word function not expected!")
+            }
+            OperandKind::Immediate(Immediate::Word(value)) => Ok(*value),
         }
     }
 
@@ -453,8 +458,11 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::INT => match instruction.operands {
-            OperandSet::Destination(Operand(OperandKind::Immediate(index), OperandSize::Byte)) => {
-                log::info!("Calling interrupt {:02X}", index);
+            OperandSet::Destination(Operand(
+                OperandKind::Immediate(Immediate::Byte(index)),
+                OperandSize::Byte,
+            )) => {
+                log::info!("Calling interrupt {}", index);
 
                 push(cpu, cpu.state.flags.bits)?;
                 push(cpu, cpu.state.segments.cs)?;

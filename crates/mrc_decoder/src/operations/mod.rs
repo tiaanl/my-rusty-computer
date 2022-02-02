@@ -1,7 +1,8 @@
+use crate::decode::immediate_operand_from_it;
 use crate::errors::Result;
 use crate::{Error, Modrm, TryFromByte};
 use mrc_instruction::{
-    Instruction, Operand, OperandSet, OperandSize, OperandKind, Operation, Register, Segment,
+    Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation, Register, Segment,
 };
 
 // x x x x x x d w | mod reg r/m
@@ -39,24 +40,26 @@ pub(crate) fn immediate_to_accumulator<It: Iterator<Item = u8>>(
 ) -> Result<Instruction> {
     let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
 
-    let mut immediate = match it.next() {
-        Some(byte) => byte,
-        None => return Err(Error::CouldNotReadExtraBytes),
-    } as u16;
+    let immediate = immediate_operand_from_it(it, operand_size)?;
 
-    if operand_size == OperandSize::Word {
-        let next_byte = match it.next() {
-            Some(byte) => byte,
-            None => return Err(Error::CouldNotReadExtraBytes),
-        } as u16;
-        immediate |= next_byte << 8;
-    }
+    // let mut immediate = match it.next() {
+    //     Some(byte) => byte,
+    //     None => return Err(Error::CouldNotReadExtraBytes),
+    // } as u16;
+    //
+    // if operand_size == OperandSize::Word {
+    //     let next_byte = match it.next() {
+    //         Some(byte) => byte,
+    //         None => return Err(Error::CouldNotReadExtraBytes),
+    //     } as u16;
+    //     immediate |= next_byte << 8;
+    // }
 
     Ok(Instruction::new(
         operation,
         OperandSet::DestinationAndSource(
             Operand(OperandKind::Register(Register::AlAx), operand_size),
-            Operand(OperandKind::Immediate(immediate), operand_size),
+            immediate,
         ),
     ))
 }
