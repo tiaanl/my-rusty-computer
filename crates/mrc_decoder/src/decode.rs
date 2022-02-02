@@ -77,8 +77,8 @@ fn jump_operation_from_low_bits(bits: u8) -> Operation {
     }
 }
 
-pub fn immediate_operand_from_it<It: Iterator<Item = u8>>(
-    it: &mut It,
+pub fn immediate_operand_from_it(
+    it: &mut impl Iterator<Item = u8>,
     operand_size: OperandSize,
 ) -> Result<Operand> {
     match operand_size {
@@ -93,18 +93,18 @@ pub fn immediate_operand_from_it<It: Iterator<Item = u8>>(
     }
 }
 
-pub fn displacement_byte_from_it<It: Iterator<Item = u8>>(it: &mut It) -> Result<OperandSet> {
+pub fn displacement_byte_from_it(it: &mut impl Iterator<Item = u8>) -> Result<OperandSet> {
     let displacement = it_read_byte(it)? as i8;
     Ok(OperandSet::Displacement(Displacement::Byte(displacement)))
 }
 
-pub fn displacement_word_from_it<It: Iterator<Item = u8>>(it: &mut It) -> Result<OperandSet> {
+pub fn displacement_word_from_it(it: &mut impl Iterator<Item = u8>) -> Result<OperandSet> {
     let displacement = it_read_word(it)? as i16;
     Ok(OperandSet::Displacement(Displacement::Word(displacement)))
 }
 
 /// Takes a byte slice and tries to convert it into an [Instruction].
-pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> Result<Instruction> {
+pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instruction> {
     let op_code = it_read_byte(it)?;
 
     match op_code {

@@ -5,7 +5,10 @@ use crate::error::{Error, Result};
 use crate::Bus;
 use crate::Port;
 use crate::{segment_and_offset, Address};
-use mrc_instruction::{AddressingMode, Displacement, Immediate, Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation, Register, Repeat, Segment};
+use mrc_instruction::{
+    AddressingMode, Displacement, Immediate, Instruction, Operand, OperandKind, OperandSet,
+    OperandSize, Operation, Register, Repeat, Segment,
+};
 
 pub mod operations;
 

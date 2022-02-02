@@ -1,10 +1,15 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use crate::decode::{
+    displacement_byte_from_it, displacement_word_from_it, immediate_operand_from_it,
+};
+use crate::{it_read_byte, it_read_word, Error, Modrm, TryFromByte};
 use mrc_instruction::data::{OperandType, OperationMap};
-use mrc_instruction::{Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation, Register, Repeat, Segment};
-use crate::{Error, it_read_byte, it_read_word, Modrm, TryFromByte};
-use crate::decode::{displacement_byte_from_it, displacement_word_from_it, immediate_operand_from_it};
+use mrc_instruction::{
+    Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation, Register, Repeat,
+    Segment,
+};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 struct DecodeMap {
@@ -58,7 +63,7 @@ fn is_destination_and_source_from_mod_rm(destination: OperandType, source: Opera
     )
 }
 
-pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> crate::Result<Instruction> {
+pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<Instruction> {
     let op_code = it_read_byte(it)?;
 
     if matches!(op_code, 0x26 | 0x2E | 0x36 | 0x3E) {
@@ -476,46 +481,46 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> crate::Result
             }
 
             (OperandType::Reg8, cl_or_cx)
-            if cl_or_cx == OperandType::CL || cl_or_cx == OperandType::CX =>
-                {
-                    let modrm_byte = it.next().map_or(Err(Error::CouldNotReadExtraBytes), Ok)?;
-                    let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+                if cl_or_cx == OperandType::CL || cl_or_cx == OperandType::CX =>
+            {
+                let modrm_byte = it.next().map_or(Err(Error::CouldNotReadExtraBytes), Ok)?;
+                let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
-                    let operand_size = match cl_or_cx {
-                        OperandType::CL => OperandSize::Byte,
-                        OperandType::CX => OperandSize::Word,
-                        _ => unreachable!(),
-                    };
+                let operand_size = match cl_or_cx {
+                    OperandType::CL => OperandSize::Byte,
+                    OperandType::CX => OperandSize::Word,
+                    _ => unreachable!(),
+                };
 
-                    Ok(Instruction::new(
-                        decode_map.operation(op_code, Some(modrm_byte)),
-                        OperandSet::DestinationAndSource(
-                            Operand(modrm.register_or_memory.into(), OperandSize::Byte),
-                            Operand(OperandKind::Register(Register::ClCx), operand_size),
-                        ),
-                    ))
-                }
+                Ok(Instruction::new(
+                    decode_map.operation(op_code, Some(modrm_byte)),
+                    OperandSet::DestinationAndSource(
+                        Operand(modrm.register_or_memory.into(), OperandSize::Byte),
+                        Operand(OperandKind::Register(Register::ClCx), operand_size),
+                    ),
+                ))
+            }
 
             (OperandType::Reg16, cl_or_cx)
-            if cl_or_cx == OperandType::CL || cl_or_cx == OperandType::CX =>
-                {
-                    let modrm_byte = it.next().map_or(Err(Error::CouldNotReadExtraBytes), Ok)?;
-                    let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+                if cl_or_cx == OperandType::CL || cl_or_cx == OperandType::CX =>
+            {
+                let modrm_byte = it.next().map_or(Err(Error::CouldNotReadExtraBytes), Ok)?;
+                let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
-                    let operand_size = match cl_or_cx {
-                        OperandType::CL => OperandSize::Byte,
-                        OperandType::CX => OperandSize::Word,
-                        _ => unreachable!(),
-                    };
+                let operand_size = match cl_or_cx {
+                    OperandType::CL => OperandSize::Byte,
+                    OperandType::CX => OperandSize::Word,
+                    _ => unreachable!(),
+                };
 
-                    Ok(Instruction::new(
-                        decode_map.operation(op_code, Some(modrm_byte)),
-                        OperandSet::DestinationAndSource(
-                            Operand(modrm.register_or_memory.into(), OperandSize::Word),
-                            Operand(OperandKind::Register(Register::ClCx), operand_size),
-                        ),
-                    ))
-                }
+                Ok(Instruction::new(
+                    decode_map.operation(op_code, Some(modrm_byte)),
+                    OperandSet::DestinationAndSource(
+                        Operand(modrm.register_or_memory.into(), OperandSize::Word),
+                        Operand(OperandKind::Register(Register::ClCx), operand_size),
+                    ),
+                ))
+            }
 
             (reg, OperandType::None) if reg == OperandType::Reg8 || reg == OperandType::Reg16 => {
                 let modrm_byte = it.next().map_or(Err(Error::CouldNotReadExtraBytes), Ok)?;
@@ -535,23 +540,23 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> crate::Result
             }
 
             (al_or_ax, OperandType::DX)
-            if al_or_ax == OperandType::AL || al_or_ax == OperandType::AX =>
-                {
-                    Ok(Instruction::new(
-                        decode_map.operation(op_code, None),
-                        OperandSet::DestinationAndSource(
-                            Operand(
-                                OperandKind::Register(Register::AlAx),
-                                match al_or_ax {
-                                    OperandType::AL => OperandSize::Byte,
-                                    OperandType::AX => OperandSize::Word,
-                                    _ => unreachable!(),
-                                },
-                            ),
-                            Operand(OperandKind::Register(Register::DlDx), OperandSize::Word),
+                if al_or_ax == OperandType::AL || al_or_ax == OperandType::AX =>
+            {
+                Ok(Instruction::new(
+                    decode_map.operation(op_code, None),
+                    OperandSet::DestinationAndSource(
+                        Operand(
+                            OperandKind::Register(Register::AlAx),
+                            match al_or_ax {
+                                OperandType::AL => OperandSize::Byte,
+                                OperandType::AX => OperandSize::Word,
+                                _ => unreachable!(),
+                            },
                         ),
-                    ))
-                }
+                        Operand(OperandKind::Register(Register::DlDx), OperandSize::Word),
+                    ),
+                ))
+            }
 
             (OperandType::DX, al_or_ax) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
@@ -577,4 +582,3 @@ pub fn decode_instruction<It: Iterator<Item = u8>>(it: &mut It) -> crate::Result
         panic!("Invalid op_code");
     }
 }
-

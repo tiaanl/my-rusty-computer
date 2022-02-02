@@ -6,10 +6,10 @@ use mrc_instruction::{
 };
 
 // x x x x x x d w | mod reg r/m
-pub(crate) fn register_memory_and_register_to_either<It: Iterator<Item = u8>>(
+pub(crate) fn register_memory_and_register_to_either(
     operation: Operation,
     op_code: u8,
-    it: &mut It,
+    it: &mut impl Iterator<Item = u8>,
 ) -> Result<Instruction> {
     let direction = (op_code >> 1) & 1;
     let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
@@ -33,27 +33,14 @@ pub(crate) fn register_memory_and_register_to_either<It: Iterator<Item = u8>>(
 }
 
 // x x x x x x x w | data | data if w = 1
-pub(crate) fn immediate_to_accumulator<It: Iterator<Item = u8>>(
+pub(crate) fn immediate_to_accumulator(
     operation: Operation,
     op_code: u8,
-    it: &mut It,
+    it: &mut impl Iterator<Item = u8>,
 ) -> Result<Instruction> {
     let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
 
     let immediate = immediate_operand_from_it(it, operand_size)?;
-
-    // let mut immediate = match it.next() {
-    //     Some(byte) => byte,
-    //     None => return Err(Error::CouldNotReadExtraBytes),
-    // } as u16;
-    //
-    // if operand_size == OperandSize::Word {
-    //     let next_byte = match it.next() {
-    //         Some(byte) => byte,
-    //         None => return Err(Error::CouldNotReadExtraBytes),
-    //     } as u16;
-    //     immediate |= next_byte << 8;
-    // }
 
     Ok(Instruction::new(
         operation,
@@ -64,9 +51,9 @@ pub(crate) fn immediate_to_accumulator<It: Iterator<Item = u8>>(
     ))
 }
 
-pub(crate) fn push_pop_segment<It: Iterator<Item = u8>>(
+pub(crate) fn push_pop_segment(
     op_code: u8,
-    _: &mut It,
+    _: &mut impl Iterator<Item = u8>,
 ) -> Result<Instruction> {
     Ok(Instruction::new(
         match op_code & 1 {

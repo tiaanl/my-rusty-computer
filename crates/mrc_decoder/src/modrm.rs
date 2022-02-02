@@ -30,7 +30,7 @@ pub enum RegisterOrMemory {
 }
 
 impl RegisterOrMemory {
-    pub fn try_from_modrm<It: Iterator<Item = u8>>(mod_rm_byte: u8, it: &mut It) -> Result<Self> {
+    pub fn try_from_modrm(mod_rm_byte: u8, it: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte & 0b111;
 
@@ -121,7 +121,7 @@ impl Modrm {
         }
     }
 
-    pub fn try_from_byte<It: Iterator<Item = u8>>(mod_rm_byte: u8, it: &mut It) -> Result<Self> {
+    pub fn try_from_byte(mod_rm_byte: u8, it: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let register = Register::try_from_byte(mod_rm_byte >> 3 & 0b111)?;
 
         let register_or_memory = RegisterOrMemory::try_from_modrm(mod_rm_byte, it)?;
@@ -132,7 +132,7 @@ impl Modrm {
         })
     }
 
-    pub fn try_from_iter<It: Iterator<Item = u8>>(it: &mut It) -> Result<Self> {
+    pub fn try_from_iter(it: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let modrm_byte = match it.next() {
             Some(byte) => byte,
             None => return Err(Error::CouldNotReadExtraBytes),

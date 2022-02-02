@@ -78,14 +78,13 @@ impl ByteReader for &[u8] {
     }
 }
 
-fn it_read_byte<It: Iterator<Item = u8>>(it: &mut It) -> Result<u8> {
-    match it.next() {
-        Some(byte) => Ok(byte),
-        None => Err(Error::CouldNotReadExtraBytes),
-    }
+#[inline]
+fn it_read_byte(it: &mut impl Iterator<Item = u8>) -> Result<u8> {
+    it.next().map_or(Err(Error::CouldNotReadExtraBytes), Ok)
 }
 
-fn it_read_word<It: Iterator<Item = u8>>(it: &mut It) -> Result<u16> {
+#[inline]
+fn it_read_word(it: &mut impl Iterator<Item = u8>) -> Result<u16> {
     let first = it_read_byte(it)?;
     let second = it_read_byte(it)?;
     Ok(u16::from_le_bytes([first, second]))
