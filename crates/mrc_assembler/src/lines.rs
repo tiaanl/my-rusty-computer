@@ -11,18 +11,18 @@
 //!   CAP   type of token
 //!
 //! <program>       ::= <instruction> {, <instruction>}
-//! <instruction>   ::= <operation>, <operand_set>
-//! <operand_set>   ::= {<operand>, {<operand>}}
+//! <instruction>   ::= <operation>, {<operand_set>}
+//! <operand_set>   ::= <operand>, {<operand>}
 //! <operand>       ::= <immediate> | <register> | <segment> | <direct> | <indirect>
 //! <immediate>     ::= NUM
 //! <register>      ::= al, bl, cl, dl, ah, bh, ch, dh, ax, bx, cx, dx, bp, sp, si, di
 //! <segment>       ::= es, cs, ss, ds
-//! <direct>        ::= IDENT | NUM
+//! <direct>        ::= "[" IDENT | NUM "]"
 //! <indirect>      ::= "[" <addressing-mode> "]"
 //! ```
 
 use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ValueOrLabel<'s> {
@@ -30,7 +30,7 @@ pub enum ValueOrLabel<'s> {
     Label(&'s str),
 }
 
-impl<'s> std::fmt::Display for ValueOrLabel<'s> {
+impl<'s> Display for ValueOrLabel<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ValueOrLabel::Value(value) => write!(f, "{:#6x}", value),
@@ -48,7 +48,7 @@ pub enum Operand<'s> {
     Immediate(ValueOrLabel<'s>),
 }
 
-impl<'s> std::fmt::Display for Operand<'s> {
+impl<'s> Display for Operand<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Operand::Indirect(addressing_mode, operand_size, segment_override) => {
@@ -93,7 +93,7 @@ pub enum OperandSet<'s> {
     None,
 }
 
-impl<'s> std::fmt::Display for OperandSet<'s> {
+impl<'s> Display for OperandSet<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             OperandSet::DestinationAndSource(destination, source) => {
@@ -111,7 +111,7 @@ pub struct Instruction<'s> {
     operand_set: OperandSet<'s>,
 }
 
-impl<'s> std::fmt::Display for Instruction<'s> {
+impl<'s> Display for Instruction<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} {}", self.operation, self.operand_set)
     }
@@ -141,7 +141,7 @@ pub enum Line<'s> {
     Comment(&'s str),
 }
 
-impl<'s> std::fmt::Display for Line<'s> {
+impl<'s> Display for Line<'s> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Line::Label(label) => write!(f, "{}:", label),

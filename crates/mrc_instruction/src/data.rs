@@ -45,12 +45,6 @@ pub enum OperandType {
     // Jump Displacement
     Displacement8,
     Displacement16,
-
-    // Things with special meanings
-    Special1,
-
-    // Don't know
-    Mp,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -59,6 +53,7 @@ pub enum OperationMap {
     ModrmReg(&'static [Operation]),
 }
 
+#[derive(Debug)]
 pub struct InstructionData(pub u8, pub OperationMap, pub OperandType, pub OperandType);
 
 macro_rules! op {
@@ -194,13 +189,13 @@ pub const INSTRUCTION_DATA: &[InstructionData] = &[
     op!(
         0x80,
         ModrmReg(&[ADD, OR, ADC, SBB, AND, SUB, XOR, CMP]),
-        Reg8,
+        RegMem8,
         Imm8
     ),
     op!(
         0x81,
         ModrmReg(&[ADD, OR, ADC, SBB, AND, SUB, XOR, CMP]),
-        Reg16,
+        RegMem16,
         Imm16
     ),
     // op!(0x82, NOP, None, None),
