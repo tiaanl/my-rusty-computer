@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 use crate::Address;
-use mrc_decoder::Error as DecodeError;
+use mrc_decoder::DecodeError;
 
 #[derive(Debug)]
 pub enum Error {

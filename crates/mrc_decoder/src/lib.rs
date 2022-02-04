@@ -13,7 +13,7 @@ pub use decode::decode_instruction;
 #[cfg(feature = "alternate-decoder")]
 pub use decode2::decode_instruction;
 
-pub use errors::{Error, Result};
+pub use errors::{DecodeError, Result};
 pub use modrm::Modrm;
 use mrc_instruction::{OperandSize, Register, Segment};
 
@@ -38,7 +38,7 @@ impl TryFromByte<Register> for Register {
             0b101 => Ok(Register::ChBp),
             0b110 => Ok(Register::DhSi),
             0b111 => Ok(Register::BhDi),
-            _ => Err(Error::InvalidRegisterEncoding(byte)),
+            _ => Err(DecodeError::InvalidRegisterEncoding(byte)),
         }
     }
 }
@@ -50,7 +50,7 @@ impl TryFromByte<Self> for Segment {
             0b01 => Ok(Self::CS),
             0b10 => Ok(Self::SS),
             0b11 => Ok(Self::DS),
-            _ => Err(Error::InvalidSegmentEncoding(byte)),
+            _ => Err(DecodeError::InvalidSegmentEncoding(byte)),
         }
     }
 }
@@ -62,25 +62,21 @@ pub trait ByteReader {
 
 impl ByteReader for &[u8] {
     fn read_u8(&self) -> Result<u8> {
-        if !self.is_empty() {
-            Ok(self[0])
-        } else {
-            Err(Error::CouldNotReadExtraBytes)
-        }
+        self.get(0)
+            .map_or(Err(DecodeError::CouldNotReadExtraBytes), |b| Ok(*b))
     }
 
     fn read_u16(&self) -> Result<u16> {
-        if self.len() >= 2 {
-            Ok(((self[1] as u16) << 8) + self[0] as u16)
-        } else {
-            Err(Error::CouldNotReadExtraBytes)
-        }
+        let low = self.read_u8()?;
+        let high = self.read_u8()?;
+        Ok(u16::from_le_bytes([low, high]))
     }
 }
 
 #[inline]
 fn it_read_byte(it: &mut impl Iterator<Item = u8>) -> Result<u8> {
-    it.next().map_or(Err(Error::CouldNotReadExtraBytes), Ok)
+    it.next()
+        .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)
 }
 
 #[inline]
@@ -95,7 +91,7 @@ impl TryFromByte<Self> for OperandSize {
         match byte {
             0b0 => Ok(OperandSize::Byte),
             0b1 => Ok(OperandSize::Word),
-            _ => Err(Error::InvalidDataSizeEncoding(byte)),
+            _ => Err(DecodeError::InvalidDataSizeEncoding(byte)),
         }
     }
 }

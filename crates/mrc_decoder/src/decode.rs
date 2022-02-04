@@ -1,6 +1,6 @@
 use crate::errors::Result;
-use crate::modrm::RegisterOrMemory;
-use crate::{it_read_byte, it_read_word, operations, Error, Modrm, TryFromByte};
+use crate::operations::Direction;
+use crate::{it_read_byte, it_read_word, operations, DecodeError, Modrm, TryFromByte};
 use mrc_instruction::{
     Displacement, Immediate, Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation,
     Register, Repeat, Segment,
@@ -21,22 +21,6 @@ fn group1_operation(op_code: u8) -> Operation {
     }
 }
 
-fn group80_operation(bits: u8) -> Operation {
-    assert!(bits <= 0b111);
-
-    match bits {
-        0b000 => Operation::ADD,
-        0b001 => Operation::OR,
-        0b010 => Operation::ADC,
-        0b011 => Operation::SBB,
-        0b100 => Operation::AND,
-        0b101 => Operation::SUB,
-        0b110 => Operation::XOR,
-        0b111 => Operation::CMP,
-        _ => unreachable!(),
-    }
-}
-
 fn group2_operation(low_bits: u8) -> Operation {
     assert!(low_bits <= 0b111);
 
@@ -49,30 +33,24 @@ fn group2_operation(low_bits: u8) -> Operation {
         0b101 => Operation::SHR,
         0b110 => Operation::SHL,
         0b111 => Operation::SAR,
+
         _ => unreachable!(),
     }
 }
 
-fn jump_operation_from_low_bits(bits: u8) -> Operation {
-    assert!(bits <= 0b1111);
+fn group80_operation(bits: u8) -> Operation {
+    assert!(bits <= 0b111);
 
     match bits {
-        0b0000 => /*0x0 =>*/ Operation::JO,
-        0b0001 => /*0x1 =>*/ Operation::JNO,
-        0b0010 => /*0x2 =>*/ Operation::JB,
-        0b0011 => /*0x3 =>*/ Operation::JNB,
-        0b0100 => /*0x4 =>*/ Operation::JE,
-        0b0101 => /*0x5 =>*/ Operation::JNE,
-        0b0110 => /*0x6 =>*/ Operation::JBE,
-        0b0111 => /*0x7 =>*/ Operation::JNBE,
-        0b1000 => /*0x8 =>*/ Operation::JS,
-        0b1001 => /*0x9 =>*/ Operation::JNS,
-        0b1010 => /*0xA =>*/ Operation::JP,
-        0b1011 => /*0xB =>*/ Operation::JNP,
-        0b1100 => /*0xC =>*/ Operation::JL,
-        0b1101 => /*0xD =>*/ Operation::JNL,
-        0b1110 => /*0xE =>*/ Operation::JLE,
-        0b1111 => /*0xF =>*/ Operation::JNLE,
+        0b000 => Operation::ADD,
+        0b001 => Operation::OR,
+        0b010 => Operation::ADC,
+        0b011 => Operation::SBB,
+        0b100 => Operation::AND,
+        0b101 => Operation::SUB,
+        0b110 => Operation::XOR,
+        0b111 => Operation::CMP,
+
         _ => unreachable!(),
     }
 }
@@ -103,29 +81,49 @@ pub fn displacement_word_from_it(it: &mut impl Iterator<Item = u8>) -> Result<Op
     Ok(OperandSet::Displacement(Displacement::Word(displacement)))
 }
 
+#[inline]
+pub(crate) fn modrm_and_byte(it: &mut impl Iterator<Item = u8>) -> Result<(Modrm, u8)> {
+    let byte = match it.next() {
+        Some(byte) => byte,
+        None => return Err(DecodeError::CouldNotReadExtraBytes),
+    };
+    let modrm = Modrm::try_from_byte(byte, it)?;
+
+    Ok((modrm, byte))
+}
+
 /// Takes a byte slice and tries to convert it into an [Instruction].
 pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instruction> {
     let op_code = it_read_byte(it)?;
 
     match op_code {
-        0x04 | 0x05 | 0x0C | 0x0D | 0x14 | 0x15 | 0x1C | 0x1D | 0x24 | 0x25 | 0x2C | 0x2D
-        | 0x34 | 0x35 | 0x3C | 0x3D => {
-            operations::immediate_to_accumulator(group1_operation(op_code), op_code, it)
-        }
-
         0x00 | 0x01 | 0x02 | 0x03 | 0x08 | 0x09 | 0x0A | 0x0B | 0x10 | 0x11 | 0x12 | 0x13
         | 0x18 | 0x19 | 0x1A | 0x1B | 0x20 | 0x21 | 0x22 | 0x23 | 0x28 | 0x29 | 0x2A | 0x2B
         | 0x30 | 0x31 | 0x32 | 0x33 | 0x38 | 0x39 | 0x3A | 0x3B => {
-            operations::register_memory_and_register_to_either(
+            operations::register_or_memory_and_register(
                 group1_operation(op_code),
+                Direction::Detect,
+                None,
                 op_code,
                 it,
             )
         }
 
-        0x06 | 0x07 | 0x0E | 0x0F | 0x16 | 0x17 | 0x1E | 0x1F => {
-            operations::push_pop_segment(op_code, it)
+        0x04 | 0x05 | 0x0C | 0x0D | 0x14 | 0x15 | 0x1C | 0x1D | 0x24 | 0x25 | 0x2C | 0x2D
+        | 0x34 | 0x35 | 0x3C | 0x3D => {
+            operations::immediate_to_accumulator(group1_operation(op_code), op_code, it)
         }
+
+        0x06 | 0x07 | 0x0E | 0x0F | 0x16 | 0x17 | 0x1E | 0x1F => Ok(Instruction::new(
+            match op_code & 1 {
+                0 => Operation::PUSH,
+                _ => Operation::POP,
+            },
+            OperandSet::Destination(Operand(
+                OperandKind::Segment(Segment::try_from_byte(op_code >> 3 & 0b111)?),
+                OperandSize::Word,
+            )),
+        )),
 
         0x26 | 0x2E | 0x36 | 0x3E => {
             fn override_segment(operand: &mut Operand, segment: Segment) {
@@ -159,32 +157,25 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             }
         }
 
-        0x27 | 0x2F | 0x37 | 0x3F => Ok(Instruction::new(
-            match (op_code >> 3) & 0b11 {
-                0b00 => Operation::DAA,
-                0b01 => Operation::DAS,
-                0b10 => Operation::AAA,
-                0b11 => Operation::AAS,
-                _ => unreachable!(),
+        0x27 => Ok(Instruction::new(Operation::DAA, OperandSet::None)),
+
+        0x2F => Ok(Instruction::new(Operation::DAS, OperandSet::None)),
+
+        0x37 => Ok(Instruction::new(Operation::AAA, OperandSet::None)),
+
+        0x3F => Ok(Instruction::new(Operation::AAS, OperandSet::None)),
+
+        0x40..=0x4F => Ok(Instruction::new(
+            if (op_code >> 3) & 0b1 == 0 {
+                Operation::INC
+            } else {
+                Operation::DEC
             },
-            OperandSet::None,
+            OperandSet::Destination(Operand(
+                OperandKind::Register(Register::try_from_byte(op_code & 0b111)?),
+                OperandSize::Word,
+            )),
         )),
-
-        0x40..=0x4F => {
-            let register = Register::try_from_byte(op_code & 0b111)?;
-
-            Ok(Instruction::new(
-                if (op_code >> 3) & 0b1 == 0 {
-                    Operation::INC
-                } else {
-                    Operation::DEC
-                },
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(register),
-                    OperandSize::Word,
-                )),
-            ))
-        }
 
         0x50..=0x5F => Ok(Instruction::new(
             if (op_code >> 3) & 0b1 == 0 {
@@ -199,29 +190,34 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
         )),
 
         0x70..=0x7F => Ok(Instruction::new(
-            jump_operation_from_low_bits(op_code & 0b1111),
+            match op_code & 0b1111 {
+                0b0000 => /*0x0 =>*/ Operation::JO,
+                0b0001 => /*0x1 =>*/ Operation::JNO,
+                0b0010 => /*0x2 =>*/ Operation::JB,
+                0b0011 => /*0x3 =>*/ Operation::JNB,
+                0b0100 => /*0x4 =>*/ Operation::JE,
+                0b0101 => /*0x5 =>*/ Operation::JNE,
+                0b0110 => /*0x6 =>*/ Operation::JBE,
+                0b0111 => /*0x7 =>*/ Operation::JNBE,
+                0b1000 => /*0x8 =>*/ Operation::JS,
+                0b1001 => /*0x9 =>*/ Operation::JNS,
+                0b1010 => /*0xA =>*/ Operation::JP,
+                0b1011 => /*0xB =>*/ Operation::JNP,
+                0b1100 => /*0xC =>*/ Operation::JL,
+                0b1101 => /*0xD =>*/ Operation::JNL,
+                0b1110 => /*0xE =>*/ Operation::JLE,
+                0b1111 => /*0xF =>*/ Operation::JNLE,
+                _ => unreachable!(),
+            },
             displacement_byte_from_it(it)?,
         )),
 
-        0x80..=0x83 => {
-            let s = (op_code >> 1) & 1 == 1;
-            let w = OperandSize::try_from_byte(op_code & 0b1)?;
-            let modrm_byte = match it.next() {
-                Some(byte) => byte,
-                None => return Err(Error::CouldNotReadExtraBytes),
-            };
-            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+        0x80..=0x82 => {
+            let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
+            let (modrm, modrm_byte) = modrm_and_byte(it)?;
 
-            let destination = Operand(modrm.register_or_memory.into(), w);
-            let source = if s && w == OperandSize::Word {
-                // TODO: Sign extended byte into word.
-                Operand(
-                    OperandKind::Immediate(Immediate::Byte(it_read_byte(it)?)),
-                    OperandSize::Byte,
-                )
-            } else {
-                immediate_operand_from_it(it, w)?
-            };
+            let destination = Operand(modrm.register_or_memory.into(), operand_size);
+            let source = immediate_operand_from_it(it, operand_size)?;
 
             Ok(Instruction::new(
                 group80_operation((modrm_byte >> 3) & 0b111),
@@ -229,89 +225,60 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             ))
         }
 
-        0x84 | 0x85 => {
+        0x83 => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
-            let modrm = Modrm::try_from_iter(it)?;
-
-            Ok(Instruction::new(
-                Operation::TEST,
-                OperandSet::DestinationAndSource(
-                    Operand(modrm.register_or_memory.into(), operand_size),
-                    Operand(OperandKind::Register(modrm.register), operand_size),
-                ),
-            ))
-        }
-
-        0x86 | 0x87 => {
-            let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
-            let modrm = Modrm::try_from_iter(it)?;
-
-            Ok(Instruction::new(
-                Operation::XCHG,
-                OperandSet::DestinationAndSource(
-                    Operand(modrm.register_or_memory.into(), operand_size),
-                    Operand(OperandKind::Register(modrm.register), operand_size),
-                ),
-            ))
-        }
-
-        0x88..=0x8B => {
-            let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
-            let direction = op_code >> 1 & 0b1;
-            let modrm = Modrm::try_from_iter(it)?;
+            let (modrm, modrm_byte) = modrm_and_byte(it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
-            let source = Operand(OperandKind::Register(modrm.register), operand_size);
+            // TODO: Sign extended byte into word.
+            let source = immediate_operand_from_it(it, OperandSize::Byte)?;
 
             Ok(Instruction::new(
-                Operation::MOV,
-                match direction {
-                    0 => OperandSet::DestinationAndSource(destination, source),
-                    _ => OperandSet::DestinationAndSource(source, destination),
-                },
+                group80_operation((modrm_byte >> 3) & 0b111),
+                OperandSet::DestinationAndSource(destination, source),
             ))
         }
 
-        0x8C | 0x8E => {
-            let operand_size = OperandSize::Word;
-            let direction = (op_code >> 1) & 0b1;
-            let modrm_byte = it_read_byte(it)?;
-            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+        0x84 | 0x85 => operations::register_or_memory_and_register(
+            Operation::TEST,
+            Direction::Detect,
+            None,
+            op_code,
+            it,
+        ),
 
-            let destination = Operand(modrm.register_or_memory.into(), operand_size);
-            let source = Operand(
-                OperandKind::Segment(Segment::try_from_byte((modrm_byte >> 3) & 0b111)?),
-                operand_size,
-            );
+        0x86 | 0x87 => operations::register_or_memory_and_register(
+            Operation::XCHG,
+            Direction::RegMemFirst,
+            None,
+            op_code,
+            it,
+        ),
 
-            Ok(Instruction::new(
-                Operation::MOV,
-                match direction {
-                    0 => OperandSet::DestinationAndSource(destination, source),
-                    _ => OperandSet::DestinationAndSource(source, destination),
-                },
-            ))
-        }
+        0x88..=0x8B => operations::register_or_memory_and_register(
+            Operation::MOV,
+            Direction::Detect,
+            None,
+            op_code,
+            it,
+        ),
 
-        0x8D => {
-            let operand_size = OperandSize::Word;
-            let modrm = Modrm::try_from_iter(it)?;
+        0x8C | 0x8E => operations::register_or_memory_and_segment(Operation::MOV, op_code, it),
 
-            Ok(Instruction::new(
-                Operation::LEA,
-                OperandSet::DestinationAndSource(
-                    Operand(OperandKind::Register(modrm.register), operand_size),
-                    Operand(modrm.register_or_memory.into(), operand_size),
-                ),
-            ))
-        }
+        0x8D => operations::register_or_memory_and_register(
+            Operation::LEA,
+            Direction::RegFirst,
+            None,
+            op_code,
+            it,
+        ),
 
         0x8F => {
             let modrm_byte = it_read_byte(it)?;
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
             if (modrm_byte >> 3) & 0b111 != 0 {
-                return Err(Error::InvalidModRmEncoding(modrm_byte));
+                return Err(DecodeError::InvalidModRmEncoding(modrm_byte));
             }
 
             Ok(Instruction::new(
@@ -363,18 +330,19 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0xA0..=0xA3 => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
-            let direction = op_code >> 1 & 0b1;
+            let direct_first = op_code >> 1 & 0b1 == 1;
 
             let address = it_read_word(it).unwrap();
 
-            let destination = Operand(OperandKind::Register(Register::AlAx), operand_size);
-            let source = Operand(OperandKind::Direct(Segment::DS, address), operand_size);
+            let reg = Operand(OperandKind::Register(Register::AlAx), operand_size);
+            let direct = Operand(OperandKind::Direct(Segment::DS, address), operand_size);
 
             Ok(Instruction::new(
                 Operation::MOV,
-                match direction {
-                    0 => OperandSet::DestinationAndSource(destination, source),
-                    _ => OperandSet::DestinationAndSource(source, destination),
+                if direct_first {
+                    OperandSet::DestinationAndSource(direct, reg)
+                } else {
+                    OperandSet::DestinationAndSource(reg, direct)
                 },
             ))
         }
@@ -449,15 +417,15 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0xC0 | 0xC1 => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
-            let modrm_byte = it_read_byte(it)?;
-            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
 
-            let destination = Operand(modrm.register_or_memory.into(), operand_size);
-            let source = immediate_operand_from_it(it, OperandSize::Byte)?;
+            let (modrm, modrm_byte) = modrm_and_byte(it)?;
+
+            let reg_mem = Operand(modrm.register_or_memory.into(), operand_size);
+            let immediate = immediate_operand_from_it(it, OperandSize::Byte)?;
 
             Ok(Instruction::new(
                 group2_operation((modrm_byte >> 3) & 0b111),
-                OperandSet::DestinationAndSource(destination, source),
+                OperandSet::DestinationAndSource(reg_mem, immediate),
             ))
         }
 
@@ -469,33 +437,27 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
         0xC3 => Ok(Instruction::new(Operation::RET, OperandSet::None)),
 
         0xC4 | 0xC5 => {
-            let operand_size = OperandSize::Word;
-            let modrm = match Modrm::try_from_iter(it)? {
-                Modrm {
-                    register_or_memory: RegisterOrMemory::Register(_),
-                    ..
-                } => return Err(Error::InvalidOpCode(op_code)),
-                modrm => modrm,
-            };
-
-            let destination = Operand(OperandKind::Register(modrm.register), operand_size);
-            let source = Operand(modrm.register_or_memory.into(), operand_size);
-
-            Ok(Instruction::new(
-                match op_code & 0b1 {
-                    0 => Operation::LES,
-                    _ => Operation::LDS,
+            // TODO: modrm reg part is not allowed to be a register
+            operations::register_or_memory_and_register(
+                if op_code & 0b1 == 1 {
+                    Operation::LDS
+                } else {
+                    Operation::LES
                 },
-                OperandSet::DestinationAndSource(destination, source),
-            ))
+                Direction::RegFirst,
+                Some(OperandSize::Word),
+                op_code,
+                it,
+            )
         }
 
         0xC6 | 0xC7 => {
+            // TODO: Clean up
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             let modrm_byte = it_read_byte(it)?;
 
             if (modrm_byte >> 3) & 0b111 != 0 {
-                return Err(Error::InvalidOpCode(op_code));
+                return Err(DecodeError::InvalidOpCode(op_code));
             }
 
             let modrm = Modrm::try_from_byte(modrm_byte, it)?;
@@ -771,7 +733,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             ))
         }
 
-        _ => Err(Error::InvalidOpCode(op_code)),
+        _ => Err(DecodeError::InvalidOpCode(op_code)),
     }
 }
 

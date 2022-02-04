@@ -1,47 +1,42 @@
 use std::fmt;
 
-use crate::modrm::RegisterOrMemory;
-
 #[derive(PartialEq, Debug)]
-pub enum Error {
-    CouldNotCreateOperandFromModRmEncoding(RegisterOrMemory),
+pub enum DecodeError {
     CouldNotReadExtraBytes,
     InvalidDataSizeEncoding(u8),
     InvalidIndirectMemoryEncoding(u8),
     InvalidModRmEncoding(u8),
-    InvalidModRmMode(u8),
     InvalidOpCode(u8),
     InvalidRegisterEncoding(u8),
     InvalidSegmentEncoding(u8),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, DecodeError>;
 
-impl fmt::Display for Error {
+impl fmt::Display for DecodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            Error::InvalidOpCode(op_code) => write!(f, "invalid op code: {:#04X}", op_code),
-            Error::InvalidModRmEncoding(mod_rm_byte) => {
-                write!(f, "invalid modR/M encoding: {:#04X}", mod_rm_byte)
+            DecodeError::CouldNotReadExtraBytes => {
+                write!(f, "Could not fetch extra bytes from stream")
             }
-            Error::CouldNotCreateOperandFromModRmEncoding(ref register_or_memory) => {
-                write!(
-                    f,
-                    "Could not create operand from mod reg r/m encoding. ({:?})",
-                    register_or_memory
-                )
+            DecodeError::InvalidDataSizeEncoding(byte) => write!(
+                f,
+                "Could not determine data size from encoding ({:#04x})",
+                byte
+            ),
+            DecodeError::InvalidIndirectMemoryEncoding(encoding) => {
+                write!(f, "Invalid indirect memory encoding ({:#10b})", encoding)
             }
-            Error::CouldNotReadExtraBytes => {
-                write!(f, "Could not fetch extra bytes from bus.")
+            DecodeError::InvalidModRmEncoding(encoding) => {
+                write!(f, "Invalid modR/M encoding ({:#04x})", encoding)
             }
-            Error::InvalidDataSizeEncoding(byte) => {
-                write!(
-                    f,
-                    "Could not determine data size from encoding ({:02x})",
-                    byte
-                )
+            DecodeError::InvalidOpCode(op_code) => write!(f, "Invalid op code ({:#04x})", op_code),
+            DecodeError::InvalidRegisterEncoding(encoding) => {
+                write!(f, "Invalid register encoding ({:#10b})", encoding)
             }
-            _ => todo!(),
+            DecodeError::InvalidSegmentEncoding(encoding) => {
+                write!(f, "Invalid segment encoding ({:#10b})", encoding)
+            }
         }
     }
 }

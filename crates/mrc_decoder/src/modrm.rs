@@ -1,5 +1,5 @@
 use crate::errors::Result;
-use crate::{it_read_byte, it_read_word, Error, TryFromByte};
+use crate::{it_read_byte, it_read_word, DecodeError, TryFromByte};
 use mrc_instruction::{AddressingMode, Displacement, OperandKind, Register, Segment};
 
 impl TryFromByte<Self> for AddressingMode {
@@ -15,7 +15,7 @@ impl TryFromByte<Self> for AddressingMode {
             0b101 => Ok(Di),
             0b110 => Ok(Bp),
             0b111 => Ok(Bx),
-            _ => Err(Error::InvalidIndirectMemoryEncoding(byte)),
+            _ => Err(DecodeError::InvalidIndirectMemoryEncoding(byte)),
         }
     }
 }
@@ -24,8 +24,8 @@ impl TryFromByte<Self> for AddressingMode {
 pub enum RegisterOrMemory {
     Direct(u16),
     Indirect(AddressingMode),
-    DisplacementByte(AddressingMode, u8),
-    DisplacementWord(AddressingMode, u16),
+    DisplacementByte(AddressingMode, i8),
+    DisplacementWord(AddressingMode, i16),
     Register(Register),
 }
 
@@ -36,21 +36,25 @@ impl RegisterOrMemory {
 
         match mode {
             0b00 => match rm {
-                0b110 => Ok(RegisterOrMemory::Direct(it_read_word(it).unwrap())),
+                0b110 => Ok(RegisterOrMemory::Direct(it_read_word(it)?)),
                 _ => Ok(RegisterOrMemory::Indirect(AddressingMode::try_from_byte(
                     rm,
                 )?)),
             },
+
             0b01 => Ok(RegisterOrMemory::DisplacementByte(
                 AddressingMode::try_from_byte(rm)?,
-                it_read_byte(it).unwrap(),
+                it_read_byte(it)? as i8,
             )),
+
             0b10 => Ok(RegisterOrMemory::DisplacementWord(
                 AddressingMode::try_from_byte(rm)?,
-                it_read_word(it).unwrap(),
+                it_read_word(it)? as i16,
             )),
+
             0b11 => Ok(RegisterOrMemory::Register(Register::try_from_byte(rm)?)),
-            _ => Err(Error::InvalidModRmEncoding(mod_rm_byte)),
+
+            _ => Err(DecodeError::InvalidModRmEncoding(mod_rm_byte)),
         }
     }
 }
@@ -135,7 +139,7 @@ impl Modrm {
     pub fn try_from_iter(it: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let modrm_byte = match it.next() {
             Some(byte) => byte,
-            None => return Err(Error::CouldNotReadExtraBytes),
+            None => return Err(DecodeError::CouldNotReadExtraBytes),
         };
 
         Self::try_from_byte(modrm_byte, it)
@@ -210,7 +214,7 @@ mod test {
         );
 
         if let Err(err) = AddressingMode::try_from_byte(77) {
-            assert_eq!(err, Error::InvalidIndirectMemoryEncoding(77))
+            assert_eq!(err, DecodeError::InvalidIndirectMemoryEncoding(77))
         } else {
             assert!(false, "does not return error");
         }
