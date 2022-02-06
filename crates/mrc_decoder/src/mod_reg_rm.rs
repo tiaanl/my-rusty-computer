@@ -300,8 +300,8 @@ mod test {
         );
         test_reg_or_mem!(
             0b00_000_110,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::Direct(0x0101)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::Direct(0x3412)
         );
         test_reg_or_mem!(
             0b00_000_111,
@@ -354,43 +354,43 @@ mod test {
         // DisplacementWord
         test_reg_or_mem!(
             0b10_000_000,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::DisplacementWord(AddressingMode::BxSi, 257)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::DisplacementWord(AddressingMode::BxSi, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_001,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::DisplacementWord(AddressingMode::BxDi, 257)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::DisplacementWord(AddressingMode::BxDi, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_010,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::DisplacementWord(AddressingMode::BpSi, 257)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::DisplacementWord(AddressingMode::BpSi, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_011,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::DisplacementWord(AddressingMode::BpDi, 257)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::DisplacementWord(AddressingMode::BpDi, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_100,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::DisplacementWord(AddressingMode::Si, 257)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::DisplacementWord(AddressingMode::Si, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_101,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::DisplacementWord(AddressingMode::Di, 257)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::DisplacementWord(AddressingMode::Di, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_110,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::DisplacementWord(AddressingMode::Bp, 257)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::DisplacementWord(AddressingMode::Bp, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_111,
-            bytes![0x01, 0x01],
-            RegisterOrMemory::DisplacementWord(AddressingMode::Bx, 257)
+            bytes![0x12, 0x34],
+            RegisterOrMemory::DisplacementWord(AddressingMode::Bx, 0x3412)
         );
 
         // Register
