@@ -1,16 +1,17 @@
-use super::CPU;
-use crate::cpu::executor::operations::{SignificantBit, StateExt};
-use crate::cpu::{Flags, State};
-use crate::error::{Error, Result};
-use crate::Bus;
-use crate::Port;
-use crate::{segment_and_offset, Address};
+pub mod operations;
+
+use crate::{
+    cpu::{
+        executor::operations::{SignificantBit, StateExt},
+        Flags, State, CPU,
+    },
+    error::{Error, Result},
+    segment_and_offset, Address, Bus, Port,
+};
 use mrc_instruction::{
     AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize,
     Operation, Register, Repeat, Segment,
 };
-
-pub mod operations;
 
 #[derive(PartialEq)]
 pub enum ExecuteResult {
@@ -595,7 +596,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             OperandSet::Displacement(displacement) => {
                 displace_ip(&mut cpu.state, displacement)?;
             }
-            OperandSet::SegmentAndOffset(segment, offset) => {
+            OperandSet::SegmentAndOffset(mrc_instruction::Address { segment, offset }) => {
                 cpu.state.set_segment_value(Segment::CS, *segment);
                 cpu.state.ip = *offset;
             }

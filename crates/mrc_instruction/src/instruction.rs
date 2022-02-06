@@ -1,4 +1,4 @@
-use crate::{Displacement, Operand, Operation, Segment, SizedRegister};
+use crate::{Address, Displacement, Operand, Operation, Segment, SizedRegister};
 use std::fmt::Display;
 
 impl From<SizedRegister> for Operand {
@@ -19,7 +19,7 @@ pub enum OperandSet {
     Destination(Operand),
     DestinationAndSource(Operand, Operand),
     Displacement(Displacement),
-    SegmentAndOffset(u16, u16),
+    SegmentAndOffset(Address),
 }
 
 impl Display for OperandSet {
@@ -30,7 +30,7 @@ impl Display for OperandSet {
             OperandSet::DestinationAndSource(destination, source) => {
                 write!(f, "{}, {}", destination, source)
             }
-            OperandSet::SegmentAndOffset(segment, offset) => {
+            OperandSet::SegmentAndOffset(Address { segment, offset }) => {
                 write!(f, "{:#06X}:{:#06X}", segment, offset)
             }
             OperandSet::Displacement(displacement) => write!(f, "{}", displacement),

@@ -2,8 +2,8 @@ use crate::errors::Result;
 use crate::operations::Direction;
 use crate::{it_read_byte, it_read_word, operations, DecodeError, ModRegRM, TryFromByte};
 use mrc_instruction::{
-    Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize, Operation, Register,
-    Repeat, Segment,
+    Address, Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize, Operation,
+    Register, Repeat, Segment,
 };
 
 fn group1_operation(op_code: u8) -> Operation {
@@ -306,7 +306,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             let segment = it_read_word(it)?;
             Ok(Instruction::new(
                 Operation::CALL,
-                OperandSet::SegmentAndOffset(segment, offset),
+                OperandSet::SegmentAndOffset(Address::new(segment, offset)),
             ))
         }
 
@@ -582,7 +582,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             Ok(Instruction::new(
                 Operation::JMP,
-                OperandSet::SegmentAndOffset(segment, offset),
+                OperandSet::SegmentAndOffset(Address::new(segment, offset)),
             ))
         }
 
@@ -718,8 +718,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 #[cfg(test)]
 mod test {
     use mrc_instruction::{
-        AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize,
-        Operation, Register, Repeat, Segment,
+        Address, AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet,
+        OperandSize, Operation, Register, Repeat, Segment,
     };
 
     struct TestIterator {
@@ -2806,7 +2806,7 @@ mod test {
             &[0x9A, 0x50, 0xDC, 0xD8, 0xA4, 0x10], // CALLF      b000:29d0
             Instruction::new(
                 Operation::CALL,
-                OperandSet::SegmentAndOffset(0xA4D8, 0xDC50)
+                OperandSet::SegmentAndOffset(Address::new(0xA4D8, 0xDC50))
             )
         );
     }
@@ -3748,7 +3748,10 @@ mod test {
     fn test_ea() {
         test_decoder!(
             &[0xEA, 0x78, 0xEB, 0x22, 0x1A, 0x7D], // JMPF       LAB_2000_8d98
-            Instruction::new(Operation::JMP, OperandSet::SegmentAndOffset(0x1A22, 0xEB78))
+            Instruction::new(
+                Operation::JMP,
+                OperandSet::SegmentAndOffset(Address::new(0x1A22, 0xEB78))
+            )
         );
     }
 
