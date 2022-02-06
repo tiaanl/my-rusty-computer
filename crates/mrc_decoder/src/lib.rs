@@ -2,7 +2,7 @@ pub mod operations;
 
 mod decode;
 mod errors;
-mod modrm;
+mod mod_reg_rm;
 
 #[cfg(feature = "alternate-decoder")]
 mod decode2;
@@ -14,7 +14,7 @@ pub use decode::decode_instruction;
 pub use decode2::decode_instruction;
 
 pub use errors::{DecodeError, Result};
-pub use modrm::Modrm;
+pub use mod_reg_rm::ModRegRM;
 use mrc_instruction::{OperandSize, Register, Segment};
 
 trait TryFromByte<T> {

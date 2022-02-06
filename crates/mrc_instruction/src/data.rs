@@ -20,13 +20,8 @@ pub enum OperandType {
     Reg8,
     Reg16,
 
-    // Register or memory
-    RegMem8,
-    RegMem16,
-
-    // Direct memory address
-    Mem8,  // e.g. byte ptr [0xABCD]
-    Mem16, // e.g. word ptr [0xABCD]
+    // Memory address, e.g. [0xABCD] or [bx + 4]
+    Mem,
 
     MemFar, // ...with segment prefix, e.g. 0FFF:9BCD
 
@@ -53,17 +48,31 @@ pub enum OperationMap {
     ModrmReg(&'static [Operation]),
 }
 
+impl PartialEq<Operation> for OperationMap {
+    fn eq(&self, other: &Operation) -> bool {
+        match self {
+            Single(operation) => operation == other,
+            ModrmReg(group) => group.iter().find(|&o| o == other).is_some(),
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct InstructionData(pub u8, pub OperationMap, pub OperandType, pub OperandType);
+pub struct InstructionData {
+    pub op_code: u8,
+    pub operation: OperationMap,
+    pub destination: OperandType,
+    pub source: OperandType,
+}
 
 macro_rules! op {
     ($op_code:expr,$operation_map:expr,$destination:ident,$source:ident) => {{
-        InstructionData(
-            $op_code,
-            $operation_map,
-            OperandType::$destination,
-            OperandType::$source,
-        )
+        InstructionData {
+            op_code: $op_code,
+            operation: $operation_map,
+            destination: OperandType::$destination,
+            source: OperandType::$source,
+        }
     }};
 }
 
@@ -71,62 +80,62 @@ use crate::Operation::*;
 use OperationMap::*;
 
 pub const INSTRUCTION_DATA: &[InstructionData] = &[
-    op!(0x00, Single(ADD), Reg8, RegMem8),
-    op!(0x01, Single(ADD), Reg16, RegMem16),
-    op!(0x02, Single(ADD), RegMem8, Reg8),
-    op!(0x03, Single(ADD), RegMem16, Reg16),
+    op!(0x00, Single(ADD), Reg8, Mem),
+    op!(0x01, Single(ADD), Reg16, Mem),
+    op!(0x02, Single(ADD), Mem, Reg8),
+    op!(0x03, Single(ADD), Mem, Reg16),
     op!(0x04, Single(ADD), AL, Imm8),
     op!(0x05, Single(ADD), AX, Imm16),
     op!(0x06, Single(PUSH), SegReg, None),
     op!(0x07, Single(POP), SegReg, None),
-    op!(0x08, Single(OR), Reg8, RegMem8),
-    op!(0x09, Single(OR), Reg16, RegMem16),
-    op!(0x0A, Single(OR), RegMem8, Reg8),
-    op!(0x0B, Single(OR), RegMem16, Reg16),
+    op!(0x08, Single(OR), Reg8, Mem),
+    op!(0x09, Single(OR), Reg16, Mem),
+    op!(0x0A, Single(OR), Mem, Reg8),
+    op!(0x0B, Single(OR), Mem, Reg16),
     op!(0x0C, Single(OR), AL, Imm8),
     op!(0x0D, Single(OR), AX, Imm16),
     op!(0x0E, Single(PUSH), SegReg, None),
-    op!(0x10, Single(ADC), Reg8, RegMem8),
-    op!(0x11, Single(ADC), Reg16, RegMem16),
-    op!(0x12, Single(ADC), RegMem8, Reg8),
-    op!(0x13, Single(ADC), RegMem16, Reg16),
+    op!(0x10, Single(ADC), Reg8, Mem),
+    op!(0x11, Single(ADC), Reg16, Mem),
+    op!(0x12, Single(ADC), Mem, Reg8),
+    op!(0x13, Single(ADC), Mem, Reg16),
     op!(0x14, Single(ADC), AL, Imm8),
     op!(0x15, Single(ADC), AX, Imm16),
     op!(0x16, Single(PUSH), SegReg, None),
     op!(0x17, Single(POP), SegReg, None),
-    op!(0x18, Single(SBB), Reg8, RegMem8),
-    op!(0x19, Single(SBB), Reg16, RegMem16),
-    op!(0x1A, Single(SBB), RegMem8, Reg8),
-    op!(0x1B, Single(SBB), RegMem16, Reg16),
+    op!(0x18, Single(SBB), Reg8, Mem),
+    op!(0x19, Single(SBB), Reg16, Mem),
+    op!(0x1A, Single(SBB), Mem, Reg8),
+    op!(0x1B, Single(SBB), Mem, Reg16),
     op!(0x1C, Single(SBB), AL, Imm8),
     op!(0x1D, Single(SBB), AX, Imm16),
     op!(0x1E, Single(PUSH), SegReg, None),
     op!(0x1F, Single(POP), SegReg, None),
-    op!(0x20, Single(AND), Reg8, RegMem8),
-    op!(0x21, Single(AND), Reg16, RegMem16),
-    op!(0x22, Single(AND), RegMem8, Reg8),
-    op!(0x23, Single(AND), RegMem16, Reg16),
+    op!(0x20, Single(AND), Reg8, Mem),
+    op!(0x21, Single(AND), Reg16, Mem),
+    op!(0x22, Single(AND), Mem, Reg8),
+    op!(0x23, Single(AND), Mem, Reg16),
     op!(0x24, Single(AND), AL, Imm8),
     op!(0x25, Single(AND), AX, Imm16),
     op!(0x27, Single(DAA), None, None),
-    op!(0x28, Single(SUB), Reg8, RegMem8),
-    op!(0x29, Single(SUB), Reg16, RegMem16),
-    op!(0x2A, Single(SUB), RegMem8, Reg8),
-    op!(0x2B, Single(SUB), RegMem16, Reg16),
+    op!(0x28, Single(SUB), Reg8, Mem),
+    op!(0x29, Single(SUB), Reg16, Mem),
+    op!(0x2A, Single(SUB), Mem, Reg8),
+    op!(0x2B, Single(SUB), Mem, Reg16),
     op!(0x2C, Single(SUB), AL, Imm8),
     op!(0x2D, Single(SUB), AX, Imm16),
     op!(0x2F, Single(DAS), None, None),
-    op!(0x30, Single(XOR), Reg8, RegMem8),
-    op!(0x31, Single(XOR), Reg16, RegMem16),
-    op!(0x32, Single(XOR), RegMem8, Reg8),
-    op!(0x33, Single(XOR), RegMem16, Reg16),
+    op!(0x30, Single(XOR), Reg8, Mem),
+    op!(0x31, Single(XOR), Reg16, Mem),
+    op!(0x32, Single(XOR), Mem, Reg8),
+    op!(0x33, Single(XOR), Mem, Reg16),
     op!(0x34, Single(XOR), AL, Imm8),
     op!(0x35, Single(XOR), AX, Imm16),
     op!(0x37, Single(AAA), None, None),
-    op!(0x38, Single(CMP), Reg8, RegMem8),
-    op!(0x39, Single(CMP), Reg16, RegMem16),
-    op!(0x3A, Single(CMP), RegMem8, Reg8),
-    op!(0x3B, Single(CMP), RegMem16, Reg16),
+    op!(0x38, Single(CMP), Reg8, Mem),
+    op!(0x39, Single(CMP), Reg16, Mem),
+    op!(0x3A, Single(CMP), Mem, Reg8),
+    op!(0x3B, Single(CMP), Mem, Reg16),
     op!(0x3C, Single(CMP), AL, Imm8),
     op!(0x3D, Single(CMP), AX, Imm16),
     op!(0x3F, Single(AAS), None, None),
@@ -165,7 +174,7 @@ pub const INSTRUCTION_DATA: &[InstructionData] = &[
     op!(0x68, Single(PUSH), Imm16, None),
     op!(0x69, Single(IMUL), SignedImm16, Reg16),
     op!(0x6A, Single(PUSH), Imm8, None),
-    op!(0x6B, Single(IMUL), SignedImm8, RegMem16),
+    op!(0x6B, Single(IMUL), SignedImm8, Mem),
     // op!(0x6C, INSB, DX, Yb),
     // op!(0x6D, INSW, DX, Yw),
     // op!(0x6E, OUTSB, Xb, DX),
@@ -189,13 +198,13 @@ pub const INSTRUCTION_DATA: &[InstructionData] = &[
     op!(
         0x80,
         ModrmReg(&[ADD, OR, ADC, SBB, AND, SUB, XOR, CMP]),
-        RegMem8,
+        Mem,
         Imm8
     ),
     op!(
         0x81,
         ModrmReg(&[ADD, OR, ADC, SBB, AND, SUB, XOR, CMP]),
-        RegMem16,
+        Mem,
         Imm16
     ),
     // op!(0x82, NOP, None, None),
@@ -205,18 +214,18 @@ pub const INSTRUCTION_DATA: &[InstructionData] = &[
         Reg16,
         SignedImm8
     ),
-    op!(0x84, Single(TEST), Reg8, RegMem8),
-    op!(0x85, Single(TEST), Reg16, RegMem16),
-    op!(0x86, Single(XCHG), Reg8, RegMem8),
-    op!(0x87, Single(XCHG), Reg16, RegMem16),
-    op!(0x88, Single(MOV), Reg8, RegMem8),
-    op!(0x89, Single(MOV), Reg16, RegMem16),
-    op!(0x8A, Single(MOV), RegMem8, Reg8),
-    op!(0x8B, Single(MOV), RegMem16, Reg16),
+    op!(0x84, Single(TEST), Reg8, Mem),
+    op!(0x85, Single(TEST), Reg16, Mem),
+    op!(0x86, Single(XCHG), Reg8, Mem),
+    op!(0x87, Single(XCHG), Reg16, Mem),
+    op!(0x88, Single(MOV), Reg8, Mem),
+    op!(0x89, Single(MOV), Reg16, Mem),
+    op!(0x8A, Single(MOV), Mem, Reg8),
+    op!(0x8B, Single(MOV), Mem, Reg16),
     op!(0x8C, Single(MOV), Reg16, SegReg),
-    op!(0x8D, Single(LEA), RegMem16, Reg16),
+    op!(0x8D, Single(LEA), Mem, Reg16),
     op!(0x8E, Single(MOV), SegReg, Reg16),
-    op!(0x8F, Single(POP), RegMem16, None),
+    op!(0x8F, Single(POP), Mem, None),
     op!(0x90, Single(NOP), None, None),
     op!(0x91, Single(XCHG), AX, OpCodeReg),
     op!(0x92, Single(XCHG), AX, OpCodeReg),
@@ -233,10 +242,10 @@ pub const INSTRUCTION_DATA: &[InstructionData] = &[
     op!(0x9D, Single(POPF), None, None),
     op!(0x9E, Single(SAHF), None, None),
     op!(0x9F, Single(LAHF), None, None),
-    op!(0xA0, Single(MOV), AL, Mem8),
-    op!(0xA1, Single(MOV), AX, Mem16),
-    op!(0xA2, Single(MOV), Mem8, AL),
-    op!(0xA3, Single(MOV), Mem16, AX),
+    op!(0xA0, Single(MOV), AL, Mem),
+    op!(0xA1, Single(MOV), AX, Mem),
+    op!(0xA2, Single(MOV), Mem, AL),
+    op!(0xA3, Single(MOV), Mem, AX),
     op!(0xA4, Single(MOVSB), None, None),
     op!(0xA5, Single(MOVSW), None, None),
     op!(0xA6, Single(CMPSB), None, None),
@@ -279,8 +288,8 @@ pub const INSTRUCTION_DATA: &[InstructionData] = &[
     ),
     op!(0xC2, Single(RET), Displacement16, None),
     op!(0xC3, Single(RET), None, None),
-    op!(0xC4, Single(LES), RegMem16, Reg16),
-    op!(0xC5, Single(LDS), RegMem16, Reg16),
+    op!(0xC4, Single(LES), Mem, Reg16),
+    op!(0xC5, Single(LDS), Mem, Reg16),
     op!(0xC6, Single(MOV), Reg8, Imm8),
     op!(0xC7, Single(MOV), Reg16, Imm16),
     // op!(0xC8, ENTER, Imm8, Imm16),

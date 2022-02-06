@@ -1,6 +1,6 @@
 use crate::errors::Result;
 use crate::operations::Direction;
-use crate::{it_read_byte, it_read_word, operations, DecodeError, Modrm, TryFromByte};
+use crate::{it_read_byte, it_read_word, operations, DecodeError, ModRegRM, TryFromByte};
 use mrc_instruction::{
     Displacement, Immediate, Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation,
     Register, Repeat, Segment,
@@ -82,12 +82,12 @@ pub fn displacement_word_from_it(it: &mut impl Iterator<Item = u8>) -> Result<Op
 }
 
 #[inline]
-pub(crate) fn modrm_and_byte(it: &mut impl Iterator<Item = u8>) -> Result<(Modrm, u8)> {
+pub(crate) fn modrm_and_byte(it: &mut impl Iterator<Item = u8>) -> Result<(ModRegRM, u8)> {
     let byte = match it.next() {
         Some(byte) => byte,
         None => return Err(DecodeError::CouldNotReadExtraBytes),
     };
-    let modrm = Modrm::try_from_byte(byte, it)?;
+    let modrm = ModRegRM::try_from_byte(byte, it)?;
 
     Ok((modrm, byte))
 }
@@ -275,7 +275,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0x8F => {
             let modrm_byte = it_read_byte(it)?;
-            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+            let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
             if (modrm_byte >> 3) & 0b111 != 0 {
                 return Err(DecodeError::InvalidModRmEncoding(modrm_byte));
@@ -460,7 +460,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
                 return Err(DecodeError::InvalidOpCode(op_code));
             }
 
-            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+            let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
             let source = immediate_operand_from_it(it, operand_size)?;
@@ -504,7 +504,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
         0xD0..=0xD3 => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             let modrm_byte = it_read_byte(it)?;
-            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+            let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
 
@@ -539,7 +539,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0xD8..=0xDF => {
             // For now, just consume the byte.
-            let _ = Modrm::try_from_iter(it)?;
+            let _ = ModRegRM::try_from_iter(it)?;
             Ok(Instruction::new(Operation::ESC, OperandSet::None))
         }
 
@@ -668,7 +668,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             let modrm_byte = it_read_byte(it)?;
-            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+            let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
 
@@ -713,7 +713,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
         0xFE | 0xFF => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             let modrm_byte = it_read_byte(it)?;
-            let modrm = Modrm::try_from_byte(modrm_byte, it)?;
+            let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
             let destination = Operand(modrm.register_or_memory.into(), operand_size);
 

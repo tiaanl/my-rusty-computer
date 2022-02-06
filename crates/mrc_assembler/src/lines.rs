@@ -21,7 +21,9 @@
 //! <indirect>      ::= "[" <addressing-mode> "]"
 //! ```
 
-use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
+use mrc_instruction::{
+    data, AddressingMode, OperandSize, Operation, Register, Segment, SizedRegister,
+};
 use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -117,11 +119,90 @@ impl<'s> Display for Instruction<'s> {
     }
 }
 
+impl PartialEq<data::InstructionData> for Instruction<'_> {
+    fn eq(&self, other: &data::InstructionData) -> bool {
+        if other.operation != self.operation {
+            return false;
+        }
+
+        if matches!(self.operand_set, OperandSet::None)
+            && other.destination == data::OperandType::None
+            && other.source == data::OperandType::None
+        {
+            return true;
+        }
+
+        match &self.operand_set {
+            OperandSet::DestinationAndSource(destination, _source) => {
+                use data::OperandType::*;
+
+                let destination_match = match other.destination {
+                    None => false,
+                    OpCodeReg => false,
+                    AL => matches!(
+                        destination,
+                        Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte))
+                    ),
+                    CL => matches!(
+                        destination,
+                        Operand::Register(SizedRegister(Register::ClCx, OperandSize::Byte))
+                    ),
+                    DL => matches!(
+                        destination,
+                        Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte))
+                    ),
+                    AX => matches!(
+                        destination,
+                        Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word))
+                    ),
+                    CX => matches!(
+                        destination,
+                        Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word))
+                    ),
+                    DX => matches!(
+                        destination,
+                        Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word))
+                    ),
+                    Reg8 => matches!(
+                        destination,
+                        Operand::Register(SizedRegister(_, OperandSize::Byte))
+                    ),
+                    Reg16 => matches!(
+                        destination,
+                        Operand::Register(SizedRegister(_, OperandSize::Word))
+                    ),
+                    Mem => false,
+                    MemFar => false,
+                    Imm8 => false,
+                    Imm16 => false,
+                    Imm1 => false,
+                    SignedImm8 => false,
+                    SignedImm16 => false,
+                    SegReg => false,
+                    Displacement8 => false,
+                    Displacement16 => false,
+                };
+
+                destination_match
+            }
+            _ => false,
+        }
+    }
+}
+
 impl<'s> Instruction<'s> {
     pub fn new(operation: Operation, operand_set: OperandSet<'s>) -> Self {
         Self {
             operation,
             operand_set,
+        }
+    }
+
+    pub fn data(&self) -> &'static data::InstructionData {
+        if let Some(data) = data::INSTRUCTION_DATA.iter().find(|d| self == *d) {
+            data
+        } else {
+            unreachable!()
         }
     }
 }
@@ -149,5 +230,35 @@ impl<'s> Display for Line<'s> {
             Line::Const(c) => write!(f, "{} equ {}", c.name, c.value),
             Line::Comment(comment) => write!(f, "{}", comment),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_with_no_operands() {
+        let ins = Instruction::new(Operation::DAA, OperandSet::None);
+        let data = ins.data();
+        assert_eq!(data::OperationMap::Single(Operation::DAA), data.operation);
+        assert_eq!(data::OperandType::None, data.destination);
+        assert_eq!(data::OperandType::None, data.source);
+    }
+
+    #[test]
+    fn test_destination_and_source_register_immediate() {
+        let ins = Instruction::new(
+            Operation::ADD,
+            OperandSet::DestinationAndSource(
+                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Immediate(ValueOrLabel::Value(0x10)),
+            ),
+        );
+
+        let data = ins.data();
+        assert_eq!(data::OperationMap::Single(Operation::ADD), data.operation);
+        assert_eq!(data::OperandType::AL, data.destination);
+        assert_eq!(data::OperandType::Imm8, data.source);
     }
 }
