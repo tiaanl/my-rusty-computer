@@ -98,7 +98,7 @@ impl std::fmt::Display for Immediate {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum OperandKind {
+pub enum Operand {
     Direct(Segment, u16, OperandSize),
     Indirect(Segment, AddressingMode, Displacement, OperandSize),
     Register(Register, OperandSize),
@@ -106,21 +106,30 @@ pub enum OperandKind {
     Immediate(Immediate),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Operand(pub OperandKind, pub OperandSize);
+impl Operand {
+    pub fn operand_size(&self) -> OperandSize {
+        match self {
+            Operand::Direct(_, _, operand_size)
+            | Operand::Indirect(_, _, _, operand_size)
+            | Operand::Register(_, operand_size) => *operand_size,
+            Operand::Segment(_) => OperandSize::Word,
+            Operand::Immediate(immediate) => match immediate {
+                Immediate::Byte(_) => OperandSize::Byte,
+                Immediate::Word(_) => OperandSize::Word,
+            },
+        }
+    }
+}
 
 impl From<SizedRegister> for Operand {
     fn from(sized_register: SizedRegister) -> Self {
-        Self(
-            OperandKind::Register(sized_register.0, sized_register.1),
-            sized_register.1,
-        )
+        Self::Register(sized_register.0, sized_register.1)
     }
 }
 
 impl From<Segment> for Operand {
     fn from(segment: Segment) -> Self {
-        Self(OperandKind::Segment(segment), OperandSize::Word)
+        Operand::Segment(segment)
     }
 }
 
@@ -137,8 +146,8 @@ impl std::fmt::Display for Operand {
             };
         }
 
-        match &self.0 {
-            OperandKind::Direct(segment, displacement, operand_size) => {
+        match self {
+            Operand::Direct(segment, displacement, operand_size) => {
                 match operand_size {
                     OperandSize::Byte => write!(f, "byte ")?,
                     OperandSize::Word => write!(f, "word ")?,
@@ -146,7 +155,7 @@ impl std::fmt::Display for Operand {
                 print_segment_prefix!(segment);
                 write!(f, "[{:#06x}]", displacement)?;
             }
-            OperandKind::Indirect(segment, encoding, displacement, operand_size) => {
+            Operand::Indirect(segment, encoding, displacement, operand_size) => {
                 match operand_size {
                     OperandSize::Byte => write!(f, "byte ")?,
                     OperandSize::Word => write!(f, "word ")?,
@@ -154,11 +163,11 @@ impl std::fmt::Display for Operand {
                 print_segment_prefix!(segment);
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
-            OperandKind::Register(register, operand_size) => {
+            Operand::Register(register, operand_size) => {
                 write!(f, "{}", SizedRegister(*register, *operand_size))?
             }
-            OperandKind::Segment(encoding) => write!(f, "{}", encoding)?,
-            OperandKind::Immediate(value) => write!(f, "{}", value)?,
+            Operand::Segment(encoding) => write!(f, "{}", encoding)?,
+            Operand::Immediate(value) => write!(f, "{}", value)?,
         }
         Ok(())
     }
@@ -204,11 +213,8 @@ pub enum Repeat {
 /// let i = Instruction::new(
 ///     Operation::MOV,
 ///     OperandSet::DestinationAndSource(
-///         Operand(OperandKind::Register(Register::AlAx, OperandSize::Word), OperandSize::Word),
-///         Operand(
-///             OperandKind::Indirect(Segment::ES, AddressingMode::BxSi, Displacement::Byte(8), OperandSize::Word),
-///             OperandSize::Word,
-///         ),
+///         Operand::Register(Register::AlAx, OperandSize::Word),
+///         Operand::Indirect(Segment::ES, AddressingMode::BxSi, Displacement::Byte(8), OperandSize::Word),
 ///     ),
 /// );
 /// ```

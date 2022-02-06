@@ -2,8 +2,8 @@ use crate::errors::Result;
 use crate::operations::Direction;
 use crate::{it_read_byte, it_read_word, operations, DecodeError, ModRegRM, TryFromByte};
 use mrc_instruction::{
-    Displacement, Immediate, Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation,
-    Register, Repeat, Segment,
+    Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize, Operation, Register,
+    Repeat, Segment,
 };
 
 fn group1_operation(op_code: u8) -> Operation {
@@ -60,14 +60,8 @@ pub fn immediate_operand_from_it(
     operand_size: OperandSize,
 ) -> Result<Operand> {
     match operand_size {
-        OperandSize::Byte => Ok(Operand(
-            OperandKind::Immediate(Immediate::Byte(it_read_byte(it)?)),
-            operand_size,
-        )),
-        OperandSize::Word => Ok(Operand(
-            OperandKind::Immediate(Immediate::Word(it_read_word(it)?)),
-            operand_size,
-        )),
+        OperandSize::Byte => Ok(Operand::Immediate(Immediate::Byte(it_read_byte(it)?))),
+        OperandSize::Word => Ok(Operand::Immediate(Immediate::Word(it_read_word(it)?))),
     }
 }
 
@@ -119,17 +113,17 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
                 0 => Operation::PUSH,
                 _ => Operation::POP,
             },
-            OperandSet::Destination(Operand(
-                OperandKind::Segment(Segment::try_from_byte(op_code >> 3 & 0b111)?),
-                OperandSize::Word,
-            )),
+            OperandSet::Destination(Operand::Segment(Segment::try_from_byte(
+                op_code >> 3 & 0b111,
+            )?)),
         )),
 
         0x26 | 0x2E | 0x36 | 0x3E => {
             fn override_segment(operand: &mut Operand, segment: Segment) {
-                match operand.0 {
-                    OperandKind::Direct(ref mut seg, ..)
-                    | OperandKind::Indirect(ref mut seg, ..) => *seg = segment,
+                match operand {
+                    Operand::Direct(ref mut seg, ..) | Operand::Indirect(ref mut seg, ..) => {
+                        *seg = segment
+                    }
                     _ => {}
                 }
             }
@@ -171,8 +165,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             } else {
                 Operation::DEC
             },
-            OperandSet::Destination(Operand(
-                OperandKind::Register(Register::try_from_byte(op_code & 0b111)?, OperandSize::Word),
+            OperandSet::Destination(Operand::Register(
+                Register::try_from_byte(op_code & 0b111)?,
                 OperandSize::Word,
             )),
         )),
@@ -183,8 +177,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             } else {
                 Operation::POP
             },
-            OperandSet::Destination(Operand(
-                OperandKind::Register(Register::try_from_byte(op_code & 0b111)?, OperandSize::Word),
+            OperandSet::Destination(Operand::Register(
+                Register::try_from_byte(op_code & 0b111)?,
                 OperandSize::Word,
             )),
         )),
@@ -216,10 +210,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             let (modrm, modrm_byte) = modrm_and_byte(it)?;
 
-            let destination = Operand(
-                modrm.register_or_memory.into_operand_kind(operand_size),
-                operand_size,
-            );
+            let destination = modrm.register_or_memory.into_operand_kind(operand_size);
             let source = immediate_operand_from_it(it, operand_size)?;
 
             Ok(Instruction::new(
@@ -232,10 +223,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
             let (modrm, modrm_byte) = modrm_and_byte(it)?;
 
-            let destination = Operand(
-                modrm.register_or_memory.into_operand_kind(operand_size),
-                operand_size,
-            );
+            let destination = modrm.register_or_memory.into_operand_kind(operand_size);
             // TODO: Sign extended byte into word.
             let source = immediate_operand_from_it(it, OperandSize::Byte)?;
 
@@ -289,12 +277,11 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             Ok(Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
+                OperandSet::Destination(
                     modrm
                         .register_or_memory
                         .into_operand_kind(OperandSize::Word),
-                    OperandSize::Word,
-                )),
+                ),
             ))
         }
 
@@ -302,14 +289,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0x91..=0x97 => {
             let operand_size = OperandSize::Word;
-            let destination = Operand(
-                OperandKind::Register(Register::AlAx, operand_size),
-                operand_size,
-            );
-            let source = Operand(
-                OperandKind::Register(Register::try_from_byte(op_code & 0b111)?, operand_size),
-                operand_size,
-            );
+            let destination = Operand::Register(Register::AlAx, operand_size);
+            let source = Operand::Register(Register::try_from_byte(op_code & 0b111)?, operand_size);
             Ok(Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(destination, source),
@@ -345,14 +326,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             let address = it_read_word(it).unwrap();
 
-            let reg = Operand(
-                OperandKind::Register(Register::AlAx, operand_size),
-                operand_size,
-            );
-            let direct = Operand(
-                OperandKind::Direct(Segment::DS, address, operand_size),
-                operand_size,
-            );
+            let reg = Operand::Register(Register::AlAx, operand_size);
+            let direct = Operand::Direct(Segment::DS, address, operand_size);
 
             Ok(Instruction::new(
                 Operation::MOV,
@@ -375,10 +350,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
         0xA8 | 0xA9 => {
             let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
 
-            let destination = Operand(
-                OperandKind::Register(Register::AlAx, operand_size),
-                operand_size,
-            );
+            let destination = Operand::Register(Register::AlAx, operand_size);
             let source = immediate_operand_from_it(it, operand_size)?;
 
             Ok(Instruction::new(
@@ -423,10 +395,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
         0xB0..=0xBF => {
             let operand_size = OperandSize::try_from_byte(op_code >> 3 & 0b1)?;
 
-            let destination = Operand(
-                OperandKind::Register(Register::try_from_byte(op_code & 0b111)?, operand_size),
-                operand_size,
-            );
+            let destination =
+                Operand::Register(Register::try_from_byte(op_code & 0b111)?, operand_size);
             let source = immediate_operand_from_it(it, operand_size)?;
 
             Ok(Instruction::new(
@@ -440,10 +410,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             let (modrm, modrm_byte) = modrm_and_byte(it)?;
 
-            let reg_mem = Operand(
-                modrm.register_or_memory.into_operand_kind(operand_size),
-                operand_size,
-            );
+            let reg_mem = modrm.register_or_memory.into_operand_kind(operand_size);
             let immediate = immediate_operand_from_it(it, OperandSize::Byte)?;
 
             Ok(Instruction::new(
@@ -485,10 +452,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
-            let destination = Operand(
-                modrm.register_or_memory.into_operand_kind(operand_size),
-                operand_size,
-            );
+            let destination = modrm.register_or_memory.into_operand_kind(operand_size);
             let source = immediate_operand_from_it(it, operand_size)?;
 
             Ok(Instruction::new(
@@ -516,10 +480,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             let code = it_read_byte(it)?;
             Ok(Instruction::new(
                 Operation::INT,
-                OperandSet::Destination(Operand(
-                    OperandKind::Immediate(Immediate::Byte(code)),
-                    OperandSize::Byte,
-                )),
+                OperandSet::Destination(Operand::Immediate(Immediate::Byte(code))),
             ))
         }
 
@@ -532,22 +493,13 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             let modrm_byte = it_read_byte(it)?;
             let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
-            let destination = Operand(
-                modrm.register_or_memory.into_operand_kind(operand_size),
-                operand_size,
-            );
+            let destination = modrm.register_or_memory.into_operand_kind(operand_size);
 
             // if v = 0 then "count" = 1; if v = 1 then "count" in (CL)
             let source = if (op_code >> 1) & 0b1 == 1 {
-                Operand(
-                    OperandKind::Register(Register::ClCx, operand_size),
-                    operand_size,
-                )
+                Operand::Register(Register::ClCx, operand_size)
             } else {
-                Operand(
-                    OperandKind::Immediate(Immediate::Byte(1)),
-                    OperandSize::Byte,
-                )
+                Operand::Immediate(Immediate::Byte(1))
             };
 
             Ok(Instruction::new(
@@ -594,14 +546,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             Ok(Instruction::new(
                 Operation::IN,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, operand_size),
-                        operand_size,
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(port)),
-                        OperandSize::Byte,
-                    ),
+                    Operand::Register(Register::AlAx, operand_size),
+                    Operand::Immediate(Immediate::Byte(port)),
                 ),
             ))
         }
@@ -614,14 +560,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             Ok(Instruction::new(
                 Operation::OUT,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(port)),
-                        OperandSize::Byte,
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, operand_size),
-                        operand_size,
-                    ),
+                    Operand::Immediate(Immediate::Byte(port)),
+                    Operand::Register(Register::AlAx, operand_size),
                 ),
             ))
         }
@@ -657,14 +597,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             Ok(Instruction::new(
                 Operation::IN,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, operand_size),
-                        operand_size,
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word,
-                    ),
+                    Operand::Register(Register::AlAx, operand_size),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 ),
             ))
         }
@@ -675,14 +609,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             Ok(Instruction::new(
                 Operation::OUT,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word,
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, operand_size),
-                        operand_size,
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
+                    Operand::Register(Register::AlAx, operand_size),
                 ),
             ))
         }
@@ -720,10 +648,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             let modrm_byte = it_read_byte(it)?;
             let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
-            let destination = Operand(
-                modrm.register_or_memory.into_operand_kind(operand_size),
-                operand_size,
-            );
+            let destination = modrm.register_or_memory.into_operand_kind(operand_size);
 
             let operation = match (modrm_byte >> 3) & 0b111 {
                 0b000 => Operation::TEST,
@@ -768,10 +693,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             let modrm_byte = it_read_byte(it)?;
             let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
-            let destination = Operand(
-                modrm.register_or_memory.into_operand_kind(operand_size),
-                operand_size,
-            );
+            let destination = modrm.register_or_memory.into_operand_kind(operand_size);
 
             Ok(Instruction::new(
                 match (modrm_byte >> 3) & 0b111 {
@@ -796,8 +718,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 #[cfg(test)]
 mod test {
     use mrc_instruction::{
-        AddressingMode, Displacement, Immediate, Instruction, Operand, OperandKind, OperandSet,
-        OperandSize, Operation, Register, Repeat, Segment,
+        AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize,
+        Operation, Register, Repeat, Segment,
     };
 
     struct TestIterator {
@@ -844,14 +766,8 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::BhDi, OperandSize::Byte),
+                    Operand::Register(Register::DhSi, OperandSize::Byte),
                 )
             )
         );
@@ -864,19 +780,13 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpDi,
-                            Displacement::Word(0x4f57),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpDi,
+                        Displacement::Word(0x4f57),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -889,14 +799,8 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AhSp, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AhSp, OperandSize::Byte),
+                    Operand::Register(Register::DhSi, OperandSize::Byte),
                 )
             )
         );
@@ -909,17 +813,11 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpSi,
-                            Displacement::Word(0x5c1),
-                            OperandSize::Word
-                        ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpSi,
+                        Displacement::Word(0x5c1),
                         OperandSize::Word
                     ),
                 )
@@ -934,14 +832,8 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x27)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x27)),
                 )
             )
         );
@@ -954,14 +846,8 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x57ca)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x57ca)),
                 )
             )
         );
@@ -973,10 +859,7 @@ mod test {
             &[0x06, 0x62, 0x41, 0x01, 0xAA, 0x72], // PUSH       ES
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Segment(Segment::ES),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Segment(Segment::ES))
             )
         );
     }
@@ -987,10 +870,7 @@ mod test {
             &[0x07, 0xD5, 0x55, 0x36, 0xDA, 0x37], // POP        ES
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Segment(Segment::ES),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Segment(Segment::ES))
             )
         );
     }
@@ -1002,14 +882,8 @@ mod test {
             Instruction::new(
                 Operation::OR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AhSp, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DhSi, OperandSize::Byte),
+                    Operand::Register(Register::AhSp, OperandSize::Byte),
                 )
             )
         );
@@ -1022,19 +896,13 @@ mod test {
             Instruction::new(
                 Operation::OR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::None,
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::None,
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::ChBp, OperandSize::Word),
                 )
             )
         );
@@ -1047,14 +915,8 @@ mod test {
             Instruction::new(
                 Operation::OR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AhSp, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AhSp, OperandSize::Byte),
+                    Operand::Register(Register::BhDi, OperandSize::Byte),
                 )
             )
         );
@@ -1067,14 +929,8 @@ mod test {
             Instruction::new(
                 Operation::OR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
                 )
             )
         );
@@ -1087,14 +943,8 @@ mod test {
             Instruction::new(
                 Operation::OR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x9f)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x9f)),
                 )
             )
         );
@@ -1107,14 +957,8 @@ mod test {
             Instruction::new(
                 Operation::OR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0xa03a)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0xa03a)),
                 )
             )
         );
@@ -1126,10 +970,7 @@ mod test {
             &[0x0E, 0x0D, 0x52, 0x52, 0x30, 0x59], // PUSH       CS
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Segment(Segment::CS),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Segment(Segment::CS))
             )
         );
     }
@@ -1138,7 +979,7 @@ mod test {
     // fn test_0f() {
     //     test_decoder!(
     //         &[0x0F, 0x8A, 0x77, 0x66, 0x6A, 0xC4],
-    //         Instruction::new(Operation::NOP, OPERANDSET::NONE)
+    //         Instruction::new(Operation::NOP, OperandSet::None)
     //     );
     // }
 
@@ -1149,19 +990,13 @@ mod test {
             Instruction::new(
                 Operation::ADC,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bp,
-                            Displacement::Word(0x6965),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bp,
+                        Displacement::Word(0x6965),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::BhDi, OperandSize::Byte),
                 )
             )
         );
@@ -1174,19 +1009,13 @@ mod test {
             Instruction::new(
                 Operation::ADC,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BxSi,
-                            Displacement::Byte(-0x80),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BxSi,
+                        Displacement::Byte(-0x80),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DhSi, OperandSize::Word),
                 )
             )
         );
@@ -1199,14 +1028,8 @@ mod test {
             Instruction::new(
                 Operation::ADC,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::ClCx, OperandSize::Byte),
+                    Operand::Register(Register::DlDx, OperandSize::Byte),
                 )
             )
         );
@@ -1219,14 +1042,8 @@ mod test {
             Instruction::new(
                 Operation::ADC,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AhSp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::ChBp, OperandSize::Word),
+                    Operand::Register(Register::AhSp, OperandSize::Word),
                 )
             )
         );
@@ -1239,14 +1056,8 @@ mod test {
             Instruction::new(
                 Operation::ADC,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x15)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x15)),
                 )
             )
         );
@@ -1259,14 +1070,8 @@ mod test {
             Instruction::new(
                 Operation::ADC,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x6776)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x6776)),
                 )
             )
         );
@@ -1278,10 +1083,7 @@ mod test {
             &[0x16, 0x6A, 0xF1, 0x1A, 0x21, 0xA0], // PUSH       SS
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Segment(Segment::SS),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Segment(Segment::SS))
             )
         );
     }
@@ -1292,10 +1094,7 @@ mod test {
             &[0x17, 0xEA, 0x3D, 0xDB, 0xF3, 0x1E], // POP        SS
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Segment(Segment::SS),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Segment(Segment::SS))
             )
         );
     }
@@ -1307,19 +1106,13 @@ mod test {
             Instruction::new(
                 Operation::SBB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Di,
-                            Displacement::None,
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Di,
+                        Displacement::None,
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Byte),
                 )
             )
         );
@@ -1332,19 +1125,13 @@ mod test {
             Instruction::new(
                 Operation::SBB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BxDi,
-                            Displacement::None,
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BxDi,
+                        Displacement::None,
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
                 )
             )
         );
@@ -1357,17 +1144,11 @@ mod test {
             Instruction::new(
                 Operation::SBB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpDi,
-                            Displacement::Word(0x203d),
-                            OperandSize::Byte
-                        ),
+                    Operand::Register(Register::BlBx, OperandSize::Byte),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpDi,
+                        Displacement::Word(0x203d),
                         OperandSize::Byte
                     ),
                 )
@@ -1382,14 +1163,8 @@ mod test {
             Instruction::new(
                 Operation::SBB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::ChBp, OperandSize::Word),
+                    Operand::Register(Register::ChBp, OperandSize::Word),
                 )
             )
         );
@@ -1402,14 +1177,8 @@ mod test {
             Instruction::new(
                 Operation::SBB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x31)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x31)),
                 )
             )
         );
@@ -1422,14 +1191,8 @@ mod test {
             Instruction::new(
                 Operation::SBB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0xd665)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0xd665)),
                 )
             )
         );
@@ -1441,10 +1204,7 @@ mod test {
             &[0x1E, 0xAC, 0x77, 0x40, 0x36, 0xC1], // PUSH       DS
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Segment(Segment::DS),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Segment(Segment::DS))
             )
         );
     }
@@ -1455,10 +1215,7 @@ mod test {
             &[0x1F, 0x07, 0x9E, 0x32, 0x4F, 0xE2], // POP        DS
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Segment(Segment::DS),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Segment(Segment::DS))
             )
         );
     }
@@ -1470,19 +1227,13 @@ mod test {
             Instruction::new(
                 Operation::AND,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Si,
-                            Displacement::None,
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Si,
+                        Displacement::None,
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::BhDi, OperandSize::Byte),
                 )
             )
         );
@@ -1495,19 +1246,13 @@ mod test {
             Instruction::new(
                 Operation::AND,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Si,
-                            Displacement::Word(0x3634),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Si,
+                        Displacement::Word(0x3634),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -1520,14 +1265,8 @@ mod test {
             Instruction::new(
                 Operation::AND,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Byte),
+                    Operand::Register(Register::BlBx, OperandSize::Byte),
                 )
             )
         );
@@ -1540,17 +1279,11 @@ mod test {
             Instruction::new(
                 Operation::AND,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BxDi,
-                            Displacement::None,
-                            OperandSize::Word
-                        ),
+                    Operand::Register(Register::BlBx, OperandSize::Word),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BxDi,
+                        Displacement::None,
                         OperandSize::Word
                     ),
                 )
@@ -1565,14 +1298,8 @@ mod test {
             Instruction::new(
                 Operation::AND,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x51)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x51)),
                 )
             )
         );
@@ -1585,14 +1312,8 @@ mod test {
             Instruction::new(
                 Operation::AND,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x8b27)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x8b27)),
                 )
             )
         );
@@ -1604,19 +1325,13 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::ES,
-                            AddressingMode::BpDi,
-                            Displacement::Word(0x4f57),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::ES,
+                        AddressingMode::BpDi,
+                        Displacement::Word(0x4f57),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -1637,19 +1352,13 @@ mod test {
             Instruction::new(
                 Operation::SUB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpSi,
-                            Displacement::Word(-0x6719),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpSi,
+                        Displacement::Word(-0x6719),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::BlBx, OperandSize::Byte),
                 )
             )
         );
@@ -1662,19 +1371,13 @@ mod test {
             Instruction::new(
                 Operation::SUB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Di,
-                            Displacement::Word(0x5261),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Di,
+                        Displacement::Word(0x5261),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::AhSp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AhSp, OperandSize::Word),
                 )
             )
         );
@@ -1687,17 +1390,11 @@ mod test {
             Instruction::new(
                 Operation::SUB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BxSi,
-                            Displacement::None,
-                            OperandSize::Byte
-                        ),
+                    Operand::Register(Register::BhDi, OperandSize::Byte),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BxSi,
+                        Displacement::None,
                         OperandSize::Byte
                     ),
                 )
@@ -1712,17 +1409,11 @@ mod test {
             Instruction::new(
                 Operation::SUB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpDi,
-                            Displacement::Byte(-0x61),
-                            OperandSize::Word
-                        ),
+                    Operand::Register(Register::ClCx, OperandSize::Word),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpDi,
+                        Displacement::Byte(-0x61),
                         OperandSize::Word
                     ),
                 )
@@ -1737,14 +1428,8 @@ mod test {
             Instruction::new(
                 Operation::SUB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x3a)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x3a)),
                 )
             )
         );
@@ -1757,14 +1442,8 @@ mod test {
             Instruction::new(
                 Operation::SUB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0xfd6e)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0xfd6e)),
                 )
             )
         );
@@ -1777,19 +1456,13 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::CS,
-                            AddressingMode::BpDi,
-                            Displacement::Word(0x4f57),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::CS,
+                        AddressingMode::BpDi,
+                        Displacement::Word(0x4f57),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -1810,19 +1483,13 @@ mod test {
             Instruction::new(
                 Operation::XOR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Di,
-                            Displacement::Byte(-0x7d),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Di,
+                        Displacement::Byte(-0x7d),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Byte),
                 )
             )
         );
@@ -1835,19 +1502,13 @@ mod test {
             Instruction::new(
                 Operation::XOR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpDi,
-                            Displacement::None,
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpDi,
+                        Displacement::None,
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -1860,14 +1521,8 @@ mod test {
             Instruction::new(
                 Operation::XOR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DhSi, OperandSize::Byte),
+                    Operand::Register(Register::ChBp, OperandSize::Byte),
                 )
             )
         );
@@ -1880,14 +1535,8 @@ mod test {
             Instruction::new(
                 Operation::XOR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::BhDi, OperandSize::Word),
+                    Operand::Register(Register::ChBp, OperandSize::Word),
                 )
             )
         );
@@ -1900,14 +1549,8 @@ mod test {
             Instruction::new(
                 Operation::XOR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x30)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x30)),
                 )
             )
         );
@@ -1920,14 +1563,8 @@ mod test {
             Instruction::new(
                 Operation::XOR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0xcd6a)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0xcd6a)),
                 )
             )
         );
@@ -1940,19 +1577,13 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::SS,
-                            AddressingMode::BpDi,
-                            Displacement::Word(0x4f57),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::SS,
+                        AddressingMode::BpDi,
+                        Displacement::Word(0x4f57),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -1973,19 +1604,13 @@ mod test {
             Instruction::new(
                 Operation::CMP,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::None,
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::None,
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DhSi, OperandSize::Byte),
                 )
             )
         );
@@ -1998,19 +1623,13 @@ mod test {
             Instruction::new(
                 Operation::CMP,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpSi,
-                            Displacement::Word(-0x137A),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpSi,
+                        Displacement::Word(-0x137A),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::ClCx, OperandSize::Word),
                 )
             )
         );
@@ -2023,14 +1642,8 @@ mod test {
             Instruction::new(
                 Operation::CMP,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DhSi, OperandSize::Byte),
+                    Operand::Register(Register::DlDx, OperandSize::Byte),
                 )
             )
         );
@@ -2043,14 +1656,8 @@ mod test {
             Instruction::new(
                 Operation::CMP,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::BhDi, OperandSize::Word),
+                    Operand::Register(Register::ClCx, OperandSize::Word),
                 )
             )
         );
@@ -2063,14 +1670,8 @@ mod test {
             Instruction::new(
                 Operation::CMP,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0xc6)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0xc6)),
                 )
             )
         );
@@ -2083,14 +1684,8 @@ mod test {
             Instruction::new(
                 Operation::CMP,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0xc8b1)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0xc8b1)),
                 )
             )
         );
@@ -2103,19 +1698,13 @@ mod test {
             Instruction::new(
                 Operation::ADD,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpDi,
-                            Displacement::Word(0x4f57),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpDi,
+                        Displacement::Word(0x4f57),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -2135,10 +1724,7 @@ mod test {
             &[0x40, 0xAB, 0x51, 0x27, 0x6D, 0x9A], // INC        AX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::AlAx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::AlAx, OperandSize::Word))
             )
         );
     }
@@ -2149,10 +1735,7 @@ mod test {
             &[0x41, 0x7A, 0x69, 0xFC, 0xC4, 0x20], // INC        CX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ClCx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::ClCx, OperandSize::Word))
             )
         );
     }
@@ -2163,10 +1746,7 @@ mod test {
             &[0x42, 0xBA, 0x7D, 0x24, 0x33, 0x92], // INC        DX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::DlDx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::DlDx, OperandSize::Word))
             )
         );
     }
@@ -2177,10 +1757,7 @@ mod test {
             &[0x43, 0x47, 0x97, 0xB4, 0x68, 0xC8], // INC        BX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BlBx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::BlBx, OperandSize::Word))
             )
         );
     }
@@ -2191,10 +1768,7 @@ mod test {
             &[0x44, 0x5A, 0xC2, 0x6A, 0xF7, 0xB8], // INC        SP
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::AhSp, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::AhSp, OperandSize::Word))
             )
         );
     }
@@ -2205,10 +1779,7 @@ mod test {
             &[0x45, 0x33, 0xA5, 0x42, 0xBC, 0x09], // INC        Bp
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ChBp, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::ChBp, OperandSize::Word))
             )
         );
     }
@@ -2219,10 +1790,7 @@ mod test {
             &[0x46, 0x8E, 0x2B, 0xD8, 0x42, 0x45], // INC        SI
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::DhSi, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::DhSi, OperandSize::Word))
             )
         );
     }
@@ -2233,10 +1801,7 @@ mod test {
             &[0x47, 0x63, 0x45, 0xC4, 0x2F, 0x0B], // INC        DI
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BhDi, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::BhDi, OperandSize::Word))
             )
         );
     }
@@ -2247,10 +1812,7 @@ mod test {
             &[0x48, 0x87, 0xC8, 0x19, 0xE9, 0x75], // DEC        AX
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::AlAx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::AlAx, OperandSize::Word))
             )
         );
     }
@@ -2261,10 +1823,7 @@ mod test {
             &[0x49, 0xC3, 0xD8, 0x50, 0xE8, 0xCA], // DEC        CX
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ClCx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::ClCx, OperandSize::Word))
             )
         );
     }
@@ -2275,10 +1834,7 @@ mod test {
             &[0x4A, 0x4E, 0xE9, 0xB9, 0xE5, 0x98], // DEC        DX
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::DlDx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::DlDx, OperandSize::Word))
             )
         );
     }
@@ -2289,10 +1845,7 @@ mod test {
             &[0x4B, 0x53, 0x9B, 0x2E, 0x14, 0x4D], // DEC        BX
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BlBx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::BlBx, OperandSize::Word))
             )
         );
     }
@@ -2303,10 +1856,7 @@ mod test {
             &[0x4C, 0x15, 0x8D, 0x53, 0x84, 0x39], // DEC        SP
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::AhSp, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::AhSp, OperandSize::Word))
             )
         );
     }
@@ -2317,10 +1867,7 @@ mod test {
             &[0x4D, 0xB5, 0xA8, 0x3E, 0x0B, 0xD7], // DEC        BP
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ChBp, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::ChBp, OperandSize::Word))
             )
         );
     }
@@ -2331,10 +1878,7 @@ mod test {
             &[0x4E, 0xD7, 0x4E, 0x7F, 0x6D, 0xE8], // DEC        SI
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::DhSi, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::DhSi, OperandSize::Word))
             )
         );
     }
@@ -2345,10 +1889,7 @@ mod test {
             &[0x4F, 0xAB, 0xD7, 0x16, 0x0C, 0x59], // DEC        DI
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BhDi, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::BhDi, OperandSize::Word))
             )
         );
     }
@@ -2359,10 +1900,7 @@ mod test {
             &[0x50, 0xBB, 0xFF, 0x5A, 0x86, 0xA7], // PUSH       AX
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::AlAx, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::AlAx, OperandSize::Word))
             )
         );
     }
@@ -2373,10 +1911,7 @@ mod test {
             &[0x51, 0x15, 0x08, 0x37, 0xCF, 0xB1], // PUSH       CX
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ClCx, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::ClCx, OperandSize::Word))
             )
         );
     }
@@ -2387,10 +1922,7 @@ mod test {
             &[0x52, 0x84, 0xC5, 0x4E, 0x55, 0x82], // PUSH       DX
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::DlDx, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::DlDx, OperandSize::Word))
             )
         );
     }
@@ -2401,10 +1933,7 @@ mod test {
             &[0x53, 0x90, 0xD6, 0x62, 0x9D, 0x00], // PUSH       BX
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BlBx, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::BlBx, OperandSize::Word))
             )
         );
     }
@@ -2415,10 +1944,7 @@ mod test {
             &[0x54, 0x07, 0xB8, 0x32, 0x4B, 0xF8], // PUSH       SP
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::AhSp, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::AhSp, OperandSize::Word))
             )
         );
     }
@@ -2429,10 +1955,7 @@ mod test {
             &[0x55, 0x92, 0xB0, 0xFF, 0x8E, 0x55], // PUSH       BP
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ChBp, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::ChBp, OperandSize::Word))
             )
         );
     }
@@ -2443,10 +1966,7 @@ mod test {
             &[0x56, 0x50, 0xE1, 0x00, 0x28, 0x4B], // PUSH       SI
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::DhSi, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::DhSi, OperandSize::Word))
             )
         );
     }
@@ -2457,10 +1977,7 @@ mod test {
             &[0x57, 0xE5, 0x26, 0x32, 0x89, 0x00], // PUSH       DI
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BhDi, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::BhDi, OperandSize::Word))
             )
         );
     }
@@ -2471,10 +1988,7 @@ mod test {
             &[0x58, 0x18, 0xE9, 0xC6, 0x71, 0x50], // POP        AX
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::AlAx, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::AlAx, OperandSize::Word))
             )
         );
     }
@@ -2485,10 +1999,7 @@ mod test {
             &[0x59, 0xA1, 0x49, 0x14, 0x00, 0xC7], // POP        CX
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ClCx, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::ClCx, OperandSize::Word))
             )
         );
     }
@@ -2499,10 +2010,7 @@ mod test {
             &[0x5A, 0xD7, 0xF7, 0x7C, 0xE8, 0x5A], // POP        DX
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::DlDx, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::DlDx, OperandSize::Word))
             )
         );
     }
@@ -2513,10 +2021,7 @@ mod test {
             &[0x5B, 0x35, 0xBB, 0x67, 0x87, 0x32], // POP        BX
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BlBx, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::BlBx, OperandSize::Word))
             )
         );
     }
@@ -2527,10 +2032,7 @@ mod test {
             &[0x5C, 0xD0, 0x6C, 0x59, 0xB4, 0x41], // POP        SP
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::AhSp, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::AhSp, OperandSize::Word))
             )
         );
     }
@@ -2541,10 +2043,7 @@ mod test {
             &[0x5D, 0x07, 0xFA, 0x7A, 0x5B, 0xB2], // POP        BP
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ChBp, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::ChBp, OperandSize::Word))
             )
         );
     }
@@ -2555,10 +2054,7 @@ mod test {
             &[0x5E, 0x4A, 0x30, 0x5D, 0x74, 0x76], // POP        SI
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::DhSi, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::DhSi, OperandSize::Word))
             )
         );
     }
@@ -2569,10 +2065,7 @@ mod test {
             &[0x5F, 0xC1, 0xDC, 0x74, 0xE5, 0x51], // POP        DI
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BhDi, OperandSize::Word),
-                    OperandSize::Word
-                ),)
+                OperandSet::Destination(Operand::Register(Register::BhDi, OperandSize::Word))
             )
         );
     }
@@ -2904,19 +2397,13 @@ mod test {
             Instruction::new(
                 Operation::OR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BxSi,
-                            Displacement::Byte(0x07),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BxSi,
+                        Displacement::Byte(0x07),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x85)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Immediate(Immediate::Byte(0x85)),
                 )
             )
         );
@@ -2929,19 +2416,13 @@ mod test {
             Instruction::new(
                 Operation::AND,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::Word(-0x7758),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::Word(-0x7758),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0xbb33)),
-                        OperandSize::Word
-                    ),
+                    Operand::Immediate(Immediate::Word(0xbb33)),
                 )
             )
         );
@@ -2975,19 +2456,13 @@ mod test {
             Instruction::new(
                 Operation::SBB,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::None,
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::None,
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x2f)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Immediate(Immediate::Byte(0x2f)),
                 )
             )
         );
@@ -3000,19 +2475,13 @@ mod test {
             Instruction::new(
                 Operation::TEST,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BxSi,
-                            Displacement::Byte(-0x3),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BxSi,
+                        Displacement::Byte(-0x3),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Byte),
                 )
             )
         );
@@ -3025,19 +2494,13 @@ mod test {
             Instruction::new(
                 Operation::TEST,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::None,
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::None,
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::BlBx, OperandSize::Word),
                 )
             )
         );
@@ -3050,19 +2513,13 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpDi,
-                            Displacement::Word(0x5c96),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpDi,
+                        Displacement::Word(0x5c96),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::ChBp, OperandSize::Byte),
                 )
             )
         );
@@ -3075,19 +2532,13 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::Byte(0x4e),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::Byte(0x4e),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
                 )
             )
         );
@@ -3100,19 +2551,13 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Si,
-                            Displacement::Word(-0x12E4),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Si,
+                        Displacement::Word(-0x12E4),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::ClCx, OperandSize::Byte),
                 )
             )
         );
@@ -3125,19 +2570,13 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::Byte(-0x40),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::Byte(-0x40),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::ClCx, OperandSize::Word),
                 )
             )
         );
@@ -3150,17 +2589,11 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpDi,
-                            Displacement::Byte(0x4e),
-                            OperandSize::Byte
-                        ),
+                    Operand::Register(Register::ChBp, OperandSize::Byte),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpDi,
+                        Displacement::Byte(0x4e),
                         OperandSize::Byte
                     ),
                 )
@@ -3175,17 +2608,11 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Si,
-                            Displacement::Byte(0x34),
-                            OperandSize::Word
-                        ),
+                    Operand::Register(Register::DhSi, OperandSize::Word),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Si,
+                        Displacement::Byte(0x34),
                         OperandSize::Word
                     ),
                 )
@@ -3200,12 +2627,9 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(OperandKind::Segment(Segment::CS), OperandSize::Word),
-                )
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Segment(Segment::CS),
+                ),
             )
         );
     }
@@ -3217,17 +2641,11 @@ mod test {
             Instruction::new(
                 Operation::LEA,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Si,
-                            Displacement::Byte(-0x7e),
-                            OperandSize::Word
-                        ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Si,
+                        Displacement::Byte(-0x7e),
                         OperandSize::Word
                     ),
                 )
@@ -3242,11 +2660,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(OperandKind::Segment(Segment::DS), OperandSize::Word),
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Segment(Segment::DS),
+                    Operand::Register(Register::DhSi, OperandSize::Word),
                 )
             )
         );
@@ -3258,10 +2673,7 @@ mod test {
             &[0x8F, 0xC5, 0xF8, 0xF1, 0x43, 0xE6], // POP        BP
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::ChBp, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::ChBp, OperandSize::Word))
             )
         );
     }
@@ -3281,14 +2693,8 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Register(Register::ClCx, OperandSize::Word),
                 )
             )
         );
@@ -3301,14 +2707,8 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -3321,14 +2721,8 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Register(Register::BlBx, OperandSize::Word),
                 )
             )
         );
@@ -3341,14 +2735,8 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AhSp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Register(Register::AhSp, OperandSize::Word),
                 )
             )
         );
@@ -3361,14 +2749,8 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Register(Register::ChBp, OperandSize::Word),
                 )
             )
         );
@@ -3381,14 +2763,8 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Register(Register::DhSi, OperandSize::Word),
                 )
             )
         );
@@ -3401,14 +2777,8 @@ mod test {
             Instruction::new(
                 Operation::XCHG,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Register(Register::BhDi, OperandSize::Word),
                 )
             )
         );
@@ -3488,14 +2858,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Direct(Segment::DS, 0x430c, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Direct(Segment::DS, 0x430c, OperandSize::Byte),
                 )
             )
         );
@@ -3508,14 +2872,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Direct(Segment::DS, 0x8be5, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Direct(Segment::DS, 0x8be5, OperandSize::Word),
                 )
             )
         );
@@ -3528,14 +2886,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Direct(Segment::DS, 0x9d98, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Direct(Segment::DS, 0x9d98, OperandSize::Byte),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
                 )
             )
         );
@@ -3548,14 +2900,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Direct(Segment::DS, 0xf847, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Direct(Segment::DS, 0xf847, OperandSize::Word),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
                 )
             )
         );
@@ -3600,14 +2946,8 @@ mod test {
             Instruction::new(
                 Operation::TEST,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x53)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x53)),
                 )
             )
         );
@@ -3620,14 +2960,8 @@ mod test {
             Instruction::new(
                 Operation::TEST,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x9a0d)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x9a0d)),
                 )
             )
         );
@@ -3688,14 +3022,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x3d)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x3d)),
                 )
             )
         );
@@ -3708,14 +3036,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x92)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::ClCx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x92)),
                 )
             )
         );
@@ -3728,14 +3050,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x3A)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x3A)),
                 )
             )
         );
@@ -3748,14 +3064,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x12)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::BlBx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x12)),
                 )
             )
         );
@@ -3768,14 +3078,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AhSp, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x41)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AhSp, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x41)),
                 )
             )
         );
@@ -3788,14 +3092,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x2D)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::ChBp, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x2D)),
                 )
             )
         );
@@ -3808,14 +3106,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x9A)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DhSi, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x9A)),
                 )
             )
         );
@@ -3828,14 +3120,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x80)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::BhDi, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x80)),
                 )
             )
         );
@@ -3848,14 +3134,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x3672)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x3672)),
                 )
             )
         );
@@ -3868,14 +3148,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0xEB70)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::ClCx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0xEB70)),
                 )
             )
         );
@@ -3888,14 +3162,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x5637)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x5637)),
                 )
             )
         );
@@ -3908,14 +3176,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0xAFD5)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::BlBx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0xAFD5)),
                 )
             )
         );
@@ -3928,14 +3190,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AhSp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x1B07)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AhSp, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x1B07)),
                 )
             )
         );
@@ -3948,14 +3204,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::ChBp, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x353D)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::ChBp, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x353D)),
                 )
             )
         );
@@ -3968,14 +3218,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DhSi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x988A)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DhSi, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x988A)),
                 )
             )
         );
@@ -3988,14 +3232,8 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BhDi, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x1DAD)),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::BhDi, OperandSize::Word),
+                    Operand::Immediate(Immediate::Word(0x1DAD)),
                 )
             )
         );
@@ -4008,19 +3246,13 @@ mod test {
             Instruction::new(
                 Operation::SHL,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BxDi,
-                            Displacement::Byte(-0x05),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BxDi,
+                        Displacement::Byte(-0x05),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x83)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Immediate(Immediate::Byte(0x83)),
                 )
             )
         );
@@ -4033,19 +3265,13 @@ mod test {
             Instruction::new(
                 Operation::RCL,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpSi,
-                            Displacement::Word(0x4f49),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpSi,
+                        Displacement::Word(0x4f49),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0xa0)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Immediate(Immediate::Byte(0xa0)),
                 )
             )
         );
@@ -4077,17 +3303,11 @@ mod test {
             Instruction::new(
                 Operation::LES,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::BlBx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Si,
-                            Displacement::Byte(0x5c),
-                            OperandSize::Word
-                        ),
+                    Operand::Register(Register::BlBx, OperandSize::Word),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Si,
+                        Displacement::Byte(0x5c),
                         OperandSize::Word
                     ),
                 )
@@ -4102,17 +3322,11 @@ mod test {
             Instruction::new(
                 Operation::LDS,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Di,
-                            Displacement::None,
-                            OperandSize::Word
-                        ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Di,
+                        Displacement::None,
                         OperandSize::Word
                     ),
                 )
@@ -4127,19 +3341,13 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::Word(0xcd8),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::Word(0xcd8),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0xc9)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Immediate(Immediate::Byte(0xc9)),
                 )
             )
         );
@@ -4152,19 +3360,13 @@ mod test {
             Instruction::new(
                 Operation::MOV,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpDi,
-                            Displacement::Byte(-0x24),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpDi,
+                        Displacement::Byte(-0x24),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Word(0x5505)),
-                        OperandSize::Word
-                    ),
+                    Operand::Immediate(Immediate::Word(0x5505)),
                 )
             )
         );
@@ -4194,10 +3396,7 @@ mod test {
             &[0xCA, 0x55, 0x5C, 0x0D, 0xF2, 0x54], // RETF       0x5c55
             Instruction::new(
                 Operation::RET,
-                OperandSet::Destination(Operand(
-                    OperandKind::Immediate(Immediate::Word(0x5c55)),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Immediate(Immediate::Word(0x5c55)))
             )
         );
     }
@@ -4224,10 +3423,7 @@ mod test {
             &[0xCD, 0xD3, 0xC7, 0x24, 0xE6, 0xD3], // INT        0xd3
             Instruction::new(
                 Operation::INT,
-                OperandSet::Destination(Operand(
-                    OperandKind::Immediate(Immediate::Byte(0xd3)),
-                    OperandSize::Byte
-                ))
+                OperandSet::Destination(Operand::Immediate(Immediate::Byte(0xd3)))
             )
         );
     }
@@ -4255,19 +3451,13 @@ mod test {
             Instruction::new(
                 Operation::SHL,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::None,
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::None,
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(1)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Immediate(Immediate::Byte(1)),
                 )
             )
         );
@@ -4280,19 +3470,13 @@ mod test {
             Instruction::new(
                 Operation::SAR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BpSi,
-                            Displacement::Word(-0x12D6),
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BpSi,
+                        Displacement::Word(-0x12D6),
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(1)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Immediate(Immediate::Byte(1)),
                 )
             )
         );
@@ -4305,19 +3489,13 @@ mod test {
             Instruction::new(
                 Operation::RCR,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::Bx,
-                            Displacement::Byte(-0x47),
-                            OperandSize::Byte
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::Bx,
+                        Displacement::Byte(-0x47),
                         OperandSize::Byte
                     ),
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::ClCx, OperandSize::Byte),
                 )
             )
         );
@@ -4330,19 +3508,13 @@ mod test {
             Instruction::new(
                 Operation::SHL,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Indirect(
-                            Segment::DS,
-                            AddressingMode::BxDi,
-                            Displacement::None,
-                            OperandSize::Word
-                        ),
+                    Operand::Indirect(
+                        Segment::DS,
+                        AddressingMode::BxDi,
+                        Displacement::None,
                         OperandSize::Word
                     ),
-                    Operand(
-                        OperandKind::Register(Register::ClCx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::ClCx, OperandSize::Word),
                 )
             )
         );
@@ -4354,10 +3526,7 @@ mod test {
             &[0xD4, 0xB6, 0x44, 0x8A, 0x0F, 0x70], // AAM        0xb6
             Instruction::new(
                 Operation::AAM,
-                OperandSet::Destination(Operand(
-                    OperandKind::Immediate(Immediate::Byte(0xb6)),
-                    OperandSize::Byte
-                ))
+                OperandSet::Destination(Operand::Immediate(Immediate::Byte(0xb6)))
             )
         );
     }
@@ -4368,10 +3537,7 @@ mod test {
             &[0xD5, 0x00, 0x8D, 0x13, 0x97, 0x5E], // AAD        0x0
             Instruction::new(
                 Operation::AAD,
-                OperandSet::Destination(Operand(
-                    OperandKind::Immediate(Immediate::Byte(0x0)),
-                    OperandSize::Byte
-                ))
+                OperandSet::Destination(Operand::Immediate(Immediate::Byte(0x0)))
             )
         );
     }
@@ -4507,14 +3673,8 @@ mod test {
             Instruction::new(
                 Operation::IN,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x30)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Immediate(Immediate::Byte(0x30)),
                 )
             )
         );
@@ -4527,14 +3687,8 @@ mod test {
             Instruction::new(
                 Operation::IN,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x70)),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Immediate(Immediate::Byte(0x70)),
                 )
             )
         );
@@ -4547,14 +3701,8 @@ mod test {
             Instruction::new(
                 Operation::OUT,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x82)),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Immediate(Immediate::Byte(0x82)),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
                 )
             )
         );
@@ -4567,14 +3715,8 @@ mod test {
             Instruction::new(
                 Operation::OUT,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Immediate(Immediate::Byte(0x26)),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Immediate(Immediate::Byte(0x26)),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
                 )
             )
         );
@@ -4628,14 +3770,8 @@ mod test {
             Instruction::new(
                 Operation::IN,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -4648,14 +3784,8 @@ mod test {
             Instruction::new(
                 Operation::IN,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
                 )
             )
         );
@@ -4668,14 +3798,8 @@ mod test {
             Instruction::new(
                 Operation::OUT,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Byte),
-                        OperandSize::Byte
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
+                    Operand::Register(Register::AlAx, OperandSize::Byte),
                 )
             )
         );
@@ -4688,14 +3812,8 @@ mod test {
             Instruction::new(
                 Operation::OUT,
                 OperandSet::DestinationAndSource(
-                    Operand(
-                        OperandKind::Register(Register::DlDx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
-                    Operand(
-                        OperandKind::Register(Register::AlAx, OperandSize::Word),
-                        OperandSize::Word
-                    ),
+                    Operand::Register(Register::DlDx, OperandSize::Word),
+                    Operand::Register(Register::AlAx, OperandSize::Word),
                 )
             )
         );
@@ -4844,13 +3962,10 @@ mod test {
             &[0xFE, 0x80, 0x0A, 0x3B, 0x0C, 0xA1], // INC        byte ptr [BX + SI + 0x3b0a]
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Indirect(
-                        Segment::DS,
-                        AddressingMode::BxSi,
-                        Displacement::Word(0x3b0a),
-                        OperandSize::Byte
-                    ),
+                OperandSet::Destination(Operand::Indirect(
+                    Segment::DS,
+                    AddressingMode::BxSi,
+                    Displacement::Word(0x3b0a),
                     OperandSize::Byte
                 ))
             )
@@ -4863,10 +3978,7 @@ mod test {
             &[0xFF, 0xC3, 0x19, 0xB8, 0x3F, 0x23], // INC        BX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::BlBx, OperandSize::Word),
-                    OperandSize::Word
-                ))
+                OperandSet::Destination(Operand::Register(Register::BlBx, OperandSize::Word))
             )
         );
     }

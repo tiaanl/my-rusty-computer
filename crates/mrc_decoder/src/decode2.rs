@@ -6,8 +6,7 @@ use crate::decode::{
 use crate::{it_read_byte, it_read_word, DecodeError, ModRegRM, TryFromByte};
 use mrc_instruction::data::{OperandType, OperationMap};
 use mrc_instruction::{
-    Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation, Register, Repeat,
-    Segment,
+    Instruction, Operand, Operand, OperandSet, OperandSize, Operation, Register, Repeat, Segment,
 };
 use std::collections::HashMap;
 
@@ -69,7 +68,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
     if matches!(op_code, 0x26 | 0x2E | 0x36 | 0x3E) {
         fn override_segment(operand: &mut Operand, segment: Segment) {
             match operand.0 {
-                OperandKind::Direct(ref mut seg, ..) | OperandKind::Indirect(ref mut seg, ..) => {
+                Operand::Direct(ref mut seg, ..) | Operand::Indirect(ref mut seg, ..) => {
                     *seg = segment
                 }
                 _ => {}
@@ -115,7 +114,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
                 let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
-                let destination = Operand(OperandKind::Register(modrm.register), OperandSize::Byte);
+                let destination = Operand(Operand::Register(modrm.register), OperandSize::Byte);
                 let source = Operand(modrm.register_or_memory.into(), OperandSize::Byte);
 
                 Ok(Instruction::new(
@@ -130,7 +129,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
                 let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
-                let destination = Operand(OperandKind::Register(modrm.register), OperandSize::Word);
+                let destination = Operand(Operand::Register(modrm.register), OperandSize::Word);
                 let source = Operand(modrm.register_or_memory.into(), OperandSize::Word);
 
                 Ok(Instruction::new(
@@ -146,7 +145,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
                 let destination = Operand(modrm.register_or_memory.into(), OperandSize::Byte);
-                let source = Operand(OperandKind::Register(modrm.register), OperandSize::Byte);
+                let source = Operand(Operand::Register(modrm.register), OperandSize::Byte);
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
@@ -161,7 +160,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
 
                 let destination = Operand(modrm.register_or_memory.into(), OperandSize::Word);
-                let source = Operand(OperandKind::Register(modrm.register), OperandSize::Word);
+                let source = Operand(Operand::Register(modrm.register), OperandSize::Word);
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
@@ -172,7 +171,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             (OperandType::OpCodeReg, OperandType::None) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
                 OperandSet::Destination(Operand(
-                    OperandKind::Register(Register::try_from_byte(op_code & 0b111)?),
+                    Operand::Register(Register::try_from_byte(op_code & 0b111)?),
                     OperandSize::Word,
                 )),
             )),
@@ -183,9 +182,9 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
                     OperandSet::DestinationAndSource(
-                        Operand(OperandKind::Register(Register::AlAx), OperandSize::Byte),
+                        Operand(Operand::Register(Register::AlAx), OperandSize::Byte),
                         Operand(
-                            OperandKind::Immediate(Immediate::Byte(immediate)),
+                            Operand::Immediate(Immediate::Byte(immediate)),
                             OperandSize::Byte,
                         ),
                     ),
@@ -198,8 +197,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
                     OperandSet::DestinationAndSource(
-                        Operand(OperandKind::Immediate(immediate as u16), OperandSize::Byte),
-                        Operand(OperandKind::Register(Register::AlAx), OperandSize::Byte),
+                        Operand(Operand::Immediate(immediate as u16), OperandSize::Byte),
+                        Operand(Operand::Register(Register::AlAx), OperandSize::Byte),
                     ),
                 ))
             }
@@ -210,8 +209,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
                     OperandSet::DestinationAndSource(
-                        Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
-                        Operand(OperandKind::Immediate(immediate as u16), OperandSize::Byte),
+                        Operand(Operand::Register(Register::AlAx), OperandSize::Word),
+                        Operand(Operand::Immediate(immediate as u16), OperandSize::Byte),
                     ),
                 ))
             }
@@ -222,8 +221,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
                     OperandSet::DestinationAndSource(
-                        Operand(OperandKind::Immediate(immediate as u16), OperandSize::Byte),
-                        Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
+                        Operand(Operand::Immediate(immediate as u16), OperandSize::Byte),
+                        Operand(Operand::Register(Register::AlAx), OperandSize::Word),
                     ),
                 ))
             }
@@ -234,8 +233,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
                     OperandSet::DestinationAndSource(
-                        Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
-                        Operand(OperandKind::Immediate(immediate), OperandSize::Word),
+                        Operand(Operand::Register(Register::AlAx), OperandSize::Word),
+                        Operand(Operand::Immediate(immediate), OperandSize::Word),
                     ),
                 ))
             }
@@ -243,7 +242,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             (OperandType::SegReg, OperandType::None) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
                 OperandSet::Destination(Operand(
-                    OperandKind::Segment(Segment::try_from_byte(op_code >> 3 & 0b111)?),
+                    Operand::Segment(Segment::try_from_byte(op_code >> 3 & 0b111)?),
                     OperandSize::Word,
                 )),
             )),
@@ -335,9 +334,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Word),
                         Operand(
-                            OperandKind::Segment(Segment::try_from_byte(
-                                (modrm_byte >> 3) & 0b111,
-                            )?),
+                            Operand::Segment(Segment::try_from_byte((modrm_byte >> 3) & 0b111)?),
                             OperandSize::Word,
                         ),
                     ),
@@ -354,9 +351,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(
-                            OperandKind::Segment(Segment::try_from_byte(
-                                (modrm_byte >> 3) & 0b111,
-                            )?),
+                            Operand::Segment(Segment::try_from_byte((modrm_byte >> 3) & 0b111)?),
                             OperandSize::Word,
                         ),
                         Operand(modrm.register_or_memory.into(), OperandSize::Word),
@@ -382,9 +377,9 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             (OperandType::AX, OperandType::OpCodeReg) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
-                    Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
+                    Operand(Operand::Register(Register::AlAx), OperandSize::Word),
                     Operand(
-                        OperandKind::Register(Register::try_from_byte(op_code & 0b111)?),
+                        Operand::Register(Register::try_from_byte(op_code & 0b111)?),
                         OperandSize::Word,
                     ),
                 ),
@@ -404,10 +399,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandKind::Direct(Segment::DS, it_read_word(it)?),
+                        Operand::Direct(Segment::DS, it_read_word(it)?),
                         OperandSize::Byte,
                     ),
-                    Operand(OperandKind::Register(Register::AlAx), OperandSize::Byte),
+                    Operand(Operand::Register(Register::AlAx), OperandSize::Byte),
                 ),
             )),
 
@@ -415,19 +410,19 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandKind::Direct(Segment::DS, it_read_word(it)?),
+                        Operand::Direct(Segment::DS, it_read_word(it)?),
                         OperandSize::Word,
                     ),
-                    Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
+                    Operand(Operand::Register(Register::AlAx), OperandSize::Word),
                 ),
             )),
 
             (OperandType::AL, OperandType::Mem8) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
-                    Operand(OperandKind::Register(Register::AlAx), OperandSize::Byte),
+                    Operand(Operand::Register(Register::AlAx), OperandSize::Byte),
                     Operand(
-                        OperandKind::Direct(Segment::DS, it_read_word(it)?),
+                        Operand::Direct(Segment::DS, it_read_word(it)?),
                         OperandSize::Byte,
                     ),
                 ),
@@ -436,9 +431,9 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             (OperandType::AX, OperandType::Mem16) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
-                    Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
+                    Operand(Operand::Register(Register::AlAx), OperandSize::Word),
                     Operand(
-                        OperandKind::Direct(Segment::DS, it_read_word(it)?),
+                        Operand::Direct(Segment::DS, it_read_word(it)?),
                         OperandSize::Word,
                     ),
                 ),
@@ -448,11 +443,11 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandKind::Register(Register::try_from_byte(op_code & 0b111)?),
+                        Operand::Register(Register::try_from_byte(op_code & 0b111)?),
                         OperandSize::Byte,
                     ),
                     Operand(
-                        OperandKind::Immediate(it_read_byte(it)? as u16),
+                        Operand::Immediate(it_read_byte(it)? as u16),
                         OperandSize::Byte,
                     ),
                 ),
@@ -462,10 +457,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
                     Operand(
-                        OperandKind::Register(Register::try_from_byte(op_code & 0b111)?),
+                        Operand::Register(Register::try_from_byte(op_code & 0b111)?),
                         OperandSize::Word,
                     ),
-                    Operand(OperandKind::Immediate(it_read_word(it)?), OperandSize::Word),
+                    Operand(Operand::Immediate(it_read_word(it)?), OperandSize::Word),
                 ),
             )),
 
@@ -489,7 +484,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Byte),
-                        Operand(OperandKind::Immediate(1), OperandSize::Byte),
+                        Operand(Operand::Immediate(1), OperandSize::Byte),
                     ),
                 ))
             }
@@ -504,7 +499,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Word),
-                        Operand(OperandKind::Immediate(1), OperandSize::Byte),
+                        Operand(Operand::Immediate(1), OperandSize::Byte),
                     ),
                 ))
             }
@@ -527,7 +522,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Byte),
-                        Operand(OperandKind::Register(Register::ClCx), operand_size),
+                        Operand(Operand::Register(Register::ClCx), operand_size),
                     ),
                 ))
             }
@@ -550,7 +545,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Word),
-                        Operand(OperandKind::Register(Register::ClCx), operand_size),
+                        Operand(Operand::Register(Register::ClCx), operand_size),
                     ),
                 ))
             }
@@ -581,14 +576,14 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                     decode_map.operation(op_code, None),
                     OperandSet::DestinationAndSource(
                         Operand(
-                            OperandKind::Register(Register::AlAx),
+                            Operand::Register(Register::AlAx),
                             match al_or_ax {
                                 OperandType::AL => OperandSize::Byte,
                                 OperandType::AX => OperandSize::Word,
                                 _ => unreachable!(),
                             },
                         ),
-                        Operand(OperandKind::Register(Register::DlDx), OperandSize::Word),
+                        Operand(Operand::Register(Register::DlDx), OperandSize::Word),
                     ),
                 ))
             }
@@ -596,9 +591,9 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             (OperandType::DX, al_or_ax) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
-                    Operand(OperandKind::Register(Register::DlDx), OperandSize::Word),
+                    Operand(Operand::Register(Register::DlDx), OperandSize::Word),
                     Operand(
-                        OperandKind::Register(Register::AlAx),
+                        Operand::Register(Register::AlAx),
                         match al_or_ax {
                             OperandType::AL => OperandSize::Byte,
                             OperandType::AX => OperandSize::Word,

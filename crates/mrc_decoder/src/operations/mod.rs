@@ -2,7 +2,7 @@ use crate::decode::{immediate_operand_from_it, modrm_and_byte};
 use crate::errors::Result;
 use crate::TryFromByte;
 use mrc_instruction::{
-    Instruction, Operand, OperandKind, OperandSet, OperandSize, Operation, Register, Segment,
+    Instruction, Operand, OperandSet, OperandSize, Operation, Register, Segment,
 };
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -38,14 +38,8 @@ pub(crate) fn register_or_memory_and_register(
 
     let (modrm, _) = modrm_and_byte(it)?;
 
-    let reg_mem = Operand(
-        modrm.register_or_memory.into_operand_kind(operand_size),
-        operand_size,
-    );
-    let reg = Operand(
-        OperandKind::Register(modrm.register, operand_size),
-        operand_size,
-    );
+    let reg_mem = modrm.register_or_memory.into_operand_kind(operand_size);
+    let reg = Operand::Register(modrm.register, operand_size);
 
     Ok(Instruction::new(
         operation,
@@ -67,16 +61,10 @@ pub(crate) fn register_or_memory_and_segment(
 
     let (modrm, modrm_byte) = modrm_and_byte(it)?;
 
-    let destination = Operand(
-        modrm
-            .register_or_memory
-            .into_operand_kind(OperandSize::Word),
-        OperandSize::Word,
-    );
-    let source = Operand(
-        OperandKind::Segment(Segment::try_from_byte((modrm_byte >> 3) & 0b111)?),
-        OperandSize::Word,
-    );
+    let destination = modrm
+        .register_or_memory
+        .into_operand_kind(OperandSize::Word);
+    let source = Operand::Segment(Segment::try_from_byte((modrm_byte >> 3) & 0b111)?);
 
     Ok(Instruction::new(
         operation,
@@ -100,7 +88,7 @@ pub(crate) fn immediate_to_accumulator(
     Ok(Instruction::new(
         operation,
         OperandSet::DestinationAndSource(
-            Operand(OperandKind::Register(Register::AlAx, operand_size), operand_size),
+            Operand::Register(Register::AlAx, operand_size),
             immediate,
         ),
     ))

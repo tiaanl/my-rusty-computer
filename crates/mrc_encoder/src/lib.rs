@@ -26,18 +26,15 @@ fn set_op_code_size_bit(op_code: u8, size: OperandSize) -> u8 {
 #[cfg(test)]
 mod test {
     use super::*;
-    use mrc_instruction::{Immediate, Operand, OperandKind, OperandSet, Operation, Register};
+    use mrc_instruction::{Immediate, Operand, OperandSet, Operation, Register};
 
     // #[test]
     fn basic() {
         let result = encode_instruction(&Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand(OperandKind::Register(Register::AlAx, OperandSize::Byte), OperandSize::Byte),
-                Operand(
-                    OperandKind::Immediate(Immediate::Byte(0x10)),
-                    OperandSize::Byte,
-                ),
+                Operand::Register(Register::AlAx, OperandSize::Byte),
+                Operand::Immediate(Immediate::Byte(0x10)),
             ),
         ));
         assert!(result.is_ok());
@@ -46,11 +43,8 @@ mod test {
         let result = encode_instruction(&Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand(OperandKind::Register(Register::AlAx, OperandSize::Word), OperandSize::Word),
-                Operand(
-                    OperandKind::Immediate(Immediate::Word(0x1020)),
-                    OperandSize::Word,
-                ),
+                Operand::Register(Register::AlAx, OperandSize::Word),
+                Operand::Immediate(Immediate::Word(0x1020)),
             ),
         ));
         assert!(result.is_ok());
