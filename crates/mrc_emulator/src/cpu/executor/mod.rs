@@ -102,28 +102,27 @@ mod byte {
         operand_type: &OperandKind,
     ) -> Result<u8> {
         match operand_type {
-            OperandKind::Direct(segment, offset) => {
+            OperandKind::Direct(segment, offset, OperandSize::Byte) => {
                 // TODO: Handle segment override.
                 let ds = cpu.state.get_segment_value(*segment);
                 let address = segment_and_offset(ds, *offset);
                 byte::bus_read(cpu, address)
             }
 
-            OperandKind::Indirect(segment, addressing_mode, displacement) => {
+            OperandKind::Indirect(segment, addressing_mode, displacement, OperandSize::Byte) => {
                 let address = indirect_address_for(cpu, *segment, addressing_mode, displacement);
                 byte::bus_read(cpu, address)
             }
 
-            OperandKind::Register(register) => Ok(cpu.state.get_byte_register_value(*register)),
-
-            OperandKind::Segment(_) => {
-                log::warn!("Invalid data access");
-                Ok(0)
+            OperandKind::Register(register, OperandSize::Byte) => {
+                Ok(cpu.state.get_byte_register_value(*register))
             }
 
             OperandKind::Immediate(Immediate::Byte(value)) => Ok(*value as u8),
-            OperandKind::Immediate(Immediate::Word(_)) => {
-                unreachable!("word immediate in byte function not expected")
+
+            _ => {
+                log::warn!("Invalid data access");
+                Ok(0)
             }
         }
     }
@@ -142,19 +141,22 @@ mod byte {
         value: u8,
     ) -> Result<()> {
         match operand_type {
-            OperandKind::Direct(segment, offset) => {
+            OperandKind::Direct(segment, offset, OperandSize::Byte) => {
                 // TODO: Handle segment override.
                 let seg = cpu.state.get_segment_value(*segment);
                 byte::bus_write(cpu, segment_and_offset(seg, *offset), value)
             }
-            OperandKind::Indirect(segment, addressing_mode, displacement) => {
+
+            OperandKind::Indirect(segment, addressing_mode, displacement, OperandSize::Byte) => {
                 let addr = indirect_address_for(cpu, *segment, addressing_mode, displacement);
                 byte::bus_write(cpu, addr, value)
             }
-            OperandKind::Register(register) => {
+
+            OperandKind::Register(register, OperandSize::Byte) => {
                 cpu.state.set_byte_register_value(*register, value);
                 Ok(())
             }
+
             _ => Err(Error::IllegalDataAccess),
         }
     }
@@ -171,6 +173,7 @@ mod byte {
 
 mod word {
     use super::*;
+    use crate::error::Error::IllegalDataAccess;
     use mrc_instruction::Immediate;
 
     pub fn bus_read<D: Bus<Address>, I: Bus<Port>>(
@@ -199,23 +202,27 @@ mod word {
         value: u16,
     ) -> Result<()> {
         match operand_type {
-            OperandKind::Direct(segment, offset) => {
+            OperandKind::Direct(segment, offset, OperandSize::Word) => {
                 // TODO: Handle segment override.
                 let seg = cpu.state.get_segment_value(*segment);
                 word::bus_write(cpu, segment_and_offset(seg, *offset), value)
             }
-            OperandKind::Indirect(segment, addressing_mode, displacement) => {
+
+            OperandKind::Indirect(segment, addressing_mode, displacement, OperandSize::Word) => {
                 let addr = indirect_address_for(cpu, *segment, addressing_mode, displacement);
                 word::bus_write(cpu, addr, value)
             }
-            OperandKind::Register(register) => {
+
+            OperandKind::Register(register, OperandSize::Word) => {
                 cpu.state.set_word_register_value(*register, value);
                 Ok(())
             }
+
             OperandKind::Segment(segment) => {
                 cpu.state.set_segment_value(*segment, value);
                 Ok(())
             }
+
             _ => Err(Error::IllegalDataAccess),
         }
     }
@@ -234,7 +241,7 @@ mod word {
         operand_type: &OperandKind,
     ) -> Result<u16> {
         match operand_type {
-            OperandKind::Direct(segment, offset) => {
+            OperandKind::Direct(segment, offset, OperandSize::Word) => {
                 // Get a single byte from DS:offset
                 let seg = cpu.state.get_segment_value(*segment);
                 let addr = segment_and_offset(seg, *offset);
@@ -242,17 +249,22 @@ mod word {
                 word::bus_read(cpu, addr)
             }
 
-            OperandKind::Indirect(segment, addressing_mode, displacement) => word::bus_read(
-                cpu,
-                indirect_address_for(cpu, *segment, addressing_mode, displacement),
-            ),
-
-            OperandKind::Register(register) => Ok(cpu.state.get_word_register_value(*register)),
-            OperandKind::Segment(segment) => Ok(cpu.state.get_segment_value(*segment)),
-            OperandKind::Immediate(Immediate::Byte(_)) => {
-                unreachable!("Byte value in word function not expected!")
+            OperandKind::Indirect(segment, addressing_mode, displacement, OperandSize::Word) => {
+                word::bus_read(
+                    cpu,
+                    indirect_address_for(cpu, *segment, addressing_mode, displacement),
+                )
             }
+
+            OperandKind::Register(register, OperandSize::Word) => {
+                Ok(cpu.state.get_word_register_value(*register))
+            }
+
+            OperandKind::Segment(segment) => Ok(cpu.state.get_segment_value(*segment)),
+
             OperandKind::Immediate(Immediate::Word(value)) => Ok(*value),
+
+            _ => Err(IllegalDataAccess),
         }
     }
 
@@ -672,9 +684,14 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
         Operation::LEA => match instruction.operands {
             OperandSet::DestinationAndSource(
-                Operand(OperandKind::Register(register), OperandSize::Word),
+                Operand(OperandKind::Register(register, OperandSize::Word), OperandSize::Word),
                 Operand(
-                    OperandKind::Indirect(segment, ref addressing_mode, ref displacement),
+                    OperandKind::Indirect(
+                        segment,
+                        ref addressing_mode,
+                        ref displacement,
+                        OperandSize::Word,
+                    ),
                     OperandSize::Word,
                 ),
             ) => {
@@ -894,7 +911,10 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::SHL | Operation::SHR => {
             if let OperandSet::DestinationAndSource(
                 Operand(ref destination, OperandSize::Word),
-                Operand(OperandKind::Register(Register::ClCx), OperandSize::Byte),
+                Operand(
+                    OperandKind::Register(Register::ClCx, OperandSize::Byte),
+                    OperandSize::Byte,
+                ),
             ) = instruction.operands
             {
                 let d = word::get_operand_type_value(cpu, destination)?;

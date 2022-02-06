@@ -33,7 +33,7 @@ mod test {
         let result = encode_instruction(&Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand(OperandKind::Register(Register::AlAx), OperandSize::Byte),
+                Operand(OperandKind::Register(Register::AlAx, OperandSize::Byte), OperandSize::Byte),
                 Operand(
                     OperandKind::Immediate(Immediate::Byte(0x10)),
                     OperandSize::Byte,
@@ -46,7 +46,7 @@ mod test {
         let result = encode_instruction(&Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand(OperandKind::Register(Register::AlAx), OperandSize::Word),
+                Operand(OperandKind::Register(Register::AlAx, OperandSize::Word), OperandSize::Word),
                 Operand(
                     OperandKind::Immediate(Immediate::Word(0x1020)),
                     OperandSize::Word,
