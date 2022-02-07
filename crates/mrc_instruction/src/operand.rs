@@ -138,6 +138,7 @@ impl Display for Operand {
                 write_segment_prefix(f, *segment)?;
                 write!(f, "[{:#06x}]", displacement)?;
             }
+
             Operand::Indirect(segment, encoding, displacement, operand_size) => {
                 match operand_size {
                     OperandSize::Byte => write!(f, "byte ")?,
@@ -146,10 +147,13 @@ impl Display for Operand {
                 write_segment_prefix(f, *segment)?;
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
+
             Operand::Register(register, operand_size) => {
                 write!(f, "{}", SizedRegister(*register, *operand_size))?
             }
+
             Operand::Segment(encoding) => write!(f, "{}", encoding)?,
+
             Operand::Immediate(value) => write!(f, "{}", value)?,
         }
         Ok(())

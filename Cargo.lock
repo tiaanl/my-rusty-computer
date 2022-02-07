@@ -1085,6 +1085,7 @@ dependencies = [
 name = "mrc_encoder"
 version = "0.0.1"
 dependencies = [
+ "mrc_decoder",
  "mrc_instruction",
 ]
 

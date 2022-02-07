@@ -1,3 +1,4 @@
 bits 16
 
-sbb word [bx], 0x2f
+add al, cl
+add al, [0x0010]

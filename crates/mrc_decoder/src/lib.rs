@@ -14,7 +14,7 @@ pub use decode::decode_instruction;
 pub use decode2::decode_instruction;
 
 pub use errors::{DecodeError, Result};
-pub use mod_reg_rm::ModRegRM;
+pub use mod_reg_rm::{ModRegRM, RegisterOrMemory};
 use mrc_instruction::{OperandSize, Register, Segment};
 
 trait TryFromByte<T> {
