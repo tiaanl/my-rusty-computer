@@ -1,6 +1,7 @@
 use crate::errors::Result;
-use crate::{it_read_byte, it_read_word, DecodeError, TryFromByte};
-use mrc_instruction::{AddressingMode, Displacement, Operand, OperandSize, Register, Segment};
+use crate::reader::ReadExt;
+use crate::{DecodeError, TryFromByte};
+use mrc_instruction::{AddressingMode, Displacement, Operand, OperandSize, Register, Segment, SizedRegister};
 
 impl TryFromByte<Self> for AddressingMode {
     fn try_from_byte(byte: u8) -> Result<Self> {
@@ -30,13 +31,13 @@ pub enum RegisterOrMemory {
 }
 
 impl RegisterOrMemory {
-    pub fn try_from_modrm(mod_rm_byte: u8, it: &mut impl Iterator<Item = u8>) -> Result<Self> {
+    pub fn try_from_modrm(mod_rm_byte: u8, reader: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte & 0b111;
 
         match mode {
             0b00 => match rm {
-                0b110 => Ok(RegisterOrMemory::Direct(it_read_word(it)?)),
+                0b110 => Ok(RegisterOrMemory::Direct(reader.read_u16()?)),
                 _ => Ok(RegisterOrMemory::Indirect(AddressingMode::try_from_byte(
                     rm,
                 )?)),
@@ -44,12 +45,12 @@ impl RegisterOrMemory {
 
             0b01 => Ok(RegisterOrMemory::DisplacementByte(
                 AddressingMode::try_from_byte(rm)?,
-                it_read_byte(it)? as i8,
+                reader.read_u8()? as i8,
             )),
 
             0b10 => Ok(RegisterOrMemory::DisplacementWord(
                 AddressingMode::try_from_byte(rm)?,
-                it_read_word(it)? as i16,
+                reader.read_u16()? as i16,
             )),
 
             0b11 => Ok(RegisterOrMemory::Register(Register::try_from_byte(rm)?)),
@@ -79,7 +80,9 @@ impl RegisterOrMemory {
                 Displacement::Word(displacement),
                 operand_size,
             ),
-            RegisterOrMemory::Register(register) => Operand::Register(register, operand_size),
+            RegisterOrMemory::Register(register) => {
+                Operand::Register(SizedRegister(register, operand_size))
+            }
         }
     }
 }
@@ -150,24 +153,15 @@ impl ModRegRM {
         }
     }
 
-    pub fn try_from_byte(mod_rm_byte: u8, it: &mut impl Iterator<Item = u8>) -> Result<Self> {
+    pub fn try_from_byte(mod_rm_byte: u8, reader: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let register = Register::try_from_byte(mod_rm_byte >> 3 & 0b111)?;
 
-        let register_or_memory = RegisterOrMemory::try_from_modrm(mod_rm_byte, it)?;
+        let register_or_memory = RegisterOrMemory::try_from_modrm(mod_rm_byte, reader)?;
 
         Ok(ModRegRM {
             register,
             register_or_memory,
         })
-    }
-
-    pub fn try_from_iter(it: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        let modrm_byte = match it.next() {
-            Some(byte) => byte,
-            None => return Err(DecodeError::CouldNotReadExtraBytes),
-        };
-
-        Self::try_from_byte(modrm_byte, it)
     }
 
     pub fn as_byte(&self) -> u8 {
@@ -238,11 +232,10 @@ mod test {
             AddressingMode::Bx
         );
 
-        if let Err(err) = AddressingMode::try_from_byte(77) {
-            assert_eq!(err, DecodeError::InvalidIndirectMemoryEncoding(77))
-        } else {
-            assert!(false, "does not return error");
-        }
+        assert!(matches!(
+            AddressingMode::try_from_byte(0x77),
+            Err(DecodeError::InvalidIndirectMemoryEncoding(0x77))
+        ));
     }
 
     #[test]
@@ -262,32 +255,12 @@ mod test {
             }
         }
 
-        macro_rules! bytes {
-            () => {{
-                &mut ByteIterator {
-                    data: &[],
-                    position: 0,
-                }
-            }};
-            ($b1:expr) => {{
-                &mut ByteIterator {
-                    data: &[$b1],
-                    position: 0,
-                }
-            }};
-            ($b1:expr,$b2:expr) => {{
-                &mut ByteIterator {
-                    data: &[$b1, $b2],
-                    position: 0,
-                }
-            }};
-        }
-
         macro_rules! test_reg_or_mem {
             ($mod_reg_rm_byte:expr,$bytes:expr,$expected:expr) => {{
+                let mut reader = $bytes.into_iter();
                 assert_eq!(
                     $expected,
-                    RegisterOrMemory::try_from_modrm($mod_reg_rm_byte, $bytes).unwrap()
+                    RegisterOrMemory::try_from_modrm($mod_reg_rm_byte, &mut reader).unwrap()
                 );
             }};
         }
@@ -295,170 +268,134 @@ mod test {
         // Indirect
         test_reg_or_mem!(
             0b00_000_000,
-            bytes![],
+            [],
             RegisterOrMemory::Indirect(AddressingMode::BxSi)
         );
         test_reg_or_mem!(
             0b00_000_001,
-            bytes![],
+            [],
             RegisterOrMemory::Indirect(AddressingMode::BxDi)
         );
         test_reg_or_mem!(
             0b00_000_010,
-            bytes![],
+            [],
             RegisterOrMemory::Indirect(AddressingMode::BpSi)
         );
         test_reg_or_mem!(
             0b00_000_011,
-            bytes![],
+            [],
             RegisterOrMemory::Indirect(AddressingMode::BpDi)
         );
         test_reg_or_mem!(
             0b00_000_100,
-            bytes![],
+            [],
             RegisterOrMemory::Indirect(AddressingMode::Si)
         );
         test_reg_or_mem!(
             0b00_000_101,
-            bytes![],
+            [],
             RegisterOrMemory::Indirect(AddressingMode::Di)
         );
-        test_reg_or_mem!(
-            0b00_000_110,
-            bytes![0x12, 0x34],
-            RegisterOrMemory::Direct(0x3412)
-        );
+        test_reg_or_mem!(0b00_000_110, [0x12, 0x34], RegisterOrMemory::Direct(0x3412));
         test_reg_or_mem!(
             0b00_000_111,
-            bytes![],
+            [],
             RegisterOrMemory::Indirect(AddressingMode::Bx)
         );
 
         // DisplacementByte
         test_reg_or_mem!(
             0b01_000_000,
-            bytes![0x01],
+            [0x01],
             RegisterOrMemory::DisplacementByte(AddressingMode::BxSi, 1)
         );
         test_reg_or_mem!(
             0b01_000_001,
-            bytes![0x01],
+            [0x01],
             RegisterOrMemory::DisplacementByte(AddressingMode::BxDi, 1)
         );
         test_reg_or_mem!(
             0b01_000_010,
-            bytes![0x01],
+            [0x01],
             RegisterOrMemory::DisplacementByte(AddressingMode::BpSi, 1)
         );
         test_reg_or_mem!(
             0b01_000_011,
-            bytes![0x01],
+            [0x01],
             RegisterOrMemory::DisplacementByte(AddressingMode::BpDi, 1)
         );
         test_reg_or_mem!(
             0b01_000_100,
-            bytes![0x01],
+            [0x01],
             RegisterOrMemory::DisplacementByte(AddressingMode::Si, 1)
         );
         test_reg_or_mem!(
             0b01_000_101,
-            bytes![0x01],
+            [0x01],
             RegisterOrMemory::DisplacementByte(AddressingMode::Di, 1)
         );
         test_reg_or_mem!(
             0b01_000_110,
-            bytes![0x01],
+            [0x01],
             RegisterOrMemory::DisplacementByte(AddressingMode::Bp, 1)
         );
         test_reg_or_mem!(
             0b01_000_111,
-            bytes![0x01],
+            [0x01],
             RegisterOrMemory::DisplacementByte(AddressingMode::Bx, 1)
         );
 
         // DisplacementWord
         test_reg_or_mem!(
             0b10_000_000,
-            bytes![0x12, 0x34],
+            [0x12, 0x34],
             RegisterOrMemory::DisplacementWord(AddressingMode::BxSi, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_001,
-            bytes![0x12, 0x34],
+            [0x12, 0x34],
             RegisterOrMemory::DisplacementWord(AddressingMode::BxDi, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_010,
-            bytes![0x12, 0x34],
+            [0x12, 0x34],
             RegisterOrMemory::DisplacementWord(AddressingMode::BpSi, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_011,
-            bytes![0x12, 0x34],
+            [0x12, 0x34],
             RegisterOrMemory::DisplacementWord(AddressingMode::BpDi, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_100,
-            bytes![0x12, 0x34],
+            [0x12, 0x34],
             RegisterOrMemory::DisplacementWord(AddressingMode::Si, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_101,
-            bytes![0x12, 0x34],
+            [0x12, 0x34],
             RegisterOrMemory::DisplacementWord(AddressingMode::Di, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_110,
-            bytes![0x12, 0x34],
+            [0x12, 0x34],
             RegisterOrMemory::DisplacementWord(AddressingMode::Bp, 0x3412)
         );
         test_reg_or_mem!(
             0b10_000_111,
-            bytes![0x12, 0x34],
+            [0x12, 0x34],
             RegisterOrMemory::DisplacementWord(AddressingMode::Bx, 0x3412)
         );
 
         // Register
-        test_reg_or_mem!(
-            0b11_000_000,
-            bytes![],
-            RegisterOrMemory::Register(Register::AlAx)
-        );
-        test_reg_or_mem!(
-            0b11_000_001,
-            bytes![],
-            RegisterOrMemory::Register(Register::ClCx)
-        );
-        test_reg_or_mem!(
-            0b11_000_010,
-            bytes![],
-            RegisterOrMemory::Register(Register::DlDx)
-        );
-        test_reg_or_mem!(
-            0b11_000_011,
-            bytes![],
-            RegisterOrMemory::Register(Register::BlBx)
-        );
-        test_reg_or_mem!(
-            0b11_000_100,
-            bytes![],
-            RegisterOrMemory::Register(Register::AhSp)
-        );
-        test_reg_or_mem!(
-            0b11_000_101,
-            bytes![],
-            RegisterOrMemory::Register(Register::ChBp)
-        );
-        test_reg_or_mem!(
-            0b11_000_110,
-            bytes![],
-            RegisterOrMemory::Register(Register::DhSi)
-        );
-        test_reg_or_mem!(
-            0b11_000_111,
-            bytes![],
-            RegisterOrMemory::Register(Register::BhDi)
-        );
+        test_reg_or_mem!(0b11_000_000, [], RegisterOrMemory::Register(Register::AlAx));
+        test_reg_or_mem!(0b11_000_001, [], RegisterOrMemory::Register(Register::ClCx));
+        test_reg_or_mem!(0b11_000_010, [], RegisterOrMemory::Register(Register::DlDx));
+        test_reg_or_mem!(0b11_000_011, [], RegisterOrMemory::Register(Register::BlBx));
+        test_reg_or_mem!(0b11_000_100, [], RegisterOrMemory::Register(Register::AhSp));
+        test_reg_or_mem!(0b11_000_101, [], RegisterOrMemory::Register(Register::ChBp));
+        test_reg_or_mem!(0b11_000_110, [], RegisterOrMemory::Register(Register::DhSi));
+        test_reg_or_mem!(0b11_000_111, [], RegisterOrMemory::Register(Register::BhDi));
     }
 
     macro_rules! test_modrm_to_byte {

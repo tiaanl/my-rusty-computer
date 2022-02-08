@@ -3,6 +3,7 @@ pub mod operations;
 mod decode;
 mod errors;
 mod mod_reg_rm;
+mod reader;
 
 #[cfg(feature = "alternate-decoder")]
 mod decode2;
@@ -15,6 +16,7 @@ pub use decode2::decode_instruction;
 
 pub use errors::{DecodeError, Result};
 pub use mod_reg_rm::{ModRegRM, RegisterOrMemory};
+
 use mrc_instruction::{OperandSize, Register, Segment};
 
 trait TryFromByte<T> {
@@ -71,19 +73,6 @@ impl ByteReader for &[u8] {
         let high = self.read_u8()?;
         Ok(u16::from_le_bytes([low, high]))
     }
-}
-
-#[inline]
-fn it_read_byte(it: &mut impl Iterator<Item = u8>) -> Result<u8> {
-    it.next()
-        .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)
-}
-
-#[inline]
-fn it_read_word(it: &mut impl Iterator<Item = u8>) -> Result<u16> {
-    let first = it_read_byte(it)?;
-    let second = it_read_byte(it)?;
-    Ok(u16::from_le_bytes([first, second]))
 }
 
 impl TryFromByte<Self> for OperandSize {

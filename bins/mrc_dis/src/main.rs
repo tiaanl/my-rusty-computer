@@ -1,5 +1,5 @@
-use mrc_decoder::decode_instruction;
-use mrc_instruction::Instruction;
+use mrc_decoder::{decode_instruction, DecodeError};
+use mrc_instruction::{Displacement, Instruction, OperandSet};
 use std::{
     fmt::{Display, Formatter},
     io::Read,
@@ -7,6 +7,7 @@ use std::{
 };
 use structopt::StructOpt;
 
+#[derive(Copy, Clone)]
 struct SegmentAndOffset {
     segment: u16,
     offset: u16,
@@ -75,20 +76,6 @@ impl<'a> Iterator for SectionIterator<'a> {
 
 const BYTES_TO_PRINT: usize = 7;
 
-fn print_instruction(addr: SegmentAndOffset, bytes: &[u8], instruction: &Instruction) {
-    let mut b: String = bytes
-        .iter()
-        .take(BYTES_TO_PRINT)
-        .map(|b| format!("{:02X} ", b))
-        .collect();
-
-    for _ in bytes.len()..BYTES_TO_PRINT {
-        b.push_str("   ");
-    }
-
-    println!("{}  {}  {}", addr, b, instruction);
-}
-
 fn print_data_byte(addr: SegmentAndOffset, byte: u8) {
     print!("{}  {:02X}", addr, byte);
     for _ in 0..BYTES_TO_PRINT {
@@ -97,25 +84,100 @@ fn print_data_byte(addr: SegmentAndOffset, byte: u8) {
     println!("db {:02X}", byte);
 }
 
+struct DecodedInstruction<'a> {
+    address: SegmentAndOffset,
+    bytes: &'a [u8],
+    instruction: Instruction,
+    size: u8,
+}
+
+impl<'a> DecodedInstruction<'a> {
+    fn new(address: SegmentAndOffset, bytes: &'a [u8], instruction: Instruction, size: u8) -> Self {
+        Self {
+            address,
+            bytes,
+            instruction,
+            size,
+        }
+    }
+}
+
+impl<'a> Display for DecodedInstruction<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // address
+        write!(f, "{}  ", self.address)?;
+
+        // bytes
+        let mut b: String = self
+            .bytes
+            .iter()
+            .take(BYTES_TO_PRINT)
+            .map(|b| format!("{:02X} ", b))
+            .collect();
+
+        for _ in self.bytes.len()..BYTES_TO_PRINT {
+            b.push_str("   ");
+        }
+
+        write!(f, "{}  ", b)?;
+
+        match self.instruction.operands {
+            OperandSet::None => write!(f, "{}", self.instruction.operation)?,
+            _ => write!(f, "{} ", self.instruction.operation)?,
+        }
+
+        match self.instruction.operands {
+            OperandSet::Displacement(displacement) => match displacement {
+                Displacement::None => {
+                    write!(f, "{}", (self.size as u32).relative_to(&self.address))?
+                }
+                Displacement::Byte(displacement) => write!(
+                    f,
+                    "{:#06X}",
+                    ((self.address.offset + (self.size as u16)) as i16) + displacement as i16
+                )?,
+                Displacement::Word(_) => todo!(),
+            },
+            OperandSet::None => {}
+            _ => write!(f, "{}", self.instruction.operands)?,
+        }
+
+        Ok(())
+    }
+}
+
 fn print_section(section: &Section) {
     let mut it = SectionIterator {
         section,
         position: 0,
     };
-
-    while (it.position as usize) < section.data.len() {
+    loop {
         let start = it.position;
         match decode_instruction(&mut it) {
             Ok(instruction) => {
                 let bytes_used = it.position - start;
                 let bytes = &section.data[(start as usize)..(start + bytes_used) as usize];
-                print_instruction(start.relative_to(&section.addr), bytes, &instruction);
-            }
-            Err(_) => {
-                print_data_byte(
+
+                let instruction = DecodedInstruction::new(
                     start.relative_to(&section.addr),
-                    section.data[start as usize],
+                    bytes,
+                    instruction,
+                    bytes_used as u8,
                 );
+
+                println!("{}", instruction);
+
+                // print_instruction(start.relative_to(&section.addr), bytes, &instruction);
+            }
+            Err(err) => {
+                if let DecodeError::EndOfInput = err {
+                    break;
+                } else {
+                    print_data_byte(
+                        start.relative_to(&section.addr),
+                        section.data[start as usize],
+                    );
+                }
             }
         }
     }
@@ -129,13 +191,18 @@ fn load_data(binary: &str) -> Result<Vec<u8>, std::io::Error> {
     Ok(buffer)
 }
 
-fn disassemble(binary: &str, format: BinaryFormat, entry: u32) -> Result<(), std::io::Error> {
+fn disassemble(
+    binary: &str,
+    format: BinaryFormat,
+    origin: u16,
+    entry: u32,
+) -> Result<(), std::io::Error> {
     let data = load_data(binary)?;
 
     match format {
         BinaryFormat::Raw => {
             let section = Section::new(
-                segment_and_offset(0, 0),
+                segment_and_offset(0, origin),
                 &data.as_slice()[(entry as usize)..],
             );
 
@@ -176,6 +243,10 @@ struct Opt {
     /// Starting point from the beginning of the file
     #[structopt(short, long)]
     entry: Option<u32>,
+
+    // The origin offset for the first instruction. Defaults to 0000:0000
+    #[structopt(short, long)]
+    origin: Option<u16>,
 
     /// The format of the binary file
     #[structopt(short, long)]
@@ -227,7 +298,12 @@ fn main() {
         detect_format(opts.binary.as_str())
     };
 
-    if let Err(err) = disassemble(opts.binary.as_str(), format, opts.entry.unwrap_or(0)) {
+    if let Err(err) = disassemble(
+        opts.binary.as_str(),
+        format,
+        opts.origin.unwrap_or(0),
+        opts.entry.unwrap_or(0),
+    ) {
         eprintln!("{}", err);
     }
 }

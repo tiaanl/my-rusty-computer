@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 /// Represents a location in a segmented memory model.  The address stores the values in 16-bit
 /// segment and offset values, but can also be represented as a 20-bit flat address.
 ///
@@ -23,6 +25,12 @@ impl Address {
     /// Return the 20-bit address value for flat memory access.
     pub fn flat(&self) -> u32 {
         ((self.segment as u32) << 4) + (self.offset as u32)
+    }
+}
+
+impl Display for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:06X}:{:06X}", self.segment, self.offset)
     }
 }
 

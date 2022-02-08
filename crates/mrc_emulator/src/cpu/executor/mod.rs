@@ -10,7 +10,7 @@ use crate::{
 };
 use mrc_instruction::{
     AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize,
-    Operation, Register, Repeat, Segment,
+    Operation, Register, Repeat, Segment, SizedRegister,
 };
 
 #[derive(PartialEq)]
@@ -81,7 +81,7 @@ fn indirect_address_for<D: Bus<Address>, I: Bus<Port>>(
 
 mod byte {
     use super::*;
-    use mrc_instruction::Immediate;
+    use mrc_instruction::{Immediate, SizedRegister};
 
     pub fn bus_read<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
@@ -115,7 +115,7 @@ mod byte {
                 byte::bus_read(cpu, address)
             }
 
-            Operand::Register(register, OperandSize::Byte) => {
+            Operand::Register(SizedRegister(register, OperandSize::Byte)) => {
                 Ok(cpu.state.get_byte_register_value(*register))
             }
 
@@ -153,7 +153,7 @@ mod byte {
                 byte::bus_write(cpu, addr, value)
             }
 
-            Operand::Register(register, OperandSize::Byte) => {
+            Operand::Register(SizedRegister(register, OperandSize::Byte)) => {
                 cpu.state.set_byte_register_value(*register, value);
                 Ok(())
             }
@@ -175,7 +175,7 @@ mod byte {
 mod word {
     use super::*;
     use crate::error::Error::IllegalDataAccess;
-    use mrc_instruction::Immediate;
+    use mrc_instruction::{Immediate, SizedRegister};
 
     pub fn bus_read<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
@@ -214,7 +214,7 @@ mod word {
                 word::bus_write(cpu, addr, value)
             }
 
-            Operand::Register(register, OperandSize::Word) => {
+            Operand::Register(SizedRegister(register, OperandSize::Word)) => {
                 cpu.state.set_word_register_value(*register, value);
                 Ok(())
             }
@@ -257,7 +257,7 @@ mod word {
                 )
             }
 
-            Operand::Register(register, OperandSize::Word) => {
+            Operand::Register(SizedRegister(register, OperandSize::Word)) => {
                 Ok(cpu.state.get_word_register_value(*register))
             }
 
@@ -689,7 +689,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
         Operation::LEA => match instruction.operands {
             OperandSet::DestinationAndSource(
-                Operand::Register(register, OperandSize::Word),
+                Operand::Register(SizedRegister(register, OperandSize::Word)),
                 Operand::Indirect(
                     segment,
                     ref addressing_mode,
@@ -914,7 +914,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::SHL | Operation::SHR => match instruction.operands {
             OperandSet::DestinationAndSource(
                 ref destination,
-                Operand::Register(Register::ClCx, OperandSize::Byte),
+                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Byte)),
             ) if destination.operand_size() == OperandSize::Word => {
                 let d = word::get_operand_type_value(cpu, destination)?;
                 let s = cpu.state.get_byte_register_value(Register::ClCx) as u16;

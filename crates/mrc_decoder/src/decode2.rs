@@ -62,8 +62,8 @@ fn is_destination_and_source_from_mod_rm(destination: OperandType, source: Opera
     )
 }
 
-pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<Instruction> {
-    let op_code = it_read_byte(it)?;
+pub fn decode_instruction(reader: &mut impl Reader) -> crate::Result<Instruction> {
+    let op_code = reader.read_byte()?;
 
     if matches!(op_code, 0x26 | 0x2E | 0x36 | 0x3E) {
         fn override_segment(operand: &mut Operand, segment: Segment) {
@@ -77,7 +77,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
 
         let segment = Segment::try_from_byte((op_code >> 3) & 0b11)?;
 
-        let mut instruction = decode_instruction(it)?;
+        let mut instruction = decode_instruction(reader)?;
 
         match instruction.operands {
             OperandSet::DestinationAndSource(ref mut destination, ref mut source) => {
@@ -96,7 +96,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
     }
 
     if matches!(op_code, 0xF2 | 0xF3) {
-        let mut instruction = decode_instruction(it)?;
+        let mut instruction = decode_instruction(reader)?;
         match op_code {
             0xF2 => instruction.repeat = Some(Repeat::NotEqual),
             0xF3 => instruction.repeat = Some(Repeat::Equal),
@@ -109,10 +109,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
     if let Some(decode_map) = data.get(&op_code) {
         match (decode_map.destination, decode_map.source) {
             (OperandType::RegMem8, OperandType::Reg8) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 let destination = Operand(Operand::Register(modrm.register), OperandSize::Byte);
                 let source = Operand(modrm.register_or_memory.into(), OperandSize::Byte);
@@ -124,10 +124,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::RegMem16, OperandType::Reg16) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 let destination = Operand(Operand::Register(modrm.register), OperandSize::Word);
                 let source = Operand(modrm.register_or_memory.into(), OperandSize::Word);
@@ -139,10 +139,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::Reg8, OperandType::RegMem8) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 let destination = Operand(modrm.register_or_memory.into(), OperandSize::Byte);
                 let source = Operand(Operand::Register(modrm.register), OperandSize::Byte);
@@ -154,10 +154,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::Reg16, OperandType::RegMem16) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 let destination = Operand(modrm.register_or_memory.into(), OperandSize::Word);
                 let source = Operand(Operand::Register(modrm.register), OperandSize::Word);
@@ -177,7 +177,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             )),
 
             (OperandType::AL, OperandType::Imm8) => {
-                let immediate = it_read_byte(it)?;
+                let immediate = it_read_byte(reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
@@ -192,7 +192,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::Imm8, OperandType::AL) => {
-                let immediate = it_read_byte(it)?;
+                let immediate = it_read_byte(reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
@@ -204,7 +204,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::AX, OperandType::Imm8) => {
-                let immediate = it_read_byte(it)?;
+                let immediate = it_read_byte(reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
@@ -216,7 +216,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::Imm8, OperandType::AX) => {
-                let immediate = it_read_byte(it)?;
+                let immediate = it_read_byte(reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
@@ -228,7 +228,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::AX, OperandType::Imm16) => {
-                let immediate = it_read_word(it)?;
+                let immediate = it_read_word(reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
@@ -254,80 +254,80 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
 
             (OperandType::Displacement8, OperandType::None) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
-                displacement_byte_from_it(it)?,
+                displacement_byte_from_it(reader)?,
             )),
 
             (OperandType::Displacement16, OperandType::None) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
-                displacement_word_from_it(it)?,
+                displacement_word_from_it(reader)?,
             )),
 
             (OperandType::Reg8, OperandType::Imm8) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Byte),
-                        immediate_operand_from_it(it, OperandSize::Byte)?,
+                        immediate_operand_from_it(reader, OperandSize::Byte)?,
                     ),
                 ))
             }
 
             (OperandType::Reg16, OperandType::Imm8) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Word),
-                        immediate_operand_from_it(it, OperandSize::Byte)?,
+                        immediate_operand_from_it(reader, OperandSize::Byte)?,
                     ),
                 ))
             }
 
             (OperandType::Reg16, OperandType::Imm16) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Word),
-                        immediate_operand_from_it(it, OperandSize::Word)?,
+                        immediate_operand_from_it(reader, OperandSize::Word)?,
                     ),
                 ))
             }
 
             (OperandType::Reg16, OperandType::SignedImm8) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 // TODO: The source imm needs to be sign extended.
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
                     OperandSet::DestinationAndSource(
                         Operand(modrm.register_or_memory.into(), OperandSize::Word),
-                        immediate_operand_from_it(it, OperandSize::Byte)?,
+                        immediate_operand_from_it(reader, OperandSize::Byte)?,
                     ),
                 ))
             }
 
             (OperandType::Reg16, OperandType::SegReg) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
@@ -342,10 +342,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::SegReg, OperandType::Reg16) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
@@ -360,10 +360,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::RegMem16, OperandType::None) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
@@ -386,8 +386,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             )),
 
             (OperandType::MemFar, OperandType::None) => {
-                let offset = it_read_word(it)?;
-                let segment = it_read_word(it)?;
+                let offset = it_read_word(reader)?;
+                let segment = it_read_word(reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, None),
@@ -399,7 +399,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
                     Operand(
-                        Operand::Direct(Segment::DS, it_read_word(it)?),
+                        Operand::Direct(Segment::DS, it_read_word(reader)?),
                         OperandSize::Byte,
                     ),
                     Operand(Operand::Register(Register::AlAx), OperandSize::Byte),
@@ -410,7 +410,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 decode_map.operation(op_code, None),
                 OperandSet::DestinationAndSource(
                     Operand(
-                        Operand::Direct(Segment::DS, it_read_word(it)?),
+                        Operand::Direct(Segment::DS, it_read_word(reader)?),
                         OperandSize::Word,
                     ),
                     Operand(Operand::Register(Register::AlAx), OperandSize::Word),
@@ -422,7 +422,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 OperandSet::DestinationAndSource(
                     Operand(Operand::Register(Register::AlAx), OperandSize::Byte),
                     Operand(
-                        Operand::Direct(Segment::DS, it_read_word(it)?),
+                        Operand::Direct(Segment::DS, it_read_word(reader)?),
                         OperandSize::Byte,
                     ),
                 ),
@@ -433,7 +433,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                 OperandSet::DestinationAndSource(
                     Operand(Operand::Register(Register::AlAx), OperandSize::Word),
                     Operand(
-                        Operand::Direct(Segment::DS, it_read_word(it)?),
+                        Operand::Direct(Segment::DS, it_read_word(reader)?),
                         OperandSize::Word,
                     ),
                 ),
@@ -447,7 +447,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                         OperandSize::Byte,
                     ),
                     Operand(
-                        Operand::Immediate(it_read_byte(it)? as u16),
+                        Operand::Immediate(it_read_byte(reader)? as u16),
                         OperandSize::Byte,
                     ),
                 ),
@@ -460,25 +460,25 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
                         Operand::Register(Register::try_from_byte(op_code & 0b111)?),
                         OperandSize::Word,
                     ),
-                    Operand(Operand::Immediate(it_read_word(it)?), OperandSize::Word),
+                    Operand(Operand::Immediate(it_read_word(reader)?), OperandSize::Word),
                 ),
             )),
 
             (OperandType::Imm16, OperandType::None) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
-                OperandSet::Destination(immediate_operand_from_it(it, OperandSize::Word)?),
+                OperandSet::Destination(immediate_operand_from_it(reader, OperandSize::Word)?),
             )),
 
             (OperandType::Imm8, OperandType::None) => Ok(Instruction::new(
                 decode_map.operation(op_code, None),
-                OperandSet::Destination(immediate_operand_from_it(it, OperandSize::Byte)?),
+                OperandSet::Destination(immediate_operand_from_it(reader, OperandSize::Byte)?),
             )),
 
             (OperandType::Reg8, OperandType::Imm1) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
@@ -490,10 +490,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (OperandType::Reg16, OperandType::Imm1) => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),
@@ -507,10 +507,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             (OperandType::Reg8, cl_or_cx)
                 if cl_or_cx == OperandType::CL || cl_or_cx == OperandType::CX =>
             {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 let operand_size = match cl_or_cx {
                     OperandType::CL => OperandSize::Byte,
@@ -530,10 +530,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             (OperandType::Reg16, cl_or_cx)
                 if cl_or_cx == OperandType::CL || cl_or_cx == OperandType::CX =>
             {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 let operand_size = match cl_or_cx {
                     OperandType::CL => OperandSize::Byte,
@@ -551,10 +551,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> crate::Result<In
             }
 
             (reg, OperandType::None) if reg == OperandType::Reg8 || reg == OperandType::Reg16 => {
-                let modrm_byte = it
+                let modrm_byte = reader
                     .next()
                     .map_or(Err(DecodeError::CouldNotReadExtraBytes), Ok)?;
-                let modrm = ModRegRM::try_from_byte(modrm_byte, it)?;
+                let modrm = ModRegRM::try_from_byte(modrm_byte, reader)?;
 
                 Ok(Instruction::new(
                     decode_map.operation(op_code, Some(modrm_byte)),

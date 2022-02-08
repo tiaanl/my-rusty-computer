@@ -31,7 +31,7 @@ process_char:
 
         mul     bx                          ; multiply the value with the decimal multiplier
         add     cx, ax                      ; add the new character value to the total
-        mul     bx, 10                      ; increase the decimal multiplier
+        add     bx, 10                      ; increase the decimal multiplier
 
         xor     dx, dx
         mov     dl, [PSP]

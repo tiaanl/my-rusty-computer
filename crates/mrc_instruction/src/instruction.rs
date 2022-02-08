@@ -1,17 +1,5 @@
-use crate::{Address, Displacement, Operand, Operation, Segment, SizedRegister};
+use crate::{Address, Displacement, Operand, Operation};
 use std::fmt::Display;
-
-impl From<SizedRegister> for Operand {
-    fn from(sized_register: SizedRegister) -> Self {
-        Self::Register(sized_register.0, sized_register.1)
-    }
-}
-
-impl From<Segment> for Operand {
-    fn from(segment: Segment) -> Self {
-        Operand::Segment(segment)
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum OperandSet {
@@ -54,8 +42,10 @@ pub enum Repeat {
 ///     Operation::MOV,
 ///     OperandSet::DestinationAndSource(
 ///         Operand::Register(
-///             Register::AlAx,
-///             OperandSize::Word,
+///             SizedRegister(
+///                 Register::AlAx,
+///                 OperandSize::Word,
+///             )
 ///         ),
 ///         Operand::Indirect(
 ///             Segment::ES,
