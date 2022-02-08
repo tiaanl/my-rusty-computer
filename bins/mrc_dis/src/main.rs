@@ -136,7 +136,11 @@ impl<'a> Display for DecodedInstruction<'a> {
                     "{:#06X}",
                     ((self.address.offset + (self.size as u16)) as i16) + displacement as i16
                 )?,
-                Displacement::Word(_) => todo!(),
+                Displacement::Word(displacement) => write!(
+                    f,
+                    "{:#06X}",
+                    ((self.address.offset + (self.size as u16)) as i16) + displacement
+                )?,
             },
             OperandSet::None => {}
             _ => write!(f, "{}", self.instruction.operands)?,
