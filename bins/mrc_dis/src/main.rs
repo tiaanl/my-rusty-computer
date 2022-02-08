@@ -244,7 +244,7 @@ struct Opt {
     #[structopt(short, long)]
     entry: Option<u32>,
 
-    // The origin offset for the first instruction. Defaults to 0000:0000
+    /// The origin offset for the first instruction. Defaults to 0000:0000
     #[structopt(short, long)]
     origin: Option<u16>,
 
