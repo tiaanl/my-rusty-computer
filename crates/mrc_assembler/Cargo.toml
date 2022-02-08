@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 mrc_instruction = { path = "../mrc_instruction" }
 nom = "7.1"
-nom_locate = { path = "../../../nom_locate" }
+nom_locate = "4.0"
