@@ -64,284 +64,12 @@ pub(crate) fn modrm_and_byte(reader: &mut impl Iterator<Item = u8>) -> Result<(M
     Ok((modrm, byte))
 }
 
-enum Data {
-    Unknown,
-    SingleByteOperation(Operation),
-}
-
-const OP_CODE_DATA: [Data; 256] = [
-    /* 00 */ Data::Unknown,
-    /* 01 */ Data::Unknown,
-    /* 02 */ Data::Unknown,
-    /* 03 */ Data::Unknown,
-    /* 04 */ Data::Unknown,
-    /* 05 */ Data::Unknown,
-    /* 06 */ Data::Unknown,
-    /* 07 */ Data::Unknown,
-    /* 08 */ Data::Unknown,
-    /* 09 */ Data::Unknown,
-    /* 0A */ Data::Unknown,
-    /* 0B */ Data::Unknown,
-    /* 0C */ Data::Unknown,
-    /* 0D */ Data::Unknown,
-    /* 0E */ Data::Unknown,
-    /* 0F */ Data::Unknown,
-    /* 10 */ Data::Unknown,
-    /* 11 */ Data::Unknown,
-    /* 12 */ Data::Unknown,
-    /* 13 */ Data::Unknown,
-    /* 14 */ Data::Unknown,
-    /* 15 */ Data::Unknown,
-    /* 16 */ Data::Unknown,
-    /* 17 */ Data::Unknown,
-    /* 18 */ Data::Unknown,
-    /* 19 */ Data::Unknown,
-    /* 1A */ Data::Unknown,
-    /* 1B */ Data::Unknown,
-    /* 1C */ Data::Unknown,
-    /* 1D */ Data::Unknown,
-    /* 1E */ Data::Unknown,
-    /* 1F */ Data::Unknown,
-    /* 20 */ Data::Unknown,
-    /* 21 */ Data::Unknown,
-    /* 22 */ Data::Unknown,
-    /* 23 */ Data::Unknown,
-    /* 24 */ Data::Unknown,
-    /* 25 */ Data::Unknown,
-    /* 26 */ Data::Unknown,
-    /* 27 */ Data::SingleByteOperation(Operation::DAA),
-    /* 28 */ Data::Unknown,
-    /* 29 */ Data::Unknown,
-    /* 2A */ Data::Unknown,
-    /* 2B */ Data::Unknown,
-    /* 2C */ Data::Unknown,
-    /* 2D */ Data::Unknown,
-    /* 2E */ Data::Unknown,
-    /* 2F */ Data::SingleByteOperation(Operation::DAS),
-    /* 30 */ Data::Unknown,
-    /* 31 */ Data::Unknown,
-    /* 32 */ Data::Unknown,
-    /* 33 */ Data::Unknown,
-    /* 34 */ Data::Unknown,
-    /* 35 */ Data::Unknown,
-    /* 36 */ Data::Unknown,
-    /* 37 */ Data::SingleByteOperation(Operation::AAA),
-    /* 38 */ Data::Unknown,
-    /* 39 */ Data::Unknown,
-    /* 3A */ Data::Unknown,
-    /* 3B */ Data::Unknown,
-    /* 3C */ Data::Unknown,
-    /* 3D */ Data::Unknown,
-    /* 3E */ Data::Unknown,
-    /* 3F */ Data::SingleByteOperation(Operation::AAS),
-    /* 40 */ Data::Unknown,
-    /* 41 */ Data::Unknown,
-    /* 42 */ Data::Unknown,
-    /* 43 */ Data::Unknown,
-    /* 44 */ Data::Unknown,
-    /* 45 */ Data::Unknown,
-    /* 46 */ Data::Unknown,
-    /* 47 */ Data::Unknown,
-    /* 48 */ Data::Unknown,
-    /* 49 */ Data::Unknown,
-    /* 4A */ Data::Unknown,
-    /* 4B */ Data::Unknown,
-    /* 4C */ Data::Unknown,
-    /* 4D */ Data::Unknown,
-    /* 4E */ Data::Unknown,
-    /* 4F */ Data::Unknown,
-    /* 50 */ Data::Unknown,
-    /* 51 */ Data::Unknown,
-    /* 52 */ Data::Unknown,
-    /* 53 */ Data::Unknown,
-    /* 54 */ Data::Unknown,
-    /* 55 */ Data::Unknown,
-    /* 56 */ Data::Unknown,
-    /* 57 */ Data::Unknown,
-    /* 58 */ Data::Unknown,
-    /* 59 */ Data::Unknown,
-    /* 5A */ Data::Unknown,
-    /* 5B */ Data::Unknown,
-    /* 5C */ Data::Unknown,
-    /* 5D */ Data::Unknown,
-    /* 5E */ Data::Unknown,
-    /* 5F */ Data::Unknown,
-    /* 60 */ Data::Unknown,
-    /* 61 */ Data::Unknown,
-    /* 62 */ Data::Unknown,
-    /* 63 */ Data::Unknown,
-    /* 64 */ Data::Unknown,
-    /* 65 */ Data::Unknown,
-    /* 66 */ Data::Unknown,
-    /* 67 */ Data::Unknown,
-    /* 68 */ Data::Unknown,
-    /* 69 */ Data::Unknown,
-    /* 6A */ Data::Unknown,
-    /* 6B */ Data::Unknown,
-    /* 6C */ Data::Unknown,
-    /* 6D */ Data::Unknown,
-    /* 6E */ Data::Unknown,
-    /* 6F */ Data::Unknown,
-    /* 70 */ Data::Unknown,
-    /* 71 */ Data::Unknown,
-    /* 72 */ Data::Unknown,
-    /* 73 */ Data::Unknown,
-    /* 74 */ Data::Unknown,
-    /* 75 */ Data::Unknown,
-    /* 76 */ Data::Unknown,
-    /* 77 */ Data::Unknown,
-    /* 78 */ Data::Unknown,
-    /* 79 */ Data::Unknown,
-    /* 7A */ Data::Unknown,
-    /* 7B */ Data::Unknown,
-    /* 7C */ Data::Unknown,
-    /* 7D */ Data::Unknown,
-    /* 7E */ Data::Unknown,
-    /* 7F */ Data::Unknown,
-    /* 80 */ Data::Unknown,
-    /* 81 */ Data::Unknown,
-    /* 82 */ Data::Unknown,
-    /* 83 */ Data::Unknown,
-    /* 84 */ Data::Unknown,
-    /* 85 */ Data::Unknown,
-    /* 86 */ Data::Unknown,
-    /* 87 */ Data::Unknown,
-    /* 88 */ Data::Unknown,
-    /* 89 */ Data::Unknown,
-    /* 8A */ Data::Unknown,
-    /* 8B */ Data::Unknown,
-    /* 8C */ Data::Unknown,
-    /* 8D */ Data::Unknown,
-    /* 8E */ Data::Unknown,
-    /* 8F */ Data::Unknown,
-    /* 90 */ Data::SingleByteOperation(Operation::NOP),
-    /* 91 */ Data::Unknown,
-    /* 92 */ Data::Unknown,
-    /* 93 */ Data::Unknown,
-    /* 94 */ Data::Unknown,
-    /* 95 */ Data::Unknown,
-    /* 96 */ Data::Unknown,
-    /* 97 */ Data::Unknown,
-    /* 98 */ Data::SingleByteOperation(Operation::CBW),
-    /* 99 */ Data::SingleByteOperation(Operation::CWD),
-    /* 9A */ Data::Unknown,
-    /* 9B */ Data::SingleByteOperation(Operation::WAIT),
-    /* 9C */ Data::SingleByteOperation(Operation::PUSHF),
-    /* 9D */ Data::SingleByteOperation(Operation::POPF),
-    /* 9E */ Data::SingleByteOperation(Operation::SAHF),
-    /* 9F */ Data::SingleByteOperation(Operation::LAHF),
-    /* A0 */ Data::Unknown,
-    /* A1 */ Data::Unknown,
-    /* A2 */ Data::Unknown,
-    /* A3 */ Data::Unknown,
-    /* A4 */ Data::SingleByteOperation(Operation::MOVSB),
-    /* A5 */ Data::SingleByteOperation(Operation::MOVSW),
-    /* A6 */ Data::SingleByteOperation(Operation::CMPSB),
-    /* A7 */ Data::SingleByteOperation(Operation::CMPSW),
-    /* A8 */ Data::Unknown,
-    /* A9 */ Data::Unknown,
-    /* AA */ Data::SingleByteOperation(Operation::STOSB),
-    /* AB */ Data::SingleByteOperation(Operation::STOSW),
-    /* AC */ Data::SingleByteOperation(Operation::LODSB),
-    /* AD */ Data::SingleByteOperation(Operation::LODSW),
-    /* AE */ Data::SingleByteOperation(Operation::SCASB),
-    /* AF */ Data::SingleByteOperation(Operation::SCASW),
-    /* B0 */ Data::Unknown,
-    /* B1 */ Data::Unknown,
-    /* B2 */ Data::Unknown,
-    /* B3 */ Data::Unknown,
-    /* B4 */ Data::Unknown,
-    /* B5 */ Data::Unknown,
-    /* B6 */ Data::Unknown,
-    /* B7 */ Data::Unknown,
-    /* B8 */ Data::Unknown,
-    /* B9 */ Data::Unknown,
-    /* BA */ Data::Unknown,
-    /* BB */ Data::Unknown,
-    /* BC */ Data::Unknown,
-    /* BD */ Data::Unknown,
-    /* BE */ Data::Unknown,
-    /* BF */ Data::Unknown,
-    /* C0 */ Data::Unknown,
-    /* C1 */ Data::Unknown,
-    /* C2 */ Data::Unknown, // Near
-    /* C3 */ Data::SingleByteOperation(Operation::RET), // Far
-    /* C4 */ Data::Unknown,
-    /* C5 */ Data::Unknown,
-    /* C6 */ Data::Unknown,
-    /* C7 */ Data::Unknown,
-    /* C8 */ Data::Unknown,
-    /* C9 */ Data::Unknown,
-    /* CA */ Data::Unknown, // Near
-    /* CB */ Data::SingleByteOperation(Operation::RET), // Far
-    /* CC */ Data::SingleByteOperation(Operation::INT3),
-    /* CD */ Data::Unknown,
-    /* CE */ Data::SingleByteOperation(Operation::INTO),
-    /* CF */ Data::SingleByteOperation(Operation::IRET),
-    /* D0 */ Data::Unknown,
-    /* D1 */ Data::Unknown,
-    /* D2 */ Data::Unknown,
-    /* D3 */ Data::Unknown,
-    /* D4 */ Data::Unknown,
-    /* D5 */ Data::Unknown,
-    /* D6 */ Data::SingleByteOperation(Operation::SALC),
-    /* D7 */ Data::SingleByteOperation(Operation::XLAT),
-    /* D8 */ Data::SingleByteOperation(Operation::ESC),
-    /* D9 */ Data::SingleByteOperation(Operation::ESC),
-    /* DA */ Data::SingleByteOperation(Operation::ESC),
-    /* DB */ Data::SingleByteOperation(Operation::ESC),
-    /* DC */ Data::SingleByteOperation(Operation::ESC),
-    /* DD */ Data::SingleByteOperation(Operation::ESC),
-    /* DE */ Data::SingleByteOperation(Operation::ESC),
-    /* DF */ Data::SingleByteOperation(Operation::ESC),
-    /* E0 */ Data::Unknown,
-    /* E1 */ Data::Unknown,
-    /* E2 */ Data::Unknown,
-    /* E3 */ Data::Unknown,
-    /* E4 */ Data::Unknown,
-    /* E5 */ Data::Unknown,
-    /* E6 */ Data::Unknown,
-    /* E7 */ Data::Unknown,
-    /* E8 */ Data::Unknown,
-    /* E9 */ Data::Unknown,
-    /* EA */ Data::Unknown,
-    /* EB */ Data::Unknown,
-    /* EC */ Data::Unknown,
-    /* ED */ Data::Unknown,
-    /* EE */ Data::Unknown,
-    /* EF */ Data::Unknown,
-    /* F0 */ Data::SingleByteOperation(Operation::LOCK),
-    /* F1 */ Data::SingleByteOperation(Operation::INT1),
-    /* F2 */ Data::Unknown,
-    /* F3 */ Data::Unknown,
-    /* F4 */ Data::SingleByteOperation(Operation::HLT),
-    /* F5 */ Data::SingleByteOperation(Operation::CMC),
-    /* F6 */ Data::Unknown,
-    /* F7 */ Data::Unknown,
-    /* F8 */ Data::SingleByteOperation(Operation::CLC),
-    /* F9 */ Data::SingleByteOperation(Operation::STC),
-    /* FA */ Data::SingleByteOperation(Operation::CLI),
-    /* FB */ Data::SingleByteOperation(Operation::STI),
-    /* FC */ Data::SingleByteOperation(Operation::CLD),
-    /* FD */ Data::SingleByteOperation(Operation::STD),
-    /* FE */ Data::Unknown,
-    /* FF */ Data::Unknown,
-];
-
 /// Takes a byte slice and tries to convert it into an [Instruction].
 pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instruction> {
     let op_code = it.read_u8().map_err(|e| match e {
         DecodeError::CouldNotReadExtraBytes => DecodeError::EndOfInput,
         err => err,
     })?;
-
-    let data = &OP_CODE_DATA[op_code as usize];
-    match data {
-        Data::Unknown => {}
-        Data::SingleByteOperation(operation) => {
-            return Ok(Instruction::new(*operation, OperandSet::None));
-        }
-    }
 
     match op_code {
         0x00 | 0x01 | 0x02 | 0x03 | 0x08 | 0x09 | 0x0A | 0x0B | 0x10 | 0x11 | 0x12 | 0x13
@@ -978,10 +706,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
 #[cfg(test)]
 mod test {
-    use mrc_instruction::{
-        Address, AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet,
-        OperandSize, Operation, Register, Repeat, Segment, SizedRegister,
-    };
+    use mrc_instruction::{Address, AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize, Operation, Register, Repeat, Segment, SizedRegister};
 
     struct TestIterator {
         data: Vec<u8>,
@@ -1986,10 +1711,7 @@ mod test {
             [0x40, 0xAB, 0x51, 0x27, 0x6D, 0x9A], // INC        AX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::AlAx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)))
             )
         );
     }
@@ -2000,10 +1722,7 @@ mod test {
             [0x41, 0x7A, 0x69, 0xFC, 0xC4, 0x20], // INC        CX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ClCx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)))
             )
         );
     }
@@ -2014,10 +1733,7 @@ mod test {
             [0x42, 0xBA, 0x7D, 0x24, 0x33, 0x92], // INC        DX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::DlDx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)))
             )
         );
     }
@@ -2028,10 +1744,7 @@ mod test {
             [0x43, 0x47, 0x97, 0xB4, 0x68, 0xC8], // INC        BX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BlBx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)))
             )
         );
     }
@@ -2042,10 +1755,7 @@ mod test {
             [0x44, 0x5A, 0xC2, 0x6A, 0xF7, 0xB8], // INC        SP
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::AhSp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::AhSp, OperandSize::Word)))
             )
         );
     }
@@ -2056,10 +1766,7 @@ mod test {
             [0x45, 0x33, 0xA5, 0x42, 0xBC, 0x09], // INC        Bp
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ChBp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)))
             )
         );
     }
@@ -2070,10 +1777,7 @@ mod test {
             [0x46, 0x8E, 0x2B, 0xD8, 0x42, 0x45], // INC        SI
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::DhSi,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)))
             )
         );
     }
@@ -2084,10 +1788,7 @@ mod test {
             [0x47, 0x63, 0x45, 0xC4, 0x2F, 0x0B], // INC        DI
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BhDi,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BhDi, OperandSize::Word)))
             )
         );
     }
@@ -2098,10 +1799,7 @@ mod test {
             [0x48, 0x87, 0xC8, 0x19, 0xE9, 0x75], // DEC        AX
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::AlAx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)))
             )
         );
     }
@@ -2112,10 +1810,7 @@ mod test {
             [0x49, 0xC3, 0xD8, 0x50, 0xE8, 0xCA], // DEC        CX
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ClCx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)))
             )
         );
     }
@@ -2126,10 +1821,7 @@ mod test {
             [0x4A, 0x4E, 0xE9, 0xB9, 0xE5, 0x98], // DEC        DX
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::DlDx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)))
             )
         );
     }
@@ -2140,10 +1832,7 @@ mod test {
             [0x4B, 0x53, 0x9B, 0x2E, 0x14, 0x4D], // DEC        BX
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BlBx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)))
             )
         );
     }
@@ -2154,10 +1843,7 @@ mod test {
             [0x4C, 0x15, 0x8D, 0x53, 0x84, 0x39], // DEC        SP
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::AhSp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::AhSp, OperandSize::Word)))
             )
         );
     }
@@ -2168,10 +1854,7 @@ mod test {
             [0x4D, 0xB5, 0xA8, 0x3E, 0x0B, 0xD7], // DEC        BP
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ChBp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)))
             )
         );
     }
@@ -2182,10 +1865,7 @@ mod test {
             [0x4E, 0xD7, 0x4E, 0x7F, 0x6D, 0xE8], // DEC        SI
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::DhSi,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)))
             )
         );
     }
@@ -2196,10 +1876,7 @@ mod test {
             [0x4F, 0xAB, 0xD7, 0x16, 0x0C, 0x59], // DEC        DI
             Instruction::new(
                 Operation::DEC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BhDi,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BhDi, OperandSize::Word)))
             )
         );
     }
@@ -2210,10 +1887,7 @@ mod test {
             [0x50, 0xBB, 0xFF, 0x5A, 0x86, 0xA7], // PUSH       AX
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::AlAx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)))
             )
         );
     }
@@ -2224,10 +1898,7 @@ mod test {
             [0x51, 0x15, 0x08, 0x37, 0xCF, 0xB1], // PUSH       CX
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ClCx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)))
             )
         );
     }
@@ -2238,10 +1909,7 @@ mod test {
             [0x52, 0x84, 0xC5, 0x4E, 0x55, 0x82], // PUSH       DX
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::DlDx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)))
             )
         );
     }
@@ -2252,10 +1920,7 @@ mod test {
             [0x53, 0x90, 0xD6, 0x62, 0x9D, 0x00], // PUSH       BX
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BlBx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)))
             )
         );
     }
@@ -2266,10 +1931,7 @@ mod test {
             [0x54, 0x07, 0xB8, 0x32, 0x4B, 0xF8], // PUSH       SP
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::AhSp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::AhSp, OperandSize::Word)))
             )
         );
     }
@@ -2280,10 +1942,7 @@ mod test {
             [0x55, 0x92, 0xB0, 0xFF, 0x8E, 0x55], // PUSH       BP
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ChBp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)))
             )
         );
     }
@@ -2294,10 +1953,7 @@ mod test {
             [0x56, 0x50, 0xE1, 0x00, 0x28, 0x4B], // PUSH       SI
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::DhSi,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)))
             )
         );
     }
@@ -2308,10 +1964,7 @@ mod test {
             [0x57, 0xE5, 0x26, 0x32, 0x89, 0x00], // PUSH       DI
             Instruction::new(
                 Operation::PUSH,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BhDi,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BhDi, OperandSize::Word)))
             )
         );
     }
@@ -2322,10 +1975,7 @@ mod test {
             [0x58, 0x18, 0xE9, 0xC6, 0x71, 0x50], // POP        AX
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::AlAx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)))
             )
         );
     }
@@ -2336,10 +1986,7 @@ mod test {
             [0x59, 0xA1, 0x49, 0x14, 0x00, 0xC7], // POP        CX
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ClCx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)))
             )
         );
     }
@@ -2350,10 +1997,7 @@ mod test {
             [0x5A, 0xD7, 0xF7, 0x7C, 0xE8, 0x5A], // POP        DX
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::DlDx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)))
             )
         );
     }
@@ -2364,10 +2008,7 @@ mod test {
             [0x5B, 0x35, 0xBB, 0x67, 0x87, 0x32], // POP        BX
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BlBx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)))
             )
         );
     }
@@ -2378,10 +2019,7 @@ mod test {
             [0x5C, 0xD0, 0x6C, 0x59, 0xB4, 0x41], // POP        SP
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::AhSp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::AhSp, OperandSize::Word)))
             )
         );
     }
@@ -2392,10 +2030,7 @@ mod test {
             [0x5D, 0x07, 0xFA, 0x7A, 0x5B, 0xB2], // POP        BP
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ChBp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)))
             )
         );
     }
@@ -2406,10 +2041,7 @@ mod test {
             [0x5E, 0x4A, 0x30, 0x5D, 0x74, 0x76], // POP        SI
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::DhSi,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)))
             )
         );
     }
@@ -2420,10 +2052,7 @@ mod test {
             [0x5F, 0xC1, 0xDC, 0x74, 0xE5, 0x51], // POP        DI
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BhDi,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BhDi, OperandSize::Word)))
             )
         );
     }
@@ -3031,10 +2660,7 @@ mod test {
             [0x8F, 0xC5, 0xF8, 0xF1, 0x43, 0xE6], // POP        BP
             Instruction::new(
                 Operation::POP,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::ChBp,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)))
             )
         );
     }
@@ -4342,10 +3968,7 @@ mod test {
             [0xFF, 0xC3, 0x19, 0xB8, 0x3F, 0x23], // INC        BX
             Instruction::new(
                 Operation::INC,
-                OperandSet::Destination(Operand::Register(SizedRegister(
-                    Register::BlBx,
-                    OperandSize::Word
-                )))
+                OperandSet::Destination(Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)))
             )
         );
     }
