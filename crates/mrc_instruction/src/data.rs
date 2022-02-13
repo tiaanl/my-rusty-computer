@@ -52,7 +52,7 @@ impl PartialEq<Operation> for OperationMap {
     fn eq(&self, other: &Operation) -> bool {
         match self {
             Single(operation) => operation == other,
-            ModrmReg(group) => group.iter().find(|&o| o == other).is_some(),
+            ModrmReg(group) => group.iter().any(|o| o == other),
         }
     }
 }

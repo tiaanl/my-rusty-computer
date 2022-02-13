@@ -136,7 +136,7 @@ impl PartialEq<data::InstructionData> for Instruction<'_> {
             OperandSet::DestinationAndSource(destination, _source) => {
                 use data::OperandType::*;
 
-                let destination_match = match other.destination {
+                match other.destination {
                     None => false,
                     OpCodeReg => false,
                     AL => matches!(
@@ -181,9 +181,7 @@ impl PartialEq<data::InstructionData> for Instruction<'_> {
                     SegReg => false,
                     Displacement8 => false,
                     Displacement16 => false,
-                };
-
-                destination_match
+                }
             }
             _ => false,
         }

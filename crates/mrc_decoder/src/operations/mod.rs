@@ -1,8 +1,9 @@
-use crate::decode::modrm_and_byte;
 use crate::errors::Result;
 use crate::reader::ReadExt;
 use crate::TryFromByte;
-use mrc_instruction::{Instruction, Operand, OperandSet, OperandSize, Operation, Register, Segment, SizedRegister};
+use mrc_instruction::{
+    Instruction, Operand, OperandSet, OperandSize, Operation, Register, Segment, SizedRegister,
+};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) enum Direction {
@@ -35,10 +36,10 @@ pub(crate) fn register_or_memory_and_register(
         }
     };
 
-    let (modrm, _) = modrm_and_byte(it)?;
+    let (mrrm, _) = it.read_mrrm_and_byte()?;
 
-    let reg_mem = modrm.register_or_memory.into_operand_kind(operand_size);
-    let reg = Operand::Register(SizedRegister(modrm.register, operand_size));
+    let reg_mem = mrrm.register_or_memory.into_operand_kind(operand_size);
+    let reg = Operand::Register(SizedRegister(mrrm.register, operand_size));
 
     Ok(Instruction::new(
         operation,
@@ -58,12 +59,10 @@ pub(crate) fn register_or_memory_and_segment(
 ) -> Result<Instruction> {
     let direction = (op_code >> 1) & 1;
 
-    let (modrm, modrm_byte) = modrm_and_byte(it)?;
+    let (mrrm, mrrm_byte) = it.read_mrrm_and_byte()?;
 
-    let destination = modrm
-        .register_or_memory
-        .into_operand_kind(OperandSize::Word);
-    let source = Operand::Segment(Segment::try_from_byte((modrm_byte >> 3) & 0b111)?);
+    let destination = mrrm.register_or_memory.into_operand_kind(OperandSize::Word);
+    let source = Operand::Segment(Segment::try_from_byte((mrrm_byte >> 3) & 0b111)?);
 
     Ok(Instruction::new(
         operation,

@@ -1,4 +1,4 @@
-use crate::{DecodeError, Result};
+use crate::{DecodeError, ModRegRM, Result};
 use mrc_instruction::{Displacement, Immediate, OperandSize};
 
 pub trait ReadExt {
@@ -7,6 +7,8 @@ pub trait ReadExt {
     fn read_u16(&mut self) -> Result<u16> {
         Ok(u16::from_le_bytes([self.read_u8()?, self.read_u8()?]))
     }
+
+    fn read_mrrm_and_byte(&mut self) -> Result<(ModRegRM, u8)>;
 
     fn read_immediate(&mut self, operand_size: OperandSize) -> Result<Immediate>;
 
@@ -20,6 +22,13 @@ impl<T: Iterator<Item = u8>> ReadExt for T {
         } else {
             Err(DecodeError::CouldNotReadExtraBytes)
         }
+    }
+
+    fn read_mrrm_and_byte(&mut self) -> Result<(ModRegRM, u8)> {
+        let mrrm_byte = self.read_u8()?;
+        let mrrm = ModRegRM::try_from_byte(mrrm_byte, self)?;
+
+        Ok((mrrm, mrrm_byte))
     }
 
     fn read_immediate(&mut self, operand_size: OperandSize) -> Result<Immediate> {

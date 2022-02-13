@@ -1,7 +1,9 @@
 use crate::errors::Result;
 use crate::reader::ReadExt;
 use crate::{DecodeError, TryFromByte};
-use mrc_instruction::{AddressingMode, Displacement, Operand, OperandSize, Register, Segment, SizedRegister};
+use mrc_instruction::{
+    AddressingMode, Displacement, Operand, OperandSize, Register, Segment, SizedRegister,
+};
 
 impl TryFromByte<Self> for AddressingMode {
     fn try_from_byte(byte: u8) -> Result<Self> {
@@ -31,7 +33,7 @@ pub enum RegisterOrMemory {
 }
 
 impl RegisterOrMemory {
-    pub fn try_from_modrm(mod_rm_byte: u8, reader: &mut impl Iterator<Item = u8>) -> Result<Self> {
+    pub fn try_from_mrrm(mod_rm_byte: u8, reader: &mut impl Iterator<Item = u8>) -> Result<Self> {
         let mode = mod_rm_byte >> 6;
         let rm = mod_rm_byte & 0b111;
 
@@ -55,7 +57,7 @@ impl RegisterOrMemory {
 
             0b11 => Ok(RegisterOrMemory::Register(Register::try_from_byte(rm)?)),
 
-            _ => Err(DecodeError::InvalidModRmEncoding(mod_rm_byte)),
+            _ => Err(DecodeError::InvalidModRegRMEncoding(mod_rm_byte)),
         }
     }
 
@@ -153,10 +155,10 @@ impl ModRegRM {
         }
     }
 
-    pub fn try_from_byte(mod_rm_byte: u8, reader: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        let register = Register::try_from_byte(mod_rm_byte >> 3 & 0b111)?;
+    pub fn try_from_byte(byte: u8, it: &mut impl Iterator<Item = u8>) -> Result<Self> {
+        let register = Register::try_from_byte(byte >> 3 & 0b111)?;
 
-        let register_or_memory = RegisterOrMemory::try_from_modrm(mod_rm_byte, reader)?;
+        let register_or_memory = RegisterOrMemory::try_from_mrrm(byte, it)?;
 
         Ok(ModRegRM {
             register,
@@ -256,11 +258,11 @@ mod test {
         }
 
         macro_rules! test_reg_or_mem {
-            ($mod_reg_rm_byte:expr,$bytes:expr,$expected:expr) => {{
-                let mut reader = $bytes.into_iter();
+            ($mrrm_byte:expr,$bytes:expr,$expected:expr) => {{
+                let mut it = $bytes.into_iter();
                 assert_eq!(
                     $expected,
-                    RegisterOrMemory::try_from_modrm($mod_reg_rm_byte, &mut reader).unwrap()
+                    RegisterOrMemory::try_from_mrrm($mrrm_byte, &mut it).unwrap()
                 );
             }};
         }
@@ -398,7 +400,7 @@ mod test {
         test_reg_or_mem!(0b11_000_111, [], RegisterOrMemory::Register(Register::BhDi));
     }
 
-    macro_rules! test_modrm_to_byte {
+    macro_rules! test_mrrm_to_byte {
         ($expected:expr,$register:expr,$register_or_memory:expr) => {{
             let byte: u8 = ModRegRM::new($register, $register_or_memory).as_byte();
             assert_eq!($expected, byte);
@@ -406,8 +408,8 @@ mod test {
     }
 
     #[test]
-    fn modrm_to_byte_register_indirect() {
-        test_modrm_to_byte!(
+    fn mrrm_to_byte_register_indirect() {
+        test_mrrm_to_byte!(
             0b00011001,
             Register::BlBx,
             RegisterOrMemory::Indirect(AddressingMode::BxDi)
@@ -415,8 +417,8 @@ mod test {
     }
 
     #[test]
-    fn modrm_to_byte_register_displacement_byte() {
-        test_modrm_to_byte!(
+    fn mrrm_to_byte_register_displacement_byte() {
+        test_mrrm_to_byte!(
             0b01011001,
             Register::BlBx,
             RegisterOrMemory::DisplacementByte(AddressingMode::BxDi, 0)
@@ -424,8 +426,8 @@ mod test {
     }
 
     #[test]
-    fn modrm_to_byte_register_displacement_word() {
-        test_modrm_to_byte!(
+    fn mrrm_to_byte_register_displacement_word() {
+        test_mrrm_to_byte!(
             0b10011001,
             Register::BlBx,
             RegisterOrMemory::DisplacementWord(AddressingMode::BxDi, 0)
@@ -433,8 +435,8 @@ mod test {
     }
 
     #[test]
-    fn modrm_to_byte_register_register() {
-        test_modrm_to_byte!(
+    fn mrrm_to_byte_register_register() {
+        test_mrrm_to_byte!(
             0b11011110,
             Register::BlBx,
             RegisterOrMemory::Register(Register::DhSi)
@@ -442,7 +444,7 @@ mod test {
     }
 
     #[test]
-    fn modrm_to_byte_register_direct() {
-        test_modrm_to_byte!(0b00010110, Register::DlDx, RegisterOrMemory::Direct(0));
+    fn mrrm_to_byte_register_direct() {
+        test_mrrm_to_byte!(0b00010110, Register::DlDx, RegisterOrMemory::Direct(0));
     }
 }

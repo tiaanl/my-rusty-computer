@@ -2,20 +2,12 @@ pub mod operations;
 
 mod decode;
 mod errors;
-mod mod_reg_rm;
+mod mrrm;
 mod reader;
 
-#[cfg(feature = "alternate-decoder")]
-mod decode2;
-
-#[cfg(not(feature = "alternate-decoder"))]
 pub use decode::decode_instruction;
-
-#[cfg(feature = "alternate-decoder")]
-pub use decode2::decode_instruction;
-
 pub use errors::{DecodeError, Result};
-pub use mod_reg_rm::{ModRegRM, RegisterOrMemory};
+pub use mrrm::{ModRegRM, RegisterOrMemory};
 
 use mrc_instruction::{OperandSize, Register, Segment};
 

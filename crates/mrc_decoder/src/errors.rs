@@ -14,8 +14,8 @@ pub enum DecodeError {
     #[error("Invalid indirect memory encoding ({0:#10b})")]
     InvalidIndirectMemoryEncoding(u8),
 
-    #[error("Invalid modR/M encoding ({0:#04x})")]
-    InvalidModRmEncoding(u8),
+    #[error("Invalid mod reg R/M encoding ({0:#04x})")]
+    InvalidModRegRMEncoding(u8),
 
     #[error("Invalid op code ({0:#04x})")]
     InvalidOpCode(u8),
