@@ -741,5 +741,5 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 }
 
 #[cfg(test)]
-#[path = "_decode_tests.rs"]
+#[path = "_tests/decode.rs"]
 mod tests;

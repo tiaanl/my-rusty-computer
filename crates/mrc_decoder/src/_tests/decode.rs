@@ -1,5 +1,8 @@
-use super::*;
-use mrc_instruction::{AddressingMode, Displacement};
+use crate::decode_instruction;
+use mrc_instruction::{
+    Address, AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet,
+    OperandSize, Operation, Register, Repeat, Segment, SizedRegister,
+};
 
 macro_rules! test_decoder {
     ($bytes:expr, $right:expr) => {
@@ -11,6 +14,19 @@ macro_rules! test_decoder {
 
 #[test]
 fn test_00() {
+    let mut it = [0x00, 0xF7, 0xDD, 0x92, 0x59, 0xA1].into_iter();
+    let left = crate::decode_instruction(&mut it).unwrap();
+    assert_eq!(
+        left,
+        (Instruction::new(
+            Operation::ADD,
+            OperandSet::DestinationAndSource(
+                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Byte)),
+                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
+            ),
+        ))
+    );
+
     test_decoder!(
         [0x00, 0xF7, 0xDD, 0x92, 0x59, 0xA1], // ADD        BH,DH
         Instruction::new(
