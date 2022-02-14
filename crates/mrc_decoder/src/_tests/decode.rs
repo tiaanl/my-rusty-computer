@@ -1825,7 +1825,7 @@ fn test_83() {
                     Displacement::None,
                     OperandSize::Word
                 ),
-                Operand::Immediate(Immediate::Byte(0x2f)),
+                Operand::Immediate(Immediate::Word(0x002f)),
             )
         )
     );

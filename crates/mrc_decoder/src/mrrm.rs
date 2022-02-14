@@ -1,12 +1,12 @@
 use crate::errors::Result;
-use crate::reader::ReadExt;
-use crate::{DecodeError, TryFromByte};
+use crate::traits::ReadExt;
+use crate::{DecodeError, TryFromEncoding};
 use mrc_instruction::{
     AddressingMode, Displacement, Operand, OperandSize, Register, Segment, SizedRegister,
 };
 
-impl TryFromByte<Self> for AddressingMode {
-    fn try_from_byte(byte: u8) -> Result<Self> {
+impl TryFromEncoding<Self> for AddressingMode {
+    fn try_from_encoding(byte: u8) -> Result<Self> {
         use AddressingMode::*;
 
         match byte {
@@ -40,28 +40,28 @@ impl RegisterOrMemory {
         match mode {
             0b00 => match rm {
                 0b110 => Ok(RegisterOrMemory::Direct(reader.read_u16()?)),
-                _ => Ok(RegisterOrMemory::Indirect(AddressingMode::try_from_byte(
+                _ => Ok(RegisterOrMemory::Indirect(AddressingMode::try_from_encoding(
                     rm,
                 )?)),
             },
 
             0b01 => Ok(RegisterOrMemory::DisplacementByte(
-                AddressingMode::try_from_byte(rm)?,
+                AddressingMode::try_from_encoding(rm)?,
                 reader.read_u8()? as i8,
             )),
 
             0b10 => Ok(RegisterOrMemory::DisplacementWord(
-                AddressingMode::try_from_byte(rm)?,
+                AddressingMode::try_from_encoding(rm)?,
                 reader.read_u16()? as i16,
             )),
 
-            0b11 => Ok(RegisterOrMemory::Register(Register::try_from_byte(rm)?)),
+            0b11 => Ok(RegisterOrMemory::Register(Register::try_from_encoding(rm)?)),
 
             _ => Err(DecodeError::InvalidModRegRMEncoding(mod_rm_byte)),
         }
     }
 
-    pub fn into_operand_kind(self, operand_size: OperandSize) -> Operand {
+    pub fn into_operand(self, operand_size: OperandSize) -> Operand {
         match self {
             RegisterOrMemory::Direct(offset) => Operand::Direct(Segment::DS, offset, operand_size),
             RegisterOrMemory::Indirect(addressing_mode) => Operand::Indirect(
@@ -156,7 +156,7 @@ impl ModRegRM {
     }
 
     pub fn try_from_byte(byte: u8, it: &mut impl Iterator<Item = u8>) -> Result<Self> {
-        let register = Register::try_from_byte(byte >> 3 & 0b111)?;
+        let register = Register::try_from_encoding(byte >> 3 & 0b111)?;
 
         let register_or_memory = RegisterOrMemory::try_from_mrrm(byte, it)?;
 
@@ -202,40 +202,40 @@ mod test {
     #[test]
     fn indirect_memory() {
         assert_eq!(
-            AddressingMode::try_from_byte(0b000).unwrap(),
+            AddressingMode::try_from_encoding(0b000).unwrap(),
             AddressingMode::BxSi
         );
         assert_eq!(
-            AddressingMode::try_from_byte(0b001).unwrap(),
+            AddressingMode::try_from_encoding(0b001).unwrap(),
             AddressingMode::BxDi
         );
         assert_eq!(
-            AddressingMode::try_from_byte(0b010).unwrap(),
+            AddressingMode::try_from_encoding(0b010).unwrap(),
             AddressingMode::BpSi
         );
         assert_eq!(
-            AddressingMode::try_from_byte(0b011).unwrap(),
+            AddressingMode::try_from_encoding(0b011).unwrap(),
             AddressingMode::BpDi
         );
         assert_eq!(
-            AddressingMode::try_from_byte(0b100).unwrap(),
+            AddressingMode::try_from_encoding(0b100).unwrap(),
             AddressingMode::Si
         );
         assert_eq!(
-            AddressingMode::try_from_byte(0b101).unwrap(),
+            AddressingMode::try_from_encoding(0b101).unwrap(),
             AddressingMode::Di
         );
         assert_eq!(
-            AddressingMode::try_from_byte(0b110).unwrap(),
+            AddressingMode::try_from_encoding(0b110).unwrap(),
             AddressingMode::Bp
         );
         assert_eq!(
-            AddressingMode::try_from_byte(0b111).unwrap(),
+            AddressingMode::try_from_encoding(0b111).unwrap(),
             AddressingMode::Bx
         );
 
         assert!(matches!(
-            AddressingMode::try_from_byte(0x77),
+            AddressingMode::try_from_encoding(0x77),
             Err(DecodeError::InvalidIndirectMemoryEncoding(0x77))
         ));
     }

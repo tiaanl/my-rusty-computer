@@ -1,6 +1,6 @@
 use crate::errors::Result;
-use crate::reader::ReadExt;
-use crate::TryFromByte;
+use crate::traits::{OpCodeExt, ReadExt};
+use crate::TryFromEncoding;
 use mrc_instruction::{
     Instruction, Operand, OperandSet, OperandSize, Operation, Register, Segment, SizedRegister,
 };
@@ -36,9 +36,9 @@ pub(crate) fn register_or_memory_and_register(
         }
     };
 
-    let (mrrm, _) = it.read_mrrm_and_byte()?;
+    let (mrrm, _) = it.read_mrrm()?;
 
-    let reg_mem = mrrm.register_or_memory.into_operand_kind(operand_size);
+    let reg_mem = mrrm.register_or_memory.into_operand(operand_size);
     let reg = Operand::Register(SizedRegister(mrrm.register, operand_size));
 
     Ok(Instruction::new(
@@ -59,10 +59,10 @@ pub(crate) fn register_or_memory_and_segment(
 ) -> Result<Instruction> {
     let direction = (op_code >> 1) & 1;
 
-    let (mrrm, mrrm_byte) = it.read_mrrm_and_byte()?;
+    let (mrrm, mrrm_byte) = it.read_mrrm()?;
 
-    let destination = mrrm.register_or_memory.into_operand_kind(OperandSize::Word);
-    let source = Operand::Segment(Segment::try_from_byte((mrrm_byte >> 3) & 0b111)?);
+    let destination = mrrm.register_or_memory.into_operand(OperandSize::Word);
+    let source = Operand::Segment(Segment::try_from_encoding((mrrm_byte >> 3) & 0b111)?);
 
     Ok(Instruction::new(
         operation,
@@ -74,12 +74,30 @@ pub(crate) fn register_or_memory_and_segment(
 }
 
 // x x x x x x x w | data | data if w = 1
+pub(crate) fn immediate_to_register_or_memory(
+    operation: impl Fn(u8) -> Operation,
+    op_code: u8,
+    it: &mut impl Iterator<Item = u8>,
+) -> Result<Instruction> {
+    let operand_size = op_code.operand_size();
+    let (mrrm, mrrm_byte) = it.read_mrrm()?;
+
+    let destination = mrrm.register_or_memory.into_operand(operand_size);
+    let source = it.read_immediate(operand_size)?.into();
+
+    Ok(Instruction::new(
+        operation(mrrm_byte),
+        OperandSet::DestinationAndSource(destination, source),
+    ))
+}
+
+// x x x x x x x w | data | data if w = 1
 pub(crate) fn immediate_to_accumulator(
     operation: Operation,
     op_code: u8,
     it: &mut impl Iterator<Item = u8>,
 ) -> Result<Instruction> {
-    let operand_size = OperandSize::try_from_byte(op_code & 0b1)?;
+    let operand_size = op_code.operand_size();
 
     Ok(Instruction::new(
         operation,

@@ -1,6 +1,20 @@
 use crate::{DecodeError, ModRegRM, Result};
 use mrc_instruction::{Displacement, Immediate, OperandSize};
 
+pub trait OpCodeExt {
+    fn operand_size(self) -> OperandSize;
+}
+
+impl OpCodeExt for u8 {
+    fn operand_size(self) -> OperandSize {
+        if self & 1 == 0 {
+            OperandSize::Byte
+        } else {
+            OperandSize::Word
+        }
+    }
+}
+
 pub trait ReadExt {
     fn read_u8(&mut self) -> Result<u8>;
 
@@ -8,7 +22,7 @@ pub trait ReadExt {
         Ok(u16::from_le_bytes([self.read_u8()?, self.read_u8()?]))
     }
 
-    fn read_mrrm_and_byte(&mut self) -> Result<(ModRegRM, u8)>;
+    fn read_mrrm(&mut self) -> Result<(ModRegRM, u8)>;
 
     fn read_immediate(&mut self, operand_size: OperandSize) -> Result<Immediate>;
 
@@ -24,7 +38,7 @@ impl<T: Iterator<Item = u8>> ReadExt for T {
         }
     }
 
-    fn read_mrrm_and_byte(&mut self) -> Result<(ModRegRM, u8)> {
+    fn read_mrrm(&mut self) -> Result<(ModRegRM, u8)> {
         let mrrm_byte = self.read_u8()?;
         let mrrm = ModRegRM::try_from_byte(mrrm_byte, self)?;
 
