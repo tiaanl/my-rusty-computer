@@ -38,8 +38,8 @@ pub(crate) fn register_or_memory_and_register(
 
     let (mrrm, _) = it.read_mrrm()?;
 
-    let reg_mem = mrrm.register_or_memory.into_operand(operand_size);
     let reg = Operand::Register(SizedRegister(mrrm.register, operand_size));
+    let reg_mem = mrrm.register_or_memory.into_operand(operand_size);
 
     Ok(Instruction::new(
         operation,

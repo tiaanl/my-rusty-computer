@@ -40,9 +40,9 @@ impl RegisterOrMemory {
         match mode {
             0b00 => match rm {
                 0b110 => Ok(RegisterOrMemory::Direct(reader.read_u16()?)),
-                _ => Ok(RegisterOrMemory::Indirect(AddressingMode::try_from_encoding(
-                    rm,
-                )?)),
+                _ => Ok(RegisterOrMemory::Indirect(
+                    AddressingMode::try_from_encoding(rm)?,
+                )),
             },
 
             0b01 => Ok(RegisterOrMemory::DisplacementByte(
@@ -73,13 +73,21 @@ impl RegisterOrMemory {
             RegisterOrMemory::DisplacementByte(addressing_mode, displacement) => Operand::Indirect(
                 Segment::DS,
                 addressing_mode,
-                Displacement::Byte(displacement),
+                if displacement == 0 {
+                    Displacement::None
+                } else {
+                    Displacement::Byte(displacement)
+                },
                 operand_size,
             ),
             RegisterOrMemory::DisplacementWord(addressing_mode, displacement) => Operand::Indirect(
                 Segment::DS,
                 addressing_mode,
-                Displacement::Word(displacement),
+                if displacement == 0 {
+                    Displacement::None
+                } else {
+                    Displacement::Word(displacement)
+                },
                 operand_size,
             ),
             RegisterOrMemory::Register(register) => {

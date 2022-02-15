@@ -30,7 +30,7 @@ impl Address {
 
 impl Display for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:06X}:{:06X}", self.segment, self.offset)
+        write!(f, "{:04X}:{:04X}", self.segment, self.offset)
     }
 }
 

@@ -18,8 +18,8 @@ impl Display for OperandSet {
             OperandSet::DestinationAndSource(destination, source) => {
                 write!(f, "{}, {}", destination, source)
             }
-            OperandSet::SegmentAndOffset(Address { segment, offset }) => {
-                write!(f, "{:#06X}:{:#06X}", segment, offset)
+            OperandSet::SegmentAndOffset(address) => {
+                write!(f, "{}", address)
             }
             OperandSet::Displacement(displacement) => write!(f, "{}", displacement),
         }
