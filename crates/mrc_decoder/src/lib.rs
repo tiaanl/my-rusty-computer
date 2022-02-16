@@ -8,11 +8,8 @@ pub use decode::decode_instruction;
 pub use errors::{DecodeError, Result};
 pub use mrrm::{ModRegRM, RegisterOrMemory};
 
+use crate::traits::TryFromEncoding;
 use mrc_instruction::{Register, Segment};
-
-trait TryFromEncoding<T> {
-    fn try_from_encoding(encoding: u8) -> Result<T>;
-}
 
 impl TryFromEncoding<Register> for Register {
     fn try_from_encoding(encoding: u8) -> Result<Self> {

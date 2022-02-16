@@ -131,16 +131,30 @@ impl<'a> Display for DecodedInstruction<'a> {
                 Displacement::None => {
                     write!(f, "{}", (self.size as u32).relative_to(&self.address))?
                 }
-                Displacement::Byte(displacement) => write!(
-                    f,
-                    "{:#06X}",
-                    ((self.address.offset + (self.size as u16)) as i16) + displacement as i16
-                )?,
-                Displacement::Word(displacement) => write!(
-                    f,
-                    "{:#06X}",
-                    ((self.address.offset + (self.size as u16)) as i16) + displacement
-                )?,
+                Displacement::Byte(displacement) => {
+                    let mut offset = self.address.offset.wrapping_add(self.size as u16);
+                    offset = if displacement < 0 {
+                        if let Some(neg) = displacement.checked_neg() {
+                            offset.wrapping_sub(neg as u16)
+                        } else {
+                            offset.wrapping_sub(128)
+                        }
+                    } else {
+                        offset.wrapping_add(displacement as u16)
+                    };
+
+                    write!(f, "{:#06X}", offset)?
+                },
+                Displacement::Word(displacement) => {
+                    let mut offset = self.address.offset.wrapping_add(self.size as u16);
+                    offset = if displacement < 0 {
+                        offset.wrapping_sub(displacement.abs() as u16)
+                    } else {
+                        offset.wrapping_add(displacement.abs() as u16)
+                    };
+
+                    write!(f, "{:#06X}", offset)?
+                }
             },
             OperandSet::None => {}
             _ => write!(f, "{}", self.instruction.operands)?,
@@ -212,7 +226,15 @@ fn disassemble(
 
             print_section(&section);
         }
-        _ => todo!(),
+        BinaryFormat::Com => {
+            let section = Section::new(
+                segment_and_offset(0x0000, 0x0100),
+                &data.as_slice()[(entry as usize)..],
+            );
+
+            print_section(&section);
+        }
+        _ => todo!("Binary format not supported: {:?}", format),
     }
 
     Ok(())

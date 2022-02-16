@@ -1,0 +1,9 @@
+[package]
+name = "tests"
+version = "0.1.0"
+authors = ["Tiaan Louw <tiaanl@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+mrc_decoder = { path = "../../crates/mrc_decoder" }
+mrc_instruction = { path = "../../crates/mrc_instruction" }

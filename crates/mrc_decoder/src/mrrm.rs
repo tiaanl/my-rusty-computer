@@ -1,6 +1,8 @@
-use crate::errors::Result;
-use crate::traits::ReadExt;
-use crate::{DecodeError, TryFromEncoding};
+use crate::{
+    errors::{DecodeError, Result},
+    traits::ReadExt,
+    TryFromEncoding,
+};
 use mrc_instruction::{
     AddressingMode, Displacement, Operand, OperandSize, Register, Segment, SizedRegister,
 };
@@ -97,58 +99,6 @@ impl RegisterOrMemory {
     }
 }
 
-// impl From<RegisterOrMemory> for OperandKind {
-//     fn from(register_or_memory: RegisterOrMemory) -> Self {
-//         match register_or_memory {
-//             RegisterOrMemory::Direct(offset) => OperandKind::Direct(Segment::DS, offset),
-//             RegisterOrMemory::Indirect(encoding) => {
-//                 OperandKind::Indirect(Segment::DS, encoding, Displacement::None)
-//             }
-//             RegisterOrMemory::DisplacementByte(encoding, displacement) => OperandKind::Indirect(
-//                 Segment::DS,
-//                 encoding,
-//                 Displacement::Byte(displacement as i8),
-//             ),
-//             RegisterOrMemory::DisplacementWord(encoding, displacement) => OperandKind::Indirect(
-//                 Segment::DS,
-//                 encoding,
-//                 Displacement::Word(displacement as i16),
-//             ),
-//             RegisterOrMemory::Register(encoding) => OperandKind::Register(encoding),
-//         }
-//     }
-// }
-
-fn encoding_for_register(register: Register) -> u8 {
-    use Register::*;
-
-    match register {
-        AlAx => 0b000,
-        ClCx => 0b001,
-        DlDx => 0b010,
-        BlBx => 0b011,
-        AhSp => 0b100,
-        ChBp => 0b101,
-        DhSi => 0b110,
-        BhDi => 0b111,
-    }
-}
-
-fn encoding_for_addressing_mode(addressing_mode: AddressingMode) -> u8 {
-    use AddressingMode::*;
-
-    match addressing_mode {
-        BxSi => 0b000,
-        BxDi => 0b001,
-        BpSi => 0b010,
-        BpDi => 0b011,
-        Si => 0b100,
-        Di => 0b101,
-        Bp => 0b110,
-        Bx => 0b111,
-    }
-}
-
 #[derive(Debug)]
 pub struct ModRegRM {
     pub register: Register,
@@ -174,6 +124,7 @@ impl ModRegRM {
         })
     }
 
+    /*
     pub fn as_byte(&self) -> u8 {
         let mut byte: u8 = match self.register_or_memory {
             RegisterOrMemory::Direct(_) => 0b00,
@@ -201,6 +152,7 @@ impl ModRegRM {
 
         byte
     }
+    */
 }
 
 #[cfg(test)]

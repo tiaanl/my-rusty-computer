@@ -1,6 +1,10 @@
 use crate::{DecodeError, ModRegRM, Result};
 use mrc_instruction::{Displacement, Immediate, OperandSize};
 
+pub trait TryFromEncoding<T> {
+    fn try_from_encoding(encoding: u8) -> Result<T>;
+}
+
 pub trait OpCodeExt {
     fn operand_size(self) -> OperandSize;
 }

@@ -1,9 +1,9 @@
 use crate::errors::Result;
 use crate::traits::{OpCodeExt, ReadExt};
-use crate::TryFromEncoding;
 use mrc_instruction::{
     Instruction, Operand, OperandSet, OperandSize, Operation, Register, Segment, SizedRegister,
 };
+use crate::TryFromEncoding;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) enum Direction {
