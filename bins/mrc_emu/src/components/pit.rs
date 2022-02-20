@@ -6,49 +6,18 @@ use std::cell::RefCell;
 // Intel 8253 Programmable Interrupt Timer
 // https://en.wikipedia.org/wiki/Intel_8253
 
-// 0x40  Channel 0 data port (read/write)
-// 0x41  Channel 1 data port (read/write)
-// 0x42  Channel 2 data port (read/write)
-// 0x43  Mode/Command register (write only, reads are ignored)
+// Base + 0b00 - Channel 0 data port (read/write)
+// Base + 0b01 - Channel 1 data port (read/write)
+// Base + 0x10 - Channel 2 data port (read/write)
+// Base + 0b11 - Mode/Command register (write only, reads are ignored)
+// *Base = Base address where timer is mapped
 
-// Control Register Bits
-//
-// +-----+-----+-----+-----+----+----+----+-----+
-// | SC1 | SC0 | RW1 | RW0 | M2 | M1 | M0 | BCD |
-// +-----+-----+-----+-----+----+----+----+-----+
-//
-// SC - Select Counter
-// | SC1 | SC0 |
-// |   0 |   0 | Select counter 0
-// |   0 |   1 | Select counter 1
-// |   1 |   0 | Select counter 2
-// |   1 |   1 | Not applicable on 8253
-//
-// RW - Read/write
-// | RW1 | RW0 |
-// |   0 |   0 | Counter latch
-// |   0 |   1 | R/W least significant byte only
-// |   1 |   0 | R/W most significant bits only
-// |   1 |   1 | R/W least significant byte first and then most significant byte
-//
-// M - Mode
-// | M2 | M1 | M0 |
-// |  0 |  0 |  0 | Mode 0
-// |  0 |  0 |  1 | Mode 1
-// |  x |  1 |  0 | Mode 2
-// |  x |  1 |  1 | Mode 3
-// |  1 |  0 |  0 | Mode 4
-// |  1 |  0 |  1 | Mode 5
-//
-// BCD - Binary/BCD
-// | BCD |
-// |   0 | Binary counter (16-bits)
-// |   1 | BCD counter (4 d..)
+// IBM PC/XT 5150 had 1 PIT and it was mapped to base 0x40.
 
 // const TICK_RATE: usize = 1193182;
 
-#[derive(Copy, Clone, Debug)]
-enum ReadWrite {
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum ReadWrite {
     Latch,
     LoByte,
     HiByte,
@@ -71,14 +40,54 @@ impl TryFrom<u8> for ReadWrite {
     }
 }
 
+/// Control Register Bits
+/// | SC1 | SC0 | RW1 | RW0 | M2 | M1 | M0 | BCD |
 #[derive(Copy, Clone, Debug)]
 struct ControlRegister {
-    /// Selected counter (0..3)
-    counter: u8,
-    // Read/Write mode
+    /// SC - Select Counter
+    /// | SC1 | SC0 |
+    /// |   0 |   0 | Select counter 0
+    /// |   0 |   1 | Select counter 1
+    /// |   1 |   0 | Select counter 2
+    /// |   1 |   1 | Not applicable on 8253
+    select_counter: u8,
+
+    /// RW - Read/write
+    /// | RW1 | RW0 |
+    /// |   0 |   0 | Counter latch
+    /// |   0 |   1 | R/W least significant byte only
+    /// |   1 |   0 | R/W most significant bits only
+    /// |   1 |   1 | R/W least significant byte first and then most significant byte
     read_write: ReadWrite,
+
+    /// M - Mode
+    /// | M2 | M1 | M0 |
+    /// |  0 |  0 |  0 | Mode 0
+    /// |  0 |  0 |  1 | Mode 1
+    /// |  x |  1 |  0 | Mode 2
+    /// |  x |  1 |  1 | Mode 3
+    /// |  1 |  0 |  0 | Mode 4
+    /// |  1 |  0 |  1 | Mode 5
     mode: u8,
+
+    /// BCD - Binary/BCD
+    /// | BCD |
+    /// |   0 | Binary counter (16-bits)
+    /// |   1 | BCD counter (4 d..)
     bcd: bool,
+}
+
+impl ControlRegister {
+    fn new(select_counter: u8, read_write: ReadWrite, mode: u8, bcd: bool) -> Self {
+        debug_assert!(select_counter < 3);
+        debug_assert!(mode < 6);
+        Self {
+            select_counter,
+            read_write,
+            mode,
+            bcd,
+        }
+    }
 }
 
 impl TryFrom<u8> for ControlRegister {
@@ -86,11 +95,40 @@ impl TryFrom<u8> for ControlRegister {
 
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         Ok(Self {
-            counter: value >> 6,
+            select_counter: value >> 6,
             read_write: ReadWrite::try_from(value >> 4 & 0b11)?,
             mode: value >> 1 & 0b111,
             bcd: (value & 0b1) != 0,
         })
+    }
+}
+
+impl From<ControlRegister> for u8 {
+    fn from(control_register: ControlRegister) -> Self {
+        let mut result = 0_u8;
+
+        // Select counter
+        debug_assert!(control_register.select_counter <= 3);
+        result |= control_register.select_counter << 6;
+
+        // Read/Write
+        result |= match control_register.read_write {
+            ReadWrite::Latch => 0b00 << 4,
+            ReadWrite::LoByte => 0b01 << 4,
+            ReadWrite::HiByte => 0b10 << 4,
+            ReadWrite::LoThenHiByte => 0b11 << 4,
+        };
+
+        // Mode
+        debug_assert!(control_register.mode <= 5);
+        result |= control_register.mode << 1;
+
+        // BCD
+        if control_register.bcd {
+            result |= 1;
+        }
+
+        result
     }
 }
 
@@ -100,6 +138,7 @@ struct Counter {
     mode: u8,
     bcd: bool,
     count: u16,
+    latched: Option<u16>,
 }
 
 impl Default for Counter {
@@ -109,6 +148,7 @@ impl Default for Counter {
             mode: 0,
             bcd: false,
             count: 0,
+            latched: None,
         }
     }
 }
@@ -134,8 +174,12 @@ impl ProgrammableIntervalTimer8253 {
 impl Bus<Port> for ProgrammableIntervalTimer8253 {
     fn read(&self, port: u16) -> Result<u8> {
         let counter = port & 0b11;
-        // Only the 3 channels can be read from.
-        assert_ne!(counter, 4);
+
+        if counter == 4 {
+            return Err(EmulatorError::Unspecified(
+                "Only the 3 counters can be read from.",
+            ));
+        }
 
         let counter = &mut self.inner.borrow_mut().counters[counter as usize];
         match counter.read_write {
@@ -156,18 +200,38 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
     }
 
     fn write(&mut self, port: u16, value: u8) -> Result<()> {
-        // log::info!("Writing to timer port: {:04X} <= {:02X}", port, value);
+        log::info!("Writing to timer port: {:04X} <= {:02X}", port, value);
 
         let counter = port & 0b11;
 
         if counter == 0x03 {
             let control_register = ControlRegister::try_from(value)?;
-            let counter = &mut self.inner.borrow_mut().counters[control_register.counter as usize];
-            counter.read_write = control_register.read_write;
-            counter.mode = control_register.mode;
-            counter.bcd = control_register.bcd;
+            let counter =
+                &mut self.inner.borrow_mut().counters[control_register.select_counter as usize];
 
-            log::info!("Set counter {} to {:?}", control_register.counter, counter);
+            if control_register.read_write == ReadWrite::Latch {
+                let latched_count = counter.count;
+                // If we already have a latched value, then we just ignore the request to latch.
+                if counter.latched.is_none() {
+                    counter.latched = Some(latched_count);
+
+                    log::info!(
+                        "Latched counter {} to {}",
+                        control_register.select_counter,
+                        latched_count
+                    );
+                }
+            } else {
+                counter.read_write = control_register.read_write;
+                counter.mode = control_register.mode;
+                counter.bcd = control_register.bcd;
+
+                log::info!(
+                    "Set counter {} to {:?}",
+                    control_register.select_counter,
+                    counter
+                );
+            }
         } else {
             let counter = &mut self.inner.borrow_mut().counters[counter as usize];
 
@@ -175,6 +239,7 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
                 ReadWrite::Latch => {
                     counter.count |= u16::from(value) << 8;
                     counter.read_write = ReadWrite::LoThenHiByte;
+                    unimplemented!()
                 }
                 ReadWrite::LoByte => {
                     counter.count = u16::from(value);
@@ -187,10 +252,39 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
                     counter.read_write = ReadWrite::Latch;
                 }
             }
-
-            // todo!()
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initialize() {
+        pretty_env_logger::init();
+
+        let mut timer = ProgrammableIntervalTimer8253::default();
+
+        // Counter 0 to mode 0 and binary.
+        timer
+            .write(
+                0x43,
+                ControlRegister::new(0, ReadWrite::LoByte, 0, false).into(),
+            )
+            .unwrap();
+
+        // Set the count for timer 0 to 64.
+        timer.write(0x40, 64).unwrap();
+
+        // TODO: There should be no need to tick the timer?
+        timer.tick();
+
+        // Read the value of the timer.
+        let value = timer.read(0x40).unwrap();
+
+        assert!(value < 64);
     }
 }

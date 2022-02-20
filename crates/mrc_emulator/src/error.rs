@@ -10,6 +10,7 @@ pub enum Error {
     DecodeError(DecodeError),
     IllegalDataAccess,
     IllegalInstruction,
+    Unspecified(&'static str),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -31,6 +32,9 @@ impl Display for Error {
             }
             Error::IllegalInstruction => {
                 write!(f, "Illegal instruction!")
+            }
+            Error::Unspecified(description) => {
+                write!(f, "Unspecified error: {}", description)
             }
         }
     }
