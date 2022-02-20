@@ -346,39 +346,35 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         }};
     }
 
-    match instruction.operands {
-        OperandSet::DestinationAndSource(ref destination, ref source) => {
-            if destination.operand_size() == source.operand_size() {
-                match destination.operand_size() {
-                    OperandSize::Byte => {
-                        let d = byte::get_operand_type_value(cpu, destination)?;
-                        let s = byte::get_operand_type_value(cpu, source)?;
-                        if let Some(result) =
-                            destination_and_source_ops!(instruction.operation, d, s, byte)
-                        {
-                            if let Some(result) = result {
-                                byte::set_operand_type_value(cpu, destination, result)?;
-                            }
-                            return Ok(ExecuteResult::Continue);
+    if let OperandSet::DestinationAndSource(ref destination, ref source) = instruction.operands {
+        if destination.operand_size() == source.operand_size() {
+            match destination.operand_size() {
+                OperandSize::Byte => {
+                    let d = byte::get_operand_type_value(cpu, destination)?;
+                    let s = byte::get_operand_type_value(cpu, source)?;
+                    if let Some(result) =
+                        destination_and_source_ops!(instruction.operation, d, s, byte)
+                    {
+                        if let Some(result) = result {
+                            byte::set_operand_type_value(cpu, destination, result)?;
                         }
+                        return Ok(ExecuteResult::Continue);
                     }
-                    OperandSize::Word => {
-                        let d = word::get_operand_type_value(cpu, destination)?;
-                        let s = word::get_operand_type_value(cpu, source)?;
-                        if let Some(result) =
-                            destination_and_source_ops!(instruction.operation, d, s, word)
-                        {
-                            if let Some(result) = result {
-                                word::set_operand_type_value(cpu, destination, result)?;
-                            }
-                            return Ok(ExecuteResult::Continue);
+                }
+                OperandSize::Word => {
+                    let d = word::get_operand_type_value(cpu, destination)?;
+                    let s = word::get_operand_type_value(cpu, source)?;
+                    if let Some(result) =
+                        destination_and_source_ops!(instruction.operation, d, s, word)
+                    {
+                        if let Some(result) = result {
+                            word::set_operand_type_value(cpu, destination, result)?;
                         }
+                        return Ok(ExecuteResult::Continue);
                     }
                 }
             }
         }
-
-        _ => illegal_operands(instruction),
     }
 
     match instruction.operation {
