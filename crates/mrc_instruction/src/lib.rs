@@ -9,7 +9,7 @@ mod register;
 
 pub mod data;
 
-pub use address::Address;
+pub use address::{Address, RelativeToAddress};
 pub use instruction::{Instruction, OperandSet, Repeat};
 pub use operand::{AddressingMode, Displacement, Immediate, Operand, OperandSize};
 pub use operation::Operation;

@@ -1,3 +1,4 @@
+use crate::Displacement;
 use std::fmt::{Display, Formatter};
 
 /// Represents a location in a segmented memory model.  The address stores the values in 16-bit
@@ -26,11 +27,46 @@ impl Address {
     pub fn flat(&self) -> u32 {
         ((self.segment as u32) << 4) + (self.offset as u32)
     }
+
+    /// Displace the offset within the same segment.
+    pub fn displace(&self, displacement: Displacement) -> Self {
+        let displacement = match displacement {
+            Displacement::None => 0,
+            Displacement::Byte(displacement) => displacement.into(),
+            Displacement::Word(displacement) => displacement,
+        };
+
+        let offset = if displacement < 0 {
+            if let Some(neg) = displacement.checked_neg() {
+                self.offset.wrapping_sub(neg as u16)
+            } else {
+                self.offset.wrapping_sub(128)
+            }
+        } else {
+            self.offset.wrapping_add(displacement as u16)
+        };
+
+        Self {
+            segment: self.segment,
+            offset,
+        }
+    }
 }
 
 impl Display for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:04X}:{:04X}", self.segment, self.offset)
+    }
+}
+
+pub trait RelativeToAddress {
+    fn relative_to(&self, addr: &Address) -> Address;
+}
+
+impl RelativeToAddress for u32 {
+    fn relative_to(&self, addr: &Address) -> Address {
+        let offset = (self & !((addr.segment as u32) << 4)) + addr.offset as u32;
+        Address::new(addr.segment, offset as u16)
     }
 }
 

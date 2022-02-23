@@ -77,6 +77,7 @@ struct ControlRegister {
     bcd: bool,
 }
 
+#[cfg(test)]
 impl ControlRegister {
     fn new(select_counter: u8, read_write: ReadWrite, mode: u8, bcd: bool) -> Self {
         debug_assert!(select_counter < 3);
@@ -182,25 +183,29 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
         }
 
         let counter = &mut self.inner.borrow_mut().counters[counter as usize];
-        match counter.read_write {
+        let value = match counter.read_write {
             ReadWrite::Latch => {
                 counter.read_write = ReadWrite::LoThenHiByte;
-                Ok((counter.count >> 8) as u8)
+                (counter.count >> 8) as u8
             }
 
-            ReadWrite::LoByte => Ok((counter.count & 0xFF) as u8),
+            ReadWrite::LoByte => (counter.count & 0xFF) as u8,
 
-            ReadWrite::HiByte => Ok((counter.count >> 8) as u8),
+            ReadWrite::HiByte => (counter.count >> 8) as u8,
 
             ReadWrite::LoThenHiByte => {
                 counter.read_write = ReadWrite::Latch;
-                Ok((counter.count & 0xFF) as u8)
+                (counter.count & 0xFF) as u8
             }
-        }
+        };
+
+        log::info!("Read from timer port {:#06X}: {:#04X}", port, value);
+
+        Ok(value)
     }
 
     fn write(&mut self, port: u16, value: u8) -> Result<()> {
-        log::info!("Writing to timer port: {:04X} <= {:02X}", port, value);
+        log::info!("Writing to timer port: {:#06X} <= {:#04X}", port, value);
 
         let counter = port & 0b11;
 
@@ -209,7 +214,9 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
             let counter =
                 &mut self.inner.borrow_mut().counters[control_register.select_counter as usize];
 
-            if control_register.read_write == ReadWrite::Latch {
+            log::info!("Control register: {:?}", control_register);
+
+            if matches!(control_register.read_write, ReadWrite::Latch) {
                 let latched_count = counter.count;
                 // If we already have a latched value, then we just ignore the request to latch.
                 if counter.latched.is_none() {
@@ -252,6 +259,8 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
                     counter.read_write = ReadWrite::Latch;
                 }
             }
+
+            log::info!("Set counter {} to {:?}", port & 0b11, counter,);
         }
 
         Ok(())

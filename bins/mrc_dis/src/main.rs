@@ -1,56 +1,15 @@
-use mrc_decoder::{decode_instruction, DecodeError};
-use mrc_instruction::{Displacement, Instruction, OperandSet};
-use std::{
-    fmt::{Display, Formatter},
-    io::Read,
-    str::FromStr,
-};
+use mrc_decoder::{decode_instruction, DecodeError, DecodedInstruction};
+use mrc_instruction::{Address, RelativeToAddress};
+use std::{io::Read, str::FromStr};
 use structopt::StructOpt;
 
-#[derive(Copy, Clone)]
-struct SegmentAndOffset {
-    segment: u16,
-    offset: u16,
-}
-
-#[inline(always)]
-fn segment_and_offset(segment: u16, offset: u16) -> SegmentAndOffset {
-    SegmentAndOffset { segment, offset }
-}
-
-impl From<(u16, u16)> for SegmentAndOffset {
-    fn from(x: (u16, u16)) -> Self {
-        Self {
-            segment: x.0,
-            offset: x.1,
-        }
-    }
-}
-
-trait ToSegmentAndOffset {
-    fn relative_to(&self, segment_and_offset: &SegmentAndOffset) -> SegmentAndOffset;
-}
-
-impl ToSegmentAndOffset for u32 {
-    fn relative_to(&self, addr: &SegmentAndOffset) -> SegmentAndOffset {
-        let offset = (self & !((addr.segment as u32) << 4)) + addr.offset as u32;
-        segment_and_offset(addr.segment, offset as u16)
-    }
-}
-
-impl Display for SegmentAndOffset {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:04X}:{:04X}", self.segment, self.offset)
-    }
-}
-
 struct Section<'a> {
-    addr: SegmentAndOffset,
+    addr: Address,
     data: &'a [u8],
 }
 
 impl<'a> Section<'a> {
-    fn new(addr: SegmentAndOffset, data: &'a [u8]) -> Self {
+    fn new(addr: Address, data: &'a [u8]) -> Self {
         Self { addr, data }
     }
 }
@@ -74,94 +33,12 @@ impl<'a> Iterator for SectionIterator<'a> {
     }
 }
 
-const BYTES_TO_PRINT: usize = 7;
-
-fn print_data_byte(addr: SegmentAndOffset, byte: u8) {
+fn print_data_byte(addr: Address, byte: u8) {
     print!("{}  {:02X}", addr, byte);
-    for _ in 0..BYTES_TO_PRINT {
+    for _ in 0..7 {
         print!("   ");
     }
     println!("db {:02X}", byte);
-}
-
-struct DecodedInstruction<'a> {
-    address: SegmentAndOffset,
-    bytes: &'a [u8],
-    instruction: Instruction,
-    size: u8,
-}
-
-impl<'a> DecodedInstruction<'a> {
-    fn new(address: SegmentAndOffset, bytes: &'a [u8], instruction: Instruction, size: u8) -> Self {
-        Self {
-            address,
-            bytes,
-            instruction,
-            size,
-        }
-    }
-}
-
-impl<'a> Display for DecodedInstruction<'a> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // address
-        write!(f, "{}  ", self.address)?;
-
-        // bytes
-        let mut b: String = self
-            .bytes
-            .iter()
-            .take(BYTES_TO_PRINT)
-            .map(|b| format!("{:02X} ", b))
-            .collect();
-
-        for _ in self.bytes.len()..BYTES_TO_PRINT {
-            b.push_str("   ");
-        }
-
-        write!(f, "{}  ", b)?;
-
-        match self.instruction.operands {
-            OperandSet::None => write!(f, "{}", self.instruction.operation)?,
-            _ => write!(f, "{} ", self.instruction.operation)?,
-        }
-
-        match self.instruction.operands {
-            OperandSet::Displacement(displacement) => match displacement {
-                Displacement::None => {
-                    write!(f, "{}", (self.size as u32).relative_to(&self.address))?
-                }
-                Displacement::Byte(displacement) => {
-                    let mut offset = self.address.offset.wrapping_add(self.size as u16);
-                    offset = if displacement < 0 {
-                        if let Some(neg) = displacement.checked_neg() {
-                            offset.wrapping_sub(neg as u16)
-                        } else {
-                            offset.wrapping_sub(128)
-                        }
-                    } else {
-                        offset.wrapping_add(displacement as u16)
-                    };
-
-                    write!(f, "{:#06X}", offset)?
-                },
-                Displacement::Word(displacement) => {
-                    let mut offset = self.address.offset.wrapping_add(self.size as u16);
-                    offset = if displacement < 0 {
-                        offset.wrapping_sub(displacement.abs() as u16)
-                    } else {
-                        offset.wrapping_add(displacement.abs() as u16)
-                    };
-
-                    write!(f, "{:#06X}", offset)?
-                }
-            },
-            OperandSet::None => {}
-            _ => write!(f, "{}", self.instruction.operands)?,
-        }
-
-        Ok(())
-    }
 }
 
 fn print_section(section: &Section) {
@@ -220,7 +97,7 @@ fn disassemble(
     match format {
         BinaryFormat::Raw => {
             let section = Section::new(
-                segment_and_offset(0, origin),
+                Address::new(0, origin),
                 &data.as_slice()[(entry as usize)..],
             );
 
@@ -228,7 +105,7 @@ fn disassemble(
         }
         BinaryFormat::Com => {
             let section = Section::new(
-                segment_and_offset(0x0000, 0x0100),
+                Address::new(0x0000, 0x0100),
                 &data.as_slice()[(entry as usize)..],
             );
 

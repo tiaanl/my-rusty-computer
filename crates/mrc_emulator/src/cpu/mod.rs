@@ -2,9 +2,9 @@ mod executor;
 
 pub use crate::cpu::executor::{execute, ExecuteResult};
 
-use crate::{error::Result, segment_and_offset, Address, Bus, Port};
+use crate::{error::Result, Address, Bus, Port};
 use bitflags::bitflags;
-use mrc_decoder::decode_instruction;
+use mrc_decoder::{decode_instruction, DecodedInstruction};
 use mrc_instruction::{Register, Segment};
 use std::fmt::{Display, Formatter};
 
@@ -283,15 +283,37 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
 
     pub fn tick(&mut self) -> Result<ExecuteResult> {
         // println!("state: {}", self.state);
-        // _print_bus_bytes(self);
 
         let _start_cs = self.state.segments.cs;
         let _start_ip = self.state.ip;
 
         let instruction = decode_instruction(self)?;
 
-        // Print instruction.
-        println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);
+        if true {
+            if false {
+                let bytes_read = (self.state.ip - _start_ip) as u8;
+                let mut byte_buffer = [0_u8; 16];
+
+                for i in 0..(bytes_read as usize) {
+                    let byte = self.bus.read(
+                        mrc_instruction::Address::new(_start_cs, _start_ip + i as u16).flat(),
+                    )?;
+                    byte_buffer[i as usize] = byte;
+                }
+
+                println!(
+                    "{}",
+                    DecodedInstruction::new(
+                        mrc_instruction::Address::new(_start_cs, _start_ip),
+                        &byte_buffer[..bytes_read as usize],
+                        instruction,
+                        bytes_read
+                    )
+                );
+            } else {
+                println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);
+            }
+        }
 
         execute(self, &instruction)
     }
@@ -314,7 +336,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let address = segment_and_offset(self.state.segments.cs, self.state.ip);
+        let address = mrc_instruction::Address::new(self.state.segments.cs, self.state.ip).flat();
         if let Ok(byte) = self.bus.read(address) {
             let (new_ip, overflow) = self.state.ip.overflowing_add(1);
             if overflow {
@@ -328,23 +350,4 @@ impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
             None
         }
     }
-}
-
-fn _print_bus_bytes<D: Bus<Address>, I: Bus<Port>>(cpu: &CPU<D, I>) {
-    print!("Bytes to decode: ");
-    let start = segment_and_offset(cpu.state.get_segment_value(Segment::CS), cpu.state.ip);
-    for i in 0..5 {
-        let addr = start + i;
-
-        let byte = match cpu.bus.read(addr) {
-            Ok(byte) => byte,
-            Err(err) => {
-                log::error!("Could not read from bus: {}", err);
-                break;
-            }
-        };
-
-        print!("{:02X} ", byte);
-    }
-    println!();
 }
