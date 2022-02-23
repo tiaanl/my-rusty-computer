@@ -11,8 +11,9 @@ macro_rules! logic {
             Some(result)
         }
 
-        pub fn not(destination: $t) -> Option<$t> {
+        pub fn not(destination: $t, flags: &mut Flags) -> Option<$t> {
             let result = !destination;
+            flags_from_result(flags, result);
             Some(result)
         }
 

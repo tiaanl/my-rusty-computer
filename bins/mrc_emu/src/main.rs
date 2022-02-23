@@ -240,20 +240,23 @@ struct IOBus {
 impl Bus<Port> for IOBus {
     fn read(&self, port: Port) -> mrc_emulator::error::Result<u8> {
         match port {
-            // First Direct Memory Access controller 8237.
-            0x0000..=0x001F => self.dma.read(port),
+            // Direct Memory Access Controller
+            0x0000..=0x000D => self.dma.read(port),
 
             // PIT (Programmable Interrupt Timer  8253, 8254)
             0x0040..=0x005F => self.pit.borrow().read(port),
 
-            _ => panic!("Unsupported port: {}", port),
+            // Direct Memory Access Page Registers
+            0x81 | 0x82 | 0x83 | 0x87 => self.dma.read(port),
+
+            _ => panic!("Unsupported port: {:#06X}", port),
         }
     }
 
     fn write(&mut self, address: Port, value: u8) -> mrc_emulator::error::Result<()> {
         match address {
-            // First Direct Memory Access controller 8237.
-            0x0000..=0x001F => self.dma.write(address, value),
+            // Direct Memory Access Controller
+            0x0000..=0x000D => self.dma.write(address, value),
 
             // PIT (Programmable Interrupt Timer  8253, 8254)
             0x0040..=0x005F => self.pit.borrow_mut().write(address, value),
@@ -261,8 +264,8 @@ impl Bus<Port> for IOBus {
             // Keyboard controller.
             0x0060..=0x006F => self.keyboard_controller.write(address, value),
 
-            // DMA page registers. (74612)
-            0x0080..=0x008F => self.dma.write(address, value),
+            // Direct Memory Access Page Registers
+            0x81 | 0x82 | 0x83 | 0x87 => self.dma.write(address, value),
 
             0xA0 => {
                 self.interrupt_manager.borrow_mut().allow_nmi = false;

@@ -705,7 +705,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 let cx = cx.wrapping_sub(1);
                 cpu.state.set_word_register_value(Register::ClCx, cx);
 
-                if cx > 0 {
+                if cx != 0 {
                     displace_ip(&mut cpu.state, displacement)?;
                 }
             }
@@ -853,13 +853,13 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             OperandSet::Destination(ref destination) => match destination.operand_size() {
                 OperandSize::Byte => {
                     let value = byte::get_operand_type_value(cpu, destination)?;
-                    if let Some(result) = operations::byte::not(value) {
+                    if let Some(result) = operations::byte::not(value, &mut cpu.state.flags) {
                         byte::set_operand_type_value(cpu, destination, result)?;
                     }
                 }
                 OperandSize::Word => {
                     let value = word::get_operand_type_value(cpu, destination)?;
-                    if let Some(result) = operations::word::not(value) {
+                    if let Some(result) = operations::word::not(value, &mut cpu.state.flags) {
                         word::set_operand_type_value(cpu, destination, result)?;
                     }
                 }
