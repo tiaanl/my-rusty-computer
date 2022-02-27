@@ -1,8 +1,8 @@
 pub mod cga;
 pub mod dma;
-pub mod keyboard;
 pub mod pic;
 pub mod pit;
+pub mod ppi;
 
 use mrc_emulator::error::Result;
 use mrc_emulator::{Bus, Port};

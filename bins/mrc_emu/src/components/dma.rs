@@ -19,14 +19,14 @@ pub struct Channel {
 }
 
 #[derive(Default)]
-pub struct DMAController {
+pub struct DirectMemoryAccessController {
     command: u8,
     // request: u8,
     index: Cell<u8>,
     channels: [Channel; 4],
 }
 
-impl DMAController {
+impl DirectMemoryAccessController {
     fn flip_index(&self) {
         self.index.set(self.index.get() ^ 1);
     }
@@ -145,10 +145,12 @@ impl DMAController {
         log::info!("Write DMA master clear");
     }
 
-    fn request(&mut self, channel_index: usize) {}
+    fn request(&mut self, _channel_index: usize) {
+        todo!()
+    }
 }
 
-impl Bus<Port> for DMAController {
+impl Bus<Port> for DirectMemoryAccessController {
     fn read(&self, port: u16) -> Result<u8> {
         log::info!("Reading from DMA controller on port {:#06x}.", port);
 
@@ -211,7 +213,7 @@ mod tests {
 
     #[test]
     fn init() {
-        let mut dmac = DMAController::default();
+        let mut dmac = DirectMemoryAccessController::default();
         dmac.write(0x00, 0x00).unwrap();
         dmac.write(0x01, 0x00).unwrap();
         dmac.write(0x02, 0x00).unwrap();

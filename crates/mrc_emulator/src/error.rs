@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 
-use crate::Address;
+use crate::{Address, Port};
 use mrc_decoder::DecodeError;
 
 #[derive(Debug)]
@@ -10,6 +10,7 @@ pub enum Error {
     DecodeError(DecodeError),
     IllegalDataAccess,
     IllegalInstruction,
+    InvalidPort(Port),
     Unspecified(&'static str),
 }
 
@@ -33,6 +34,7 @@ impl Display for Error {
             Error::IllegalInstruction => {
                 write!(f, "Illegal instruction!")
             }
+            Error::InvalidPort(port) => write!(f, "Invalid port {}", port),
             Error::Unspecified(description) => {
                 write!(f, "Unspecified error: {}", description)
             }

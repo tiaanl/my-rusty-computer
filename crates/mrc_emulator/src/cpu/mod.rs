@@ -282,12 +282,21 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
     }
 
     pub fn tick(&mut self) -> Result<ExecuteResult> {
-        // println!("state: {}", self.state);
+        println!("state: {}", self.state);
 
         let _start_cs = self.state.segments.cs;
         let _start_ip = self.state.ip;
 
         let instruction = decode_instruction(self)?;
+
+        if _start_cs == 0xF000 {
+            match _start_ip {
+                0xE01A => println!("STGTST PROC"),
+                0xE169 => println!("STOP"),
+                0xE1E4 => println!("C23"),
+                _ => {}
+            }
+        }
 
         if true {
             if false {

@@ -3,6 +3,7 @@ use mrc_instruction::Register;
 
 mod arithmetic;
 mod logic;
+mod string;
 
 pub trait SignificantBit {
     fn least_significant_bit(&self) -> bool;
@@ -55,6 +56,7 @@ pub mod byte {
     pub use super::logic::byte::{
         and, exclusive_or, not, or, rotate_left, rotate_right, shift_left, shift_right, test,
     };
+    pub use super::string::byte::{load, mov, store, scan};
 }
 
 pub mod word {

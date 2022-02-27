@@ -3,17 +3,22 @@ mod config;
 mod debugger;
 mod interrupts;
 
-use crate::components::dma::DMAController;
-use crate::interrupts::InterruptManager;
+use crate::components::pic::ProgrammableInterruptController;
+use crate::{
+    components::{
+        cga::Cga, dma::DirectMemoryAccessController, pit::ProgrammableIntervalTimer8253,
+        ppi::ProgrammablePeripheralInterface,
+    },
+    interrupts::InterruptManager,
+};
 use config::Config;
-use mrc_emulator::components::ram::RandomAccessMemory;
-use mrc_emulator::components::rom::ReadOnlyMemory;
-use mrc_emulator::cpu::{ExecuteResult, CPU};
-use mrc_emulator::error::Error;
-use mrc_emulator::{Address, Bus, Port};
-use std::cell::RefCell;
-use std::io::Read;
-use std::rc::Rc;
+use mrc_emulator::{
+    components::{ram::RandomAccessMemory, rom::ReadOnlyMemory},
+    cpu::{ExecuteResult, CPU},
+    error::Error,
+    Address, Bus, Port,
+};
+use std::{cell::RefCell, io::Read, rc::Rc};
 use structopt::StructOpt;
 
 const MEMORY_MAX: usize = 0x100000;
@@ -231,54 +236,55 @@ impl Bus<Address> for Memory {
 struct IOBus {
     interrupt_manager: Rc<RefCell<InterruptManager>>,
 
-    dma: components::dma::DMAController,
-    keyboard_controller: components::keyboard::KeyboardController,
-    cga: components::cga::Cga,
-    pit: Rc<RefCell<components::pit::ProgrammableIntervalTimer8253>>,
+    dma: DirectMemoryAccessController,
+    cga: Cga,
+    pic: ProgrammableInterruptController,
+    pit: Rc<RefCell<ProgrammableIntervalTimer8253>>,
+    ppi: ProgrammablePeripheralInterface,
 }
 
 impl Bus<Port> for IOBus {
-    fn read(&self, port: Port) -> mrc_emulator::error::Result<u8> {
-        match port {
-            // Direct Memory Access Controller
-            0x0000..=0x000D => self.dma.read(port),
+    fn read(&self, address: Port) -> mrc_emulator::error::Result<u8> {
+        match address {
+            0x0000..=0x000D => self.dma.read(address),
 
-            // PIT (Programmable Interrupt Timer  8253, 8254)
-            0x0040..=0x005F => self.pit.borrow().read(port),
+            0x0020..=0x0021 => self.pic.read(address),
 
-            // Direct Memory Access Page Registers
-            0x81 | 0x82 | 0x83 | 0x87 => self.dma.read(port),
+            0x0040..=0x005F => self.pit.borrow().read(address),
 
-            _ => panic!("Unsupported port: {:#06X}", port),
+            0x0060..=0x0063 => self.ppi.read(address),
+
+            0x0081 | 0x0082 | 0x0083 | 0x0087 => self.dma.read(address),
+
+            _ => panic!("Reading from unsupported port: {:#06X}", address),
         }
     }
 
     fn write(&mut self, address: Port, value: u8) -> mrc_emulator::error::Result<()> {
         match address {
-            // Direct Memory Access Controller
             0x0000..=0x000D => self.dma.write(address, value),
 
-            // PIT (Programmable Interrupt Timer  8253, 8254)
+            0x0020..=0x0021 => self.pic.write(address, value),
+
             0x0040..=0x005F => self.pit.borrow_mut().write(address, value),
 
-            // Keyboard controller.
-            0x0060..=0x006F => self.keyboard_controller.write(address, value),
+            0x0060..=0x0063 => self.ppi.write(address, value),
 
-            // Direct Memory Access Page Registers
-            0x81 | 0x82 | 0x83 | 0x87 => self.dma.write(address, value),
+            0x0081 | 0x0082 | 0x0083 | 0x0087 => self.dma.write(address, value),
 
-            0xA0 => {
+            0x00A0 => {
                 self.interrupt_manager.borrow_mut().allow_nmi = false;
                 Ok(())
             }
 
-            // CGA graphics.
             0x03D0..=0x03DF => self.cga.write(address, value),
 
-            // MDA graphics.
             0x03B0..=0x03BF => Ok(()),
 
-            _ => todo!(),
+            _ => panic!(
+                "Writing {:#04x} to unsupported port: {:#06X}",
+                value, address
+            ),
         }
     }
 }
@@ -292,19 +298,20 @@ fn main() {
     let memory = Memory::new(bios);
 
     let interrupt_manager = Rc::new(RefCell::new(InterruptManager { allow_nmi: true }));
-    let dma = DMAController::default();
-    let keyboard_controller = components::keyboard::KeyboardController::default();
+    let dma = DirectMemoryAccessController::default();
     let cga = components::cga::Cga::default();
     let pit = Rc::new(RefCell::new(
         components::pit::ProgrammableIntervalTimer8253::default(),
     ));
+    let pic = ProgrammableInterruptController::default();
 
     let io_bus = IOBus {
         interrupt_manager,
         dma,
-        keyboard_controller,
         cga,
+        pic,
         pit: Rc::clone(&pit),
+        ppi: ProgrammablePeripheralInterface::default(),
     };
 
     let mut cpu = CPU::new(memory, io_bus);
