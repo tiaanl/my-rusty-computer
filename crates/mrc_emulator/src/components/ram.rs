@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::{Address, Bus};
+use crate::{Address, Bus, Port};
 
 pub struct RandomAccessMemory {
     data: Vec<u8>,
@@ -29,6 +29,25 @@ impl Bus<Address> for RandomAccessMemory {
     fn write(&mut self, address: Address, value: u8) -> Result<()> {
         if address as usize >= self.data.len() {
             Err(Error::AddressNotMapped(address))
+        } else {
+            self.data[address as usize] = value;
+            Ok(())
+        }
+    }
+}
+
+impl Bus<Port> for RandomAccessMemory {
+    fn read(&self, address: Port) -> Result<u8> {
+        if address as usize >= self.data.len() {
+            Err(Error::InvalidPort(address))
+        } else {
+            Ok(self.data[address as usize])
+        }
+    }
+
+    fn write(&mut self, address: Port, value: u8) -> Result<()> {
+        if address as usize >= self.data.len() {
+            Err(Error::InvalidPort(address))
         } else {
             self.data[address as usize] = value;
             Ok(())
