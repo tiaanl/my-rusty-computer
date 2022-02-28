@@ -2,6 +2,7 @@
 members = [
     "bins/gen_test_bin",
     "bins/gui_test",
+    "bins/led_show",
     "bins/mrc_asm",
     "bins/mrc_dis",
     "bins/mrc_emu",

@@ -1,0 +1,10 @@
+[package]
+name = "led_show"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+glium = "0.30"
+image = { version = "0.24", default_features = false, features = ["png"] }
+png = "=0.17.3"
+mrc_emulator = { path = "../../crates/mrc_emulator" }
