@@ -3,7 +3,9 @@ mod config;
 mod debugger;
 mod interrupts;
 
+use crate::components::keyboard::Keyboard;
 use crate::components::pic::ProgrammableInterruptController;
+use crate::components::ppi::Latch;
 use crate::{
     components::{
         cga::Cga, dma::DirectMemoryAccessController, pit::ProgrammableIntervalTimer8253,
@@ -240,7 +242,7 @@ struct IOBus {
     cga: Cga,
     pic: ProgrammableInterruptController,
     pit: Rc<RefCell<ProgrammableIntervalTimer8253>>,
-    ppi: ProgrammablePeripheralInterface,
+    ppi: ProgrammablePeripheralInterface<Latch, Keyboard, Latch>,
 }
 
 impl Bus<Port> for IOBus {
@@ -311,7 +313,7 @@ fn main() {
         cga,
         pic,
         pit: Rc::clone(&pit),
-        ppi: ProgrammablePeripheralInterface::default(),
+        ppi: ProgrammablePeripheralInterface::new(Latch(0x00), Keyboard::default(), Latch(0x00)),
     };
 
     let mut cpu = CPU::new(memory, io_bus);

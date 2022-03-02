@@ -3,70 +3,92 @@
 use mrc_emulator::error::Error;
 use mrc_emulator::{Bus, Port};
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Mode {
     Input,
     Output,
 }
 
 #[derive(Debug)]
-pub struct ChipPort {
-    mode: Mode,
-    value: u8,
+pub struct ProgrammablePeripheralInterface<A, B, C>
+where
+    A: Bus<Port>,
+    B: Bus<Port>,
+    C: Bus<Port>,
+{
+    port_a: A,
+    port_b: B,
+    port_c: C,
+
+    modes: [Mode; 3],
 }
 
-impl Default for ChipPort {
-    fn default() -> Self {
+impl<A, B, C> ProgrammablePeripheralInterface<A, B, C>
+where
+    A: Bus<Port>,
+    B: Bus<Port>,
+    C: Bus<Port>,
+{
+    pub fn new(port_a: A, port_b: B, port_c: C) -> Self {
         Self {
-            mode: Mode::Input,
-            value: 0,
+            port_a,
+            port_b,
+            port_c,
+            modes: [Mode::Input; 3],
         }
     }
 }
 
-#[derive(Debug, Default)]
-pub struct ProgrammablePeripheralInterface {
-    ports: [ChipPort; 3],
-}
-
-impl Bus<Port> for ProgrammablePeripheralInterface {
+impl<A, B, C> Bus<Port> for ProgrammablePeripheralInterface<A, B, C>
+where
+    A: Bus<Port>,
+    B: Bus<Port>,
+    C: Bus<Port>,
+{
     fn read(&self, address: Port) -> mrc_emulator::error::Result<u8> {
         let address = address & 0b11;
 
-        if address < 3 {
-            let value = self.ports[address as usize].value;
-            log::info!(
-                "Reading from PPI port {}: {:#04X}",
-                ['A', 'B', 'C'][address as usize],
-                value
-            );
-            Ok(value)
-        } else {
-            Err(Error::InvalidPort(address))
+        match address {
+            0b00 => self.port_a.read(address),
+            0b01 => self.port_b.read(address),
+            0b10 => self.port_c.read(address),
+            0b11 => Err(Error::InvalidPort(address)),
+            _ => unreachable!(),
         }
     }
 
     fn write(&mut self, address: Port, value: u8) -> mrc_emulator::error::Result<()> {
         let address = address & 0b11;
 
-        if address == 0b11 {
-            for i in 0..3_usize {
-                self.ports[i].mode = if value & (1 << i) != 0 {
-                    Mode::Input
-                } else {
-                    Mode::Output
+        match address {
+            0b00 => self.port_a.write(address, value),
+            0b01 => self.port_b.write(address, value),
+            0b10 => self.port_c.write(address, value),
+            0b11 => {
+                for i in 0..3_usize {
+                    self.modes[i] = if value & (1 << i) != 0 {
+                        Mode::Input
+                    } else {
+                        Mode::Output
+                    }
                 }
+                log::info!("Writing to PPI control register: {:?}", self.modes);
+                Ok(())
             }
-            log::info!("Writing to PPI control register: {:?}", self);
-        } else {
-            log::info!(
-                "Writing to PPI port {}: {:#04X}",
-                ['A', 'B', 'C'][address as usize],
-                value
-            );
-            self.ports[address as usize].value;
+            _ => Err(Error::InvalidPort(address)),
         }
+    }
+}
 
+pub struct Latch(pub u8);
+
+impl Bus<Port> for Latch {
+    fn read(&self, _address: Port) -> mrc_emulator::error::Result<u8> {
+        Ok(self.0)
+    }
+
+    fn write(&mut self, _address: Port, value: u8) -> mrc_emulator::error::Result<()> {
+        self.0 = value;
         Ok(())
     }
 }

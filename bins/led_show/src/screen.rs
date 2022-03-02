@@ -49,33 +49,67 @@ impl Screen {
         ];
 
         let vertex_buffer = glium::VertexBuffer::new(display, &shape).unwrap();
-        let indices = glium::index::NoIndices(glium::index::PrimitiveType::TriangleFan);
+        let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
         let vertex_shader_src = r#"
-            #version 140
+            #version 330 core
             in vec2 position;
-            in vec2 tex_coords;
-            out vec2 v_tex_coords;
-            uniform mat4 matrix;
             void main() {
-                v_tex_coords = tex_coords;
-                gl_Position = matrix * vec4(position, 0.0, 1.0);
+                gl_Position = vec4(position, 0.0, 1.0);
+            }
+        "#;
+
+        let geometry_shader_src = r#"
+            #version 330 core
+
+            layout (points) in;
+            layout (triangle_strip, max_vertices = 4) out;
+
+            in VS_OUT {
+                vec2 tex_coord;
+            } vs_out[];
+
+            out vec2 tex_coord;
+
+            void main() {
+                float block_size = 1.0 / 8.0;
+
+                gl_Position = gl_in[0].gl_Position - vec4(-block_size, -block_size, 0.0, 0.0);
+                tex_coord = vec2(0.0, 1.0);
+                EmitVertex();
+
+                gl_Position = gl_in[0].gl_Position - vec4(-block_size, block_size, 0.0, 0.0);
+                tex_coord = vec2(0.0, 0.0);
+                EmitVertex();
+
+                gl_Position = gl_in[0].gl_Position - vec4( block_size, -block_size, 0.0, 0.0);
+                tex_coord = vec2(1.0, 1.0);
+                EmitVertex();
+
+                gl_Position = gl_in[0].gl_Position - vec4( block_size, block_size, 0.0, 0.0);
+                tex_coord = vec2(1.0, 0.0);
+                EmitVertex();
             }
         "#;
 
         let fragment_shader_src = r#"
-            #version 140
-            in vec2 v_tex_coords;
+            #version 330 core
+            in vec2 tex_coord;
             out vec4 color;
             uniform sampler2D tex;
             void main() {
-                color = texture(tex, v_tex_coords);
+                color = texture(tex, tex_coord);
+                // color = vec4(1.0, 0.0, 0.0, 1.0);
             }
         "#;
 
-        let program =
-            glium::Program::from_source(display, vertex_shader_src, fragment_shader_src, None)
-                .unwrap();
+        let program = glium::Program::from_source(
+            display,
+            vertex_shader_src,
+            fragment_shader_src,
+            Some(geometry_shader_src),
+        )
+        .unwrap();
 
         Self {
             texture,
@@ -87,12 +121,6 @@ impl Screen {
 
     pub fn draw(&self, target: &mut glium::Frame) {
         let uniforms = uniform! {
-            matrix: [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0_f32],
-            ],
             tex: &self.texture,
         };
 

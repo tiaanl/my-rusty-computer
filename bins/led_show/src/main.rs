@@ -3,17 +3,18 @@ mod screen;
 use glium::{glutin, Surface};
 use mrc_emulator::error::Error;
 use mrc_emulator::{Bus, Port};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 struct Io {
-    data: Arc<Mutex<[u8; 8]>>,
+    data: Arc<RwLock<[u8; 8]>>,
 }
 
 impl Bus<Port> for Io {
     fn read(&self, address: Port) -> mrc_emulator::error::Result<u8> {
         if address < 8 {
-            let data = self.data.lock().unwrap();
-            Ok(data[address as usize])
+            let data = self.data.read().unwrap();
+            let value = data[address as usize];
+            Ok(value)
         } else {
             Err(Error::InvalidPort(address))
         }
@@ -21,7 +22,7 @@ impl Bus<Port> for Io {
 
     fn write(&mut self, address: Port, value: u8) -> mrc_emulator::error::Result<()> {
         if address < 8 {
-            let mut data = self.data.lock().unwrap();
+            let mut data = self.data.write().unwrap();
             data[address as usize] = value;
             Ok(())
         } else {
@@ -33,23 +34,27 @@ impl Bus<Port> for Io {
 fn main() {
     let event_loop = glutin::event_loop::EventLoop::new();
     let wb = glutin::window::WindowBuilder::new();
-    let cb = glutin::ContextBuilder::new();
+    let cb = glutin::ContextBuilder::new().with_gl_profile(glutin::GlProfile::Core);
     let display = glium::Display::new(wb, cb, &event_loop).unwrap();
 
+    println!("OpenGL version: {}", display.get_opengl_version_string());
+    println!("OpenGL renderer: {}", display.get_opengl_renderer_string());
+    println!("OpenGL profile: {:?}", display.get_opengl_profile());
+
     let screen = screen::Screen::new(&display);
-    let data = Arc::new(Mutex::new([0_u8; 8]));
+    let data = Arc::new(RwLock::new([0_u8; 8]));
 
     let io = Io { data: data.clone() };
 
     std::thread::spawn(|| {
+        let code = include_bytes!("../assets/main.bin");
+
         let mut data = mrc_emulator::components::ram::RandomAccessMemory::with_capacity(0x100000);
-        data.write(0_u32, 0xB0).unwrap();
-        data.write(1_u32, 0x01).unwrap();
-        data.write(2_u32, 0xE6).unwrap();
-        data.write(3_u32, 0x00).unwrap();
-        data.write(4_u32, 0xF4).unwrap();
+        for i in 0..code.len() {
+            data.write(i as u32, code[i]).unwrap();
+        }
         let mut cpu = mrc_emulator::cpu::CPU::new(data, io);
-        cpu.start();
+        cpu.start().unwrap();
         println!("Done");
     });
 
@@ -79,9 +84,7 @@ fn main() {
         let mut target = display.draw();
         target.clear_color(0.0, 0.0, 1.0, 1.0);
 
-        let data = {
-            data.lock().unwrap().clone()
-        };
+        let data = { data.read().unwrap().clone() };
 
         println!("{:?}", data);
 

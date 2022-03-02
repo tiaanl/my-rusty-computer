@@ -1,0 +1,3 @@
+mov     al, 0x01
+out     0x00, al
+hlt

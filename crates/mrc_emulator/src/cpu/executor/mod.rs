@@ -21,6 +21,13 @@ pub enum ExecuteResult {
 
 impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
     fn push(&mut self, value: u16) -> Result<()> {
+        self.state.set_word_register_value(
+            Register::AhSp,
+            self.state
+                .get_word_register_value(Register::AhSp)
+                .wrapping_sub(2),
+        );
+
         word::bus_write(
             &mut self.bus,
             segment_and_offset(
@@ -31,13 +38,6 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
         )?;
 
         // log::info!("Push {:04X} to [{:04X}:{:04X}]", value, ss, sp,);
-
-        self.state.set_word_register_value(
-            Register::AhSp,
-            self.state
-                .get_word_register_value(Register::AhSp)
-                .wrapping_sub(2),
-        );
 
         Ok(())
     }
