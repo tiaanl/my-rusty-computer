@@ -52,11 +52,13 @@ pub mod byte {
         flags.set(Flags::PARITY, super::parity_for(result));
     }
 
-    pub use super::arithmetic::byte::{add, add_with_carry, compare, multiply, subtract};
+    pub use super::arithmetic::byte::{
+        add, add_with_carry, compare, decrement, increment, multiply, subtract,
+    };
     pub use super::logic::byte::{
         and, exclusive_or, not, or, rotate_left, rotate_right, shift_left, shift_right, test,
     };
-    pub use super::string::byte::{load, mov, store, scan};
+    pub use super::string::byte::{load, mov, scan, store};
 }
 
 pub mod word {
@@ -69,7 +71,9 @@ pub mod word {
         flags.set(Flags::PARITY, super::parity_for(result as u8));
     }
 
-    pub use super::arithmetic::word::{add, add_with_carry, compare, multiply, subtract};
+    pub use super::arithmetic::word::{
+        add, add_with_carry, compare, decrement, increment, multiply, subtract,
+    };
     pub use super::logic::word::{
         and, exclusive_or, not, or, rotate_left, rotate_right, shift_left, shift_right, test,
     };

@@ -248,11 +248,11 @@ impl Display for State {
         print_flag!(T, Flags::TRAP);
         print_flag!(S, Flags::SIGN);
         print_flag!(Z, Flags::ZERO);
-        print_flag!(U, Flags::RESERVED_5);
+        // print_flag!(R, Flags::RESERVED_5);
         print_flag!(A, Flags::AUX_CARRY);
-        print_flag!(U, Flags::RESERVED_3);
+        // print_flag!(R, Flags::RESERVED_3);
         print_flag!(P, Flags::PARITY);
-        print_flag!(U, Flags::RESERVED_1);
+        // print_flag!(R, Flags::RESERVED_1);
         print_flag!(C, Flags::CARRY);
 
         Ok(())
@@ -282,42 +282,43 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
     }
 
     pub fn tick(&mut self) -> Result<ExecuteResult> {
-        println!("state: {}", self.state);
+        const PRINT: bool = true;
 
-        let _start_cs = self.state.segments.cs;
-        let _start_ip = self.state.ip;
+        let cs = self.state.segments.cs;
+        let ip = self.state.ip;
 
         let instruction = decode_instruction(self)?;
 
-        let flat = segment_and_offset(_start_cs, _start_ip);
+        if PRINT {
+            println!("state: {}", self.state);
 
-        if true {
             if false {
-                let bytes_read = (self.state.ip - _start_ip) as u8;
+                let bytes_read = (self.state.ip - ip) as u8;
                 let mut byte_buffer = [0_u8; 16];
 
                 for i in 0..(bytes_read as usize) {
-                    let byte = self.bus.read(
-                        mrc_instruction::Address::new(_start_cs, _start_ip + i as u16).flat(),
-                    )?;
+                    let byte = self
+                        .bus
+                        .read(mrc_instruction::Address::new(cs, ip + i as u16).flat())?;
                     byte_buffer[i as usize] = byte;
                 }
 
                 println!(
                     "{}",
                     DecodedInstruction::new(
-                        mrc_instruction::Address::new(_start_cs, _start_ip),
+                        mrc_instruction::Address::new(cs, ip),
                         &byte_buffer[..bytes_read as usize],
                         instruction,
                         bytes_read
                     )
                 );
             } else {
-                println!("{:04X}:{:04X} {}", _start_cs, _start_ip, &instruction);
+                println!("{:04X}:{:04X} {}", cs, ip, &instruction);
             }
         }
 
-        if flat == 0xfe1ea {
+        let flat = segment_and_offset(cs, ip);
+        if flat == 0xFE24C {
             println!("break");
         }
 

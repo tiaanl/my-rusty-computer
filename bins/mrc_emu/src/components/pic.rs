@@ -16,6 +16,14 @@ pub struct ProgrammableInterruptController {
 }
 
 impl ProgrammableInterruptController {
+    fn read_low(&self) -> Result<u8> {
+        todo!()
+    }
+
+    fn read_high(&self) -> Result<u8> {
+        Ok(self.imr)
+    }
+
     fn write_low(&mut self, value: u8) -> Result<()> {
         log::info!("Writing to PIC low port: {:#04X}", value);
 
@@ -35,30 +43,30 @@ impl ProgrammableInterruptController {
             let ocw2 = value & 0xE0;
             if ocw2 & 0x20 != 0 {
                 // This must be an ocw2 with an EOI command.
-                let mut ir_low = 0; // TODO: This should have a undefined state.
+                let mut _ir_low = 0; // TODO: This should have a undefined state.
                 let mut ir_end = 0;
                 if (ocw2 & 0x60) != 0 {
                     // Specific EOI command.
-                    ir_low = value & 0x07;
-                    ir_end = 1 << ir_low;
+                    _ir_low = value & 0x07;
+                    ir_end = 1 << _ir_low;
                 } else {
-                    ir_low = self.ir_low + 1;
+                    _ir_low = self.ir_low + 1;
                     loop {
-                        ir_low &= 7;
-                        let ir = 1 << ir_low;
+                        _ir_low &= 7;
+                        let ir = 1 << _ir_low;
                         if self.isr & ir != 0 {
                             ir_end = ir;
                             break;
                         }
-                        if ir_low == self.ir_low {
-                            ir_low += 1;
+                        if _ir_low == self.ir_low {
+                            _ir_low += 1;
                             break;
                         }
-                        ir_low += 1;
+                        _ir_low += 1;
                     }
                 }
 
-                let irq = self.irq_base + ir_low;
+                let _irq = self.irq_base + _ir_low;
 
                 if self.isr & ir_end != 0 {
                     self.isr &= !ir_end;
@@ -114,8 +122,12 @@ impl ProgrammableInterruptController {
 }
 
 impl Bus<Port> for ProgrammableInterruptController {
-    fn read(&self, _port: u16) -> Result<u8> {
-        todo!()
+    fn read(&self, port: u16) -> Result<u8> {
+        if port & 0b1 == 0 {
+            self.read_low()
+        } else {
+            self.read_high()
+        }
     }
 
     fn write(&mut self, port: u16, value: u8) -> Result<()> {

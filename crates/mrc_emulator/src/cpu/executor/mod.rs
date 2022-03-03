@@ -421,12 +421,12 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 match destination.operand_size() {
                     OperandSize::Byte => {
                         let mut value = byte::get_operand_type_value(cpu, destination)?;
-                        value = value.wrapping_sub(1);
+                        value = operations::byte::decrement(value, &mut cpu.state.flags).unwrap();
                         byte::set_operand_type_value(cpu, destination, value)?
                     }
                     OperandSize::Word => {
                         let mut value = word::get_operand_type_value(cpu, destination)?;
-                        value = value.wrapping_sub(1);
+                        value = operations::word::decrement(value, &mut cpu.state.flags).unwrap();
                         word::set_operand_type_value(cpu, destination, value)?
                     }
                 };
@@ -469,12 +469,12 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             OperandSet::Destination(destination) => match destination.operand_size() {
                 OperandSize::Byte => {
                     let mut value = byte::get_operand_value(cpu, destination)?;
-                    value = value.wrapping_add(1);
+                    value = operations::byte::increment(value, &mut cpu.state.flags).unwrap();
                     byte::set_operand_value(cpu, destination, value)?;
                 }
                 OperandSize::Word => {
                     let mut value = word::get_operand_value(cpu, destination)?;
-                    value = value.wrapping_add(1);
+                    value = operations::word::increment(value, &mut cpu.state.flags).unwrap();
                     word::set_operand_value(cpu, destination, value)?;
                 }
             },
@@ -933,6 +933,10 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
+        Operation::PUSHF => {
+            cpu.push(cpu.state.flags.bits)?;
+        }
+
         Operation::POP => match &instruction.operands {
             OperandSet::Destination(destination) => {
                 let value = cpu.pop()?;
@@ -940,6 +944,10 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             }
             _ => illegal_operands(instruction),
         },
+
+        Operation::POPF => {
+            cpu.state.flags.bits = cpu.pop()?;
+        }
 
         Operation::RET => {
             // Pop the return address from the stack.
@@ -1009,7 +1017,8 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         _ => {
-            return Err(Error::IllegalInstruction);
+            // return Err(Error::IllegalInstruction);
+            todo!("Instruction not implemented: {:?}", instruction)
         }
     }
 

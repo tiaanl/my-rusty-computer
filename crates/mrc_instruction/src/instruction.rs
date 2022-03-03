@@ -86,9 +86,18 @@ impl Instruction {
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.operands {
-            OperandSet::None => write!(f, "{:<10}", self.operation),
-            _ => write!(f, "{:<10} {}", self.operation, &self.operands),
+        match self.repeat {
+            None => match self.operands {
+                OperandSet::None => write!(f, "{:<10}", self.operation),
+                _ => write!(f, "{:<10} {}", self.operation, &self.operands),
+            },
+            Some(rep) => {
+                match rep {
+                    Repeat::Equal => write!(f, "rep "),
+                    Repeat::NotEqual => write!(f, "repz "),
+                }?;
+                write!(f, "{}", self.operation)
+            }
         }
     }
 }

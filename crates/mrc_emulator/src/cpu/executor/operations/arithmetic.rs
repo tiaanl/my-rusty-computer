@@ -51,6 +51,22 @@ macro_rules! arithmetic {
             Some(result)
         }
 
+        pub fn increment(destination: $t, flags: &mut Flags) -> Option<$t> {
+            let result = destination.wrapping_add(1);
+
+            flags_from_result(flags, result);
+
+            Some(result)
+        }
+
+        pub fn decrement(destination: $t, flags: &mut Flags) -> Option<$t> {
+            let result = destination.wrapping_sub(1);
+
+            flags_from_result(flags, result);
+
+            Some(result)
+        }
+
         // TODO: Tests
     };
 }

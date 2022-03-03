@@ -246,7 +246,6 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
                 ReadWrite::Latch => {
                     counter.count |= u16::from(value) << 8;
                     counter.read_write = ReadWrite::LoThenHiByte;
-                    unimplemented!()
                 }
                 ReadWrite::LoByte => {
                     counter.count = u16::from(value);
