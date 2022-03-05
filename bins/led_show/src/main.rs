@@ -6,12 +6,12 @@ use mrc_emulator::{Bus, Port};
 use std::sync::{Arc, RwLock};
 
 struct Io {
-    data: Arc<RwLock<[u8; 8]>>,
+    data: Arc<RwLock<[u8; 16]>>,
 }
 
 impl Bus<Port> for Io {
     fn read(&self, address: Port) -> mrc_emulator::error::Result<u8> {
-        if address < 8 {
+        if address < 16 {
             let data = self.data.read().unwrap();
             let value = data[address as usize];
             Ok(value)
@@ -21,7 +21,7 @@ impl Bus<Port> for Io {
     }
 
     fn write(&mut self, address: Port, value: u8) -> mrc_emulator::error::Result<()> {
-        if address < 8 {
+        if address < 16 {
             let mut data = self.data.write().unwrap();
             data[address as usize] = value;
             Ok(())
@@ -41,8 +41,8 @@ fn main() {
     println!("OpenGL renderer: {}", display.get_opengl_renderer_string());
     println!("OpenGL profile: {:?}", display.get_opengl_profile());
 
-    let screen = screen::Screen::new(&display);
-    let data = Arc::new(RwLock::new([0_u8; 8]));
+    let mut screen = screen::Screen::new(&display);
+    let data = Arc::new(RwLock::new([0_u8; 16]));
 
     let io = Io { data: data.clone() };
 
@@ -79,16 +79,12 @@ fn main() {
             std::time::Instant::now() + std::time::Duration::from_nanos(16_666_667);
         *control_flow = glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
 
-        // TODO: Update here.
-
         let mut target = display.draw();
         target.clear_color(0.0, 0.0, 1.0, 1.0);
 
         let data = { data.read().unwrap().clone() };
 
-        println!("{:?}", data);
-
-        screen.draw(&mut target);
+        screen.draw(&mut target, &data);
 
         target.finish().unwrap();
     });

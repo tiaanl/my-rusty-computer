@@ -282,7 +282,7 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
     }
 
     pub fn tick(&mut self) -> Result<ExecuteResult> {
-        const PRINT: bool = true;
+        const PRINT: bool = false;
 
         let cs = self.state.segments.cs;
         let ip = self.state.ip;
