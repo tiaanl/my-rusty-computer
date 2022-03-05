@@ -1,7 +1,7 @@
 //! Emulation of the Intel 8255 Programmable Peripheral Interface
 
-use mrc_emulator::error::Error;
-use mrc_emulator::{Bus, Port};
+use crate::{Bus, Port};
+use crate::error::{Error, Result};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Mode {
@@ -45,7 +45,7 @@ where
     B: Bus<Port>,
     C: Bus<Port>,
 {
-    fn read(&self, address: Port) -> mrc_emulator::error::Result<u8> {
+    fn read(&self, address: Port) -> Result<u8> {
         let address = address & 0b11;
 
         match address {
@@ -57,7 +57,7 @@ where
         }
     }
 
-    fn write(&mut self, address: Port, value: u8) -> mrc_emulator::error::Result<()> {
+    fn write(&mut self, address: Port, value: u8) -> Result<()> {
         let address = address & 0b11;
 
         match address {
@@ -83,11 +83,11 @@ where
 pub struct Latch(pub u8);
 
 impl Bus<Port> for Latch {
-    fn read(&self, _address: Port) -> mrc_emulator::error::Result<u8> {
+    fn read(&self, _address: Port) -> Result<u8> {
         Ok(self.0)
     }
 
-    fn write(&mut self, _address: Port, value: u8) -> mrc_emulator::error::Result<()> {
+    fn write(&mut self, _address: Port, value: u8) -> Result<()> {
         self.0 = value;
         Ok(())
     }

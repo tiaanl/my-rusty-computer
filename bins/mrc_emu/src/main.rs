@@ -3,17 +3,13 @@ mod config;
 mod debugger;
 mod interrupts;
 
-use crate::components::keyboard::Keyboard;
-use crate::components::pic::ProgrammableInterruptController;
-use crate::components::ppi::Latch;
-use crate::{
-    components::{
-        cga::Cga, dma::DirectMemoryAccessController, pit::ProgrammableIntervalTimer8253,
-        ppi::ProgrammablePeripheralInterface,
-    },
-    interrupts::InterruptManager,
-};
+use crate::interrupts::InterruptManager;
 use config::Config;
+use mrc_emulator::components::{
+    cga::Cga, dma::DirectMemoryAccessController, keyboard::Keyboard,
+    pic::ProgrammableInterruptController, pit::ProgrammableIntervalTimer8253, ppi::Latch,
+    ppi::ProgrammablePeripheralInterface,
+};
 use mrc_emulator::{
     components::{ram::RandomAccessMemory, rom::ReadOnlyMemory},
     cpu::{ExecuteResult, CPU},
@@ -301,10 +297,8 @@ fn main() {
 
     let interrupt_manager = Rc::new(RefCell::new(InterruptManager { allow_nmi: true }));
     let dma = DirectMemoryAccessController::default();
-    let cga = components::cga::Cga::default();
-    let pit = Rc::new(RefCell::new(
-        components::pit::ProgrammableIntervalTimer8253::default(),
-    ));
+    let cga = Cga::default();
+    let pit = Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default()));
     let pic = ProgrammableInterruptController::default();
 
     let io_bus = IOBus {

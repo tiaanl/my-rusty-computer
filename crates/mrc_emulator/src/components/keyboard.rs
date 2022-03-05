@@ -1,4 +1,4 @@
-use mrc_emulator::{error::Result, Bus, Port};
+use crate::{error::Result, Bus, Port};
 use std::collections::VecDeque;
 
 #[derive(Default)]
@@ -52,7 +52,9 @@ impl Keyboard {
                 None => 0,
             };
 
-            if true /*send_value_to_cpu(value)*/ {
+            if true
+            /*send_value_to_cpu(value)*/
+            {
                 log::info!("Keyboard data {:#04X} transmitted.", value);
                 self.buffer.pop_front();
             }

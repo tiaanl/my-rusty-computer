@@ -1,6 +1,6 @@
 //! Emulation of Intel 8259A programmable interrupt controller.
 
-use mrc_emulator::{error::Result, Bus, Port};
+use crate::{error::Result, Bus, Port};
 
 #[derive(Default)]
 pub struct ProgrammableInterruptController {

@@ -1,6 +1,7 @@
-use mrc_emulator::error::Error as EmulatorError;
-use mrc_emulator::error::Result;
-use mrc_emulator::{Bus, Port};
+use crate::{
+    error::{Error, Result},
+    Bus, Port,
+};
 use std::cell::RefCell;
 
 // Intel 8253 Programmable Interrupt Timer
@@ -25,7 +26,7 @@ pub enum ReadWrite {
 }
 
 impl TryFrom<u8> for ReadWrite {
-    type Error = EmulatorError;
+    type Error = Error;
 
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         use ReadWrite::*;
@@ -35,7 +36,7 @@ impl TryFrom<u8> for ReadWrite {
             0b01 => Ok(LoByte),
             0b10 => Ok(HiByte),
             0b11 => Ok(LoThenHiByte),
-            _ => Err(EmulatorError::IllegalDataAccess),
+            _ => Err(Error::IllegalDataAccess),
         }
     }
 }
@@ -92,7 +93,7 @@ impl ControlRegister {
 }
 
 impl TryFrom<u8> for ControlRegister {
-    type Error = EmulatorError;
+    type Error = Error;
 
     fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
         Ok(Self {
@@ -177,7 +178,7 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
         let counter = port & 0b11;
 
         if counter == 4 {
-            return Err(EmulatorError::Unspecified(
+            return Err(Error::Unspecified(
                 "Only the 3 counters can be read from.",
             ));
         }

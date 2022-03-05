@@ -3,8 +3,7 @@
 //! IBM PC/XT model 5150 and up uses DMA channel 0 for memory refresh cycles and channel 2 for the
 //! fixed disk controller.
 
-use mrc_emulator::error::Result;
-use mrc_emulator::{Bus, Port};
+use crate::{error::Result, Bus, Port};
 use std::cell::Cell;
 
 #[derive(Default)]

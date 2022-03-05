@@ -100,7 +100,7 @@ fn encode_mod_reg_rm(
 
     result.push(op_code);
 
-    result.push(ModRegRM::new(destination, register_or_memory).as_byte());
+    // result.push(ModRegRM::new(destination, register_or_memory).as_byte());
 
     Ok(result)
 }
