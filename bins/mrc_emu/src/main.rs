@@ -1,6 +1,5 @@
 mod components;
 mod config;
-mod debugger;
 mod interrupts;
 
 use crate::interrupts::InterruptManager;
@@ -10,12 +9,14 @@ use mrc_emulator::components::{
     pic::ProgrammableInterruptController, pit::ProgrammableIntervalTimer8253, ppi::Latch,
     ppi::ProgrammablePeripheralInterface,
 };
+use mrc_emulator::debugger::{Debugger, DebuggerState, EmulatorCommand};
 use mrc_emulator::{
     components::{ram::RandomAccessMemory, rom::ReadOnlyMemory},
     cpu::{ExecuteResult, CPU},
     error::Error,
     Address, Bus, Port,
 };
+use std::sync::mpsc::{Receiver, Sender};
 use std::{cell::RefCell, io::Read, rc::Rc};
 use structopt::StructOpt;
 
@@ -59,141 +60,6 @@ fn create_bios(path: Option<String>) -> ReadOnlyMemory {
 
     bios.unwrap_or_else(|| ReadOnlyMemory::from_vec(vec![0u8; BIOS_SIZE as usize]))
 }
-
-// fn create_emulator(
-//     builder: &mut EmulatorBuilder,
-//     config: &Config,
-//     screen_text_mode: Arc<RwLock<TextMode>>,
-// ) {
-//     // 640KiB RAM
-//     builder.map_address(0x00000..0xA0000, RandomAccessMemory::with_capacity(0xA0000));
-//
-//     // Single Intel 8259A programmable interrupt controller.
-//     builder.map_io_range(0x20, 2, Rc::new(RefCell::new(Pic::default())));
-//
-//     // On IBM PC/XT port 0xA0 is mapped to a non-maskable interrupt (NMI) register.
-//     let nmi = NMI { value: 0xA0 };
-//     builder.map_io_range(0xA0, 1, Rc::new(RefCell::new(nmi)));
-//
-//     // Programmable Interval Timer
-//     builder.map_io_range(
-//         0x40,
-//         0x04,
-//         Rc::new(RefCell::new(ProgrammableIntervalTimer8253::default())),
-//     );
-//
-//     /*
-//     // Basic ROM just below BIOS.
-//     [
-//         (
-//             r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF6.ROM"#,
-//             0xF6000,
-//         ),
-//         (
-//             r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICF8.ROM"#,
-//             0xF8000,
-//         ),
-//         (
-//             r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFA.ROM"#,
-//             0xFA000,
-//         ),
-//         (
-//             r#"C:\Code\my-rusty-computer\bins\mrc_emu\ext\bios\BASICFC.ROM"#,
-//             0xFC000,
-//         ),
-//     ]
-//         .map(|(path, address)| {
-//             let data = load_rom(path).unwrap();
-//             let data_len = data.len() as u32;
-//             let rom = ReadOnlyMemory::from_vec(data);
-//             emulator
-//                 .bus()
-//                 .borrow_mut()
-//                 .map(address, data_len, Rc::new(RefCell::new(rom)));
-//             log::info!(
-//             "Loading ROM \"{}\" to [{:05X}..{:05X}]",
-//             path,
-//             address,
-//             address + data_len
-//         );
-//         });
-//     */
-//
-//     if let Some(bios_path) = &config.bios {
-//         install_bios(builder, bios_path);
-//     } else {
-//         let data = include_bytes!("../ext/mrc_bios/bios.bin");
-//         let data = Vec::from(*data);
-//         let data_size = data.len() as u32;
-//         let bios_start_addr = 0x100000 - data_size;
-//
-//         builder.map_address(
-//             bios_start_addr..bios_start_addr + data_size,
-//             ReadOnlyMemory::from_vec(data),
-//         );
-//     }
-//
-//     builder.map_address(0xB8000..0xBC000, TextModeInterface::new(screen_text_mode));
-//     // builder.map_interrupt(0x10, TextModeInterface::new(screen_text_mode));
-//
-//     builder.reset_vector(0xF000, 0xFFF0);
-// fn main() {
-//     pretty_env_logger::init();
-//
-//     let config = Config::from_args();
-//
-//     let event_loop = glutin::event_loop::EventLoop::new();
-//
-//     let mut screen = Screen::new(&event_loop);
-//
-//     let mut last_monitor_update = Instant::now();
-//
-//     let mut is_debugging = false;
-//
-//     event_loop.run(move |event, _, control_flow| {
-//         *control_flow = ControlFlow::Poll;
-//
-//         if let Some(cf) = screen.handle_events(&event) {
-//             *control_flow = cf;
-//             return;
-//         }
-//
-//         if is_debugging {
-//             // if let Some(debugger_action) = debugger.handle_events(&event) {
-//             //     match debugger_action {
-//             //         DebuggerAction::Step => {
-//             //             emulator.write().tick();
-//             //         }
-//             //     }
-//             //     return;
-//             // }
-//         } else {
-//             for _ in 0..10 {
-//                 let current_cpu_addr = segment_and_offset(
-//                     emulator.read().cpu.state.get_segment_value(Segment::Cs),
-//                     emulator.read().cpu.state.ip,
-//                 );
-//
-//                 // fe00:00b0 = fe0b0
-//                 if current_cpu_addr == 0xFE0B0 {
-//                     is_debugging = true;
-//                 } else {
-//                     emulator.write().tick();
-//                 }
-//             }
-//         }
-//
-//         // 60 fps
-//         let now = Instant::now();
-//         if now >= last_monitor_update + std::time::Duration::from_nanos(16_666_667) {
-//             last_monitor_update = now;
-//             screen.tick();
-//             debugger.update(emulator.read());
-//             debugger.tick();
-//         }
-//     });
-// }
-// }
 
 struct Memory {
     ram: RandomAccessMemory,
@@ -287,12 +153,11 @@ impl Bus<Port> for IOBus {
     }
 }
 
-fn main() {
-    pretty_env_logger::init();
-
-    let config = Config::from_args();
-
-    let bios = create_bios(config.bios);
+fn run_emulator(
+    bios: ReadOnlyMemory,
+    receiver: Receiver<EmulatorCommand>,
+    state_sender: Sender<DebuggerState>,
+) {
     let memory = Memory::new(bios);
 
     let interrupt_manager = Rc::new(RefCell::new(InterruptManager { allow_nmi: true }));
@@ -315,11 +180,119 @@ fn main() {
     // Set the CPU reset vector: 0xFFFF0
     cpu.jump_to(0xF000, 0xFFF0);
 
-    // for _ in 0..10 {
+    let mut running = false;
+
+    let _ = state_sender
+        .send(DebuggerState { state: cpu.state })
+        .unwrap();
+
     loop {
         pit.borrow_mut().tick();
         if !matches!(cpu.tick(), Ok(ExecuteResult::Continue)) {
             break;
         }
+
+        if running {
+            if let Ok(command) = receiver.try_recv() {
+                match command {
+                    EmulatorCommand::Run => running = true,
+                    EmulatorCommand::Stop => running = false,
+                    EmulatorCommand::Step => running = false,
+                }
+            }
+        } else {
+            // Send a new state to the debugger and wait for a command:
+            if let Ok(command) = receiver.recv() {
+                match command {
+                    EmulatorCommand::Run => running = true,
+                    EmulatorCommand::Stop => running = false,
+                    EmulatorCommand::Step => running = false,
+                }
+            }
+        }
+
+        let _ = state_sender
+            .send(DebuggerState { state: cpu.state })
+            .unwrap();
     }
+}
+
+fn main() {
+    pretty_env_logger::init();
+
+    let config = Config::from_args();
+
+    let bios = create_bios(config.bios);
+
+    let event_loop = glutin::event_loop::EventLoop::new();
+
+    let window_builder = glutin::window::WindowBuilder::new()
+        .with_resizable(true)
+        .with_inner_size(glutin::dpi::LogicalSize {
+            width: 800.0,
+            height: 600.0,
+        })
+        .with_title("My Rusty Computer (Debugger)");
+
+    let context_builder = glutin::ContextBuilder::new()
+        .with_depth_buffer(0)
+        .with_srgb(true)
+        .with_stencil_buffer(0)
+        .with_vsync(true);
+
+    let display = glium::Display::new(window_builder, context_builder, &event_loop)
+        .expect("Could not create display.");
+
+    let (command_sender, command_receiver) = std::sync::mpsc::channel();
+    let (state_sender, state_receiver) = std::sync::mpsc::channel();
+
+    let mut debugger = Debugger::new(&display, command_sender);
+
+    std::thread::spawn(move || {
+        run_emulator(bios, command_receiver, state_sender);
+    });
+
+    event_loop.run(move |event, _, control_flow| {
+        let mut redraw = || {
+            let needs_repaint = debugger.needs_redraw(&display);
+
+            *control_flow = if needs_repaint {
+                display.gl_window().window().request_redraw();
+                glutin::event_loop::ControlFlow::Poll
+            } else {
+                glutin::event_loop::ControlFlow::Wait
+            };
+
+            {
+                let mut frame = display.draw();
+                debugger.draw(&display, &mut frame);
+                frame.finish().unwrap();
+            }
+        };
+
+        match event {
+            // Platform-dependent event handlers to workaround a winit bug
+            // See: https://github.com/rust-windowing/winit/issues/987
+            // See: https://github.com/rust-windowing/winit/issues/1619
+            glutin::event::Event::RedrawEventsCleared if cfg!(windows) => redraw(),
+            glutin::event::Event::RedrawRequested(_) if !cfg!(windows) => redraw(),
+
+            glutin::event::Event::WindowEvent { event, .. } => {
+                use glutin::event::WindowEvent;
+                if matches!(event, WindowEvent::CloseRequested | WindowEvent::Destroyed) {
+                    *control_flow = glutin::event_loop::ControlFlow::Exit;
+                }
+
+                debugger.on_event(&event);
+
+                display.gl_window().window().request_redraw(); // TODO: ask egui if the events warrants a repaint instead
+            }
+
+            _ => {
+                if let Ok(incoming_state) = state_receiver.try_recv() {
+                    debugger.set_state(incoming_state);
+                };
+            }
+        }
+    });
 }

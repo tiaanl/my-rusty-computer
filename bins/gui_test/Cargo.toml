@@ -4,6 +4,6 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-egui = { version = "0.15.0", default_features = false }
-egui_glium = "0.15.0"
-glium = "0.30.2"
+egui = "0.17"
+egui_glium = "0.17"
+glium = "0.31"

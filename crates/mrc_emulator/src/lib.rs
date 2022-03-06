@@ -1,5 +1,6 @@
 pub mod components;
 pub mod cpu;
+pub mod debugger;
 pub mod error;
 
 /// An object where bytes can be read from or written to.

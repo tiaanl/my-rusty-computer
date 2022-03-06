@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-glium = "0.30"
+glium = "0.31"
 image = { version = "0.24", default_features = false, features = ["png"] }
 mrc_emulator = { path = "../../crates/mrc_emulator" }
 png = "=0.17.3"
