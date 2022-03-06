@@ -3,6 +3,7 @@ mod screen;
 
 use crate::panel::Panel;
 use glium::{glutin, Surface};
+use mrc_emulator::components::pit::ProgrammableIntervalTimer8253;
 use mrc_emulator::{
     error::{Error, Result},
     Bus, Port,
@@ -43,29 +44,32 @@ impl<Inner: Bus<Size>, Size> Bus<Size> for ThreadSafeBus<Inner, Size> {
     }
 }
 
-struct Io {
+struct Chipset {
+    pit: ProgrammableIntervalTimer8253,
     panel: ThreadSafeBus<Panel, Port>,
 }
 
-impl Bus<Port> for Io {
+impl Bus<Port> for Chipset {
     fn read(&self, address: Port) -> Result<u8> {
-        if address == 0x00 {
-            self.panel.read(address)
-        } else {
-            Err(Error::InvalidPort(address))
+        match address {
+            0x00 => self.panel.read(address),
+            0x40..=0x43 => self.pit.read(address),
+            _ => Err(Error::InvalidPort(address)),
         }
     }
 
     fn write(&mut self, address: Port, value: u8) -> Result<()> {
-        if address == 0x00 {
-            self.panel.write(address, value)
-        } else {
-            Err(Error::InvalidPort(address))
+        match address {
+            0x00 => self.panel.write(address, value),
+            0x40..=0x43 => self.pit.write(address, value),
+            _ => Err(Error::InvalidPort(address)),
         }
     }
 }
 
 fn main() {
+    pretty_env_logger::init();
+
     let event_loop = glutin::event_loop::EventLoop::new();
     let wb = glutin::window::WindowBuilder::new();
     let cb = glutin::ContextBuilder::new().with_gl_profile(glutin::GlProfile::Core);
@@ -88,7 +92,10 @@ fn main() {
             data.write(i as u32, code[i]).unwrap();
         }
 
-        let io = Io { panel: cloned };
+        let io = Chipset {
+            pit: ProgrammableIntervalTimer8253::default(),
+            panel: cloned,
+        };
 
         let mut cpu = mrc_emulator::cpu::CPU::new(data, io);
         cpu.start().unwrap();

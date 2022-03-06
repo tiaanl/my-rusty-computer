@@ -1029,6 +1029,7 @@ dependencies = [
  "image",
  "mrc_emulator",
  "png",
+ "pretty_env_logger",
 ]
 
 [[package]]

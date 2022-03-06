@@ -1,11 +1,5 @@
-use crate::{
-    error::{Error, Result},
-    Bus, Port,
-};
-use std::cell::RefCell;
-
-// Intel 8253 Programmable Interrupt Timer
-// https://en.wikipedia.org/wiki/Intel_8253
+//! Intel 8253 Programmable Interrupt Timer
+//! https://en.wikipedia.org/wiki/Intel_8253
 
 // Base + 0b00 - Channel 0 data port (read/write)
 // Base + 0b01 - Channel 1 data port (read/write)
@@ -16,6 +10,12 @@ use std::cell::RefCell;
 // IBM PC/XT 5150 had 1 PIT and it was mapped to base 0x40.
 
 // const TICK_RATE: usize = 1193182;
+
+use crate::{
+    error::{Error, Result},
+    Bus, Port,
+};
+use std::cell::RefCell;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ReadWrite {
@@ -178,9 +178,7 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
         let counter = port & 0b11;
 
         if counter == 4 {
-            return Err(Error::Unspecified(
-                "Only the 3 counters can be read from.",
-            ));
+            return Err(Error::Unspecified("Only the 3 counters can be read from."));
         }
 
         let counter = &mut self.inner.borrow_mut().counters[counter as usize];

@@ -2,7 +2,7 @@ mod executor;
 
 pub use crate::cpu::executor::{execute, ExecuteResult};
 
-use crate::{error::Result, segment_and_offset, Address, Bus, Port};
+use crate::{error::Result, Address, Bus, Port};
 use bitflags::bitflags;
 use mrc_decoder::{decode_instruction, DecodedInstruction};
 use mrc_instruction::{Register, Segment};
@@ -315,11 +315,6 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
             } else {
                 println!("{:04X}:{:04X} {}", cs, ip, &instruction);
             }
-        }
-
-        let flat = segment_and_offset(cs, ip);
-        if flat == 0xFE24C {
-            println!("break");
         }
 
         execute(self, &instruction)
