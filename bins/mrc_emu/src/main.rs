@@ -9,13 +9,16 @@ use mrc_emulator::components::{
     pic::ProgrammableInterruptController, pit::ProgrammableIntervalTimer8253, ppi::Latch,
     ppi::ProgrammablePeripheralInterface,
 };
+
+use mrc_decoder::decode_instruction;
 use mrc_emulator::debugger::{Debugger, DebuggerState, EmulatorCommand};
 use mrc_emulator::{
     components::{ram::RandomAccessMemory, rom::ReadOnlyMemory},
     cpu::{ExecuteResult, CPU},
     error::Error,
-    Address, Bus, Port,
+    segment_and_offset, Address, Bus, Port,
 };
+use mrc_instruction::{RelativeToAddress, Segment};
 use std::sync::mpsc::{Receiver, Sender};
 use std::{cell::RefCell, io::Read, rc::Rc};
 use structopt::StructOpt;
@@ -153,6 +156,73 @@ impl Bus<Port> for IOBus {
     }
 }
 
+struct CPUIt<'cpu, D: Bus<Address>, I: Bus<Port>> {
+    cpu: &'cpu CPU<D, I>,
+    pub address: Address,
+}
+
+impl<'cpu, D: Bus<Address>, I: Bus<Port>> Iterator for CPUIt<'cpu, D, I> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.cpu.read_from_bus(self.address) {
+            Ok(byte) => {
+                self.address = self.address.wrapping_add(1);
+                Some(byte)
+            }
+            Err(_) => None,
+        }
+    }
+}
+
+fn build_debugger_state<D: Bus<Address>, I: Bus<Port>>(
+    cpu: &CPU<D, I>,
+) -> mrc_decoder::Result<DebuggerState> {
+    let cs = cpu.state.get_segment_value(Segment::CS);
+    let mut it = CPUIt {
+        cpu,
+        address: segment_and_offset(cs, cpu.state.ip),
+    };
+
+    let source = [
+        format!(
+            "{:04X}:{:04X} {}",
+            cs,
+            { it.address & !((cs as u32) << 4) },
+            decode_instruction(&mut it)?
+        ),
+        format!(
+            "{:04X}:{:04X} {}",
+            cs,
+            { it.address & !((cs as u32) << 4) },
+            decode_instruction(&mut it)?
+        ),
+        format!(
+            "{:04X}:{:04X} {}",
+            cs,
+            { it.address & !((cs as u32) << 4) },
+            decode_instruction(&mut it)?
+        ),
+        format!(
+            "{:04X}:{:04X} {}",
+            cs,
+            { it.address & !((cs as u32) << 4) },
+            decode_instruction(&mut it)?
+        ),
+        format!(
+            "{:04X}:{:04X} {}",
+            cs,
+            { it.address & !((cs as u32) << 4) },
+            decode_instruction(&mut it)?
+        ),
+    ];
+
+    Ok(DebuggerState {
+        state: cpu.state.clone(),
+        source,
+    })
+}
+
 fn run_emulator(
     bios: ReadOnlyMemory,
     receiver: Receiver<EmulatorCommand>,
@@ -182,9 +252,19 @@ fn run_emulator(
 
     let mut running = false;
 
-    let _ = state_sender
-        .send(DebuggerState { state: cpu.state })
-        .unwrap();
+    let send_debugger_state = |cpu: &CPU<_, _>| {
+        match build_debugger_state(&cpu) {
+            Ok(debug_state) => {
+                let _ = state_sender.send(debug_state).unwrap();
+            }
+
+            Err(_) => {
+                return;
+            }
+        };
+    };
+
+    send_debugger_state(&cpu);
 
     loop {
         pit.borrow_mut().tick();
@@ -211,9 +291,7 @@ fn run_emulator(
             }
         }
 
-        let _ = state_sender
-            .send(DebuggerState { state: cpu.state })
-            .unwrap();
+        send_debugger_state(&cpu);
     }
 }
 

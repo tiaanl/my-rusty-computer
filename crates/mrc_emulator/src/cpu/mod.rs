@@ -331,6 +331,10 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
 
         Ok(())
     }
+
+    pub fn read_from_bus(&self, address: Address) -> Result<u8> {
+        self.bus.read(address)
+    }
 }
 
 /// The decoder requires an iterator to fetch bytes.

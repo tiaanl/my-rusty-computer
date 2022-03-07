@@ -15,12 +15,20 @@ pub enum EmulatorCommand {
 
 pub struct DebuggerState {
     pub state: State,
+    pub source: [String; 5],
 }
 
 impl Default for DebuggerState {
     fn default() -> Self {
         Self {
             state: Default::default(),
+            source: [
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+            ],
         }
     }
 }
@@ -154,6 +162,10 @@ impl Debugger {
             let state = &self.state.state;
             egui::CentralPanel::default().show(ctx, |ui| {
                 Self::registers(ui, state);
+
+                for line in &self.state.source {
+                    egui::Label::new(line).ui(ui);
+                }
 
                 if egui::Button::new("Run").ui(ui).clicked() {
                     Self::send_command(&self.command_sender, EmulatorCommand::Run);
