@@ -1,10 +1,11 @@
 use crate::cpu::State;
-use egui::Widget;
+use egui::{Button, Widget, WidgetText};
 use egui_glium;
 use egui_glium::egui_winit::winit::event::WindowEvent;
 use glium::{Display, Frame};
 use mrc_instruction::{Register, Segment};
 use std::sync::mpsc::{SendError, Sender};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub enum EmulatorCommand {
@@ -13,6 +14,7 @@ pub enum EmulatorCommand {
     Step,
 }
 
+#[derive(Clone)]
 pub struct DebuggerState {
     pub state: State,
     pub source: [String; 5],
@@ -35,119 +37,107 @@ impl Default for DebuggerState {
 
 pub struct Debugger {
     egui: egui_glium::EguiGlium,
+    debugger_state: Arc<Mutex<DebuggerState>>,
     command_sender: Sender<EmulatorCommand>,
-    state: DebuggerState,
+}
+
+fn label(ui: &mut egui::Ui, label: String, value: String) {
+    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+        ui.heading(value);
+        ui.label(label);
+    });
 }
 
 impl Debugger {
-    pub fn new(display: &glium::Display, command_sender: Sender<EmulatorCommand>) -> Self {
+    pub fn new(
+        display: &glium::Display,
+        debugger_state: Arc<Mutex<DebuggerState>>,
+        command_sender: Sender<EmulatorCommand>,
+    ) -> Self {
         Self {
             egui: egui_glium::EguiGlium::new(display),
+            debugger_state,
             command_sender,
-            state: DebuggerState::default(),
         }
     }
 
     fn registers(ui: &mut egui::Ui, state: &State) {
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                egui::Label::new("AX").ui(ui);
-                egui::Label::new(format!(
-                    "{:#06X}",
-                    state.get_word_register_value(Register::AlAx)
-                ))
-                .ui(ui);
-            });
+        ui.columns(8, |ui| {
+            label(
+                &mut ui[0],
+                "AX".into(),
+                format!("{:04X}", state.get_word_register_value(Register::AlAx)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("BX").ui(ui);
-                egui::Label::new(format!(
-                    "{:#06X}",
-                    state.get_word_register_value(Register::BlBx)
-                ))
-                .ui(ui);
-            });
+            label(
+                &mut ui[1],
+                "BX".into(),
+                format!("{:04X}", state.get_word_register_value(Register::BlBx)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("CX").ui(ui);
-                egui::Label::new(format!(
-                    "{:#06X}",
-                    state.get_word_register_value(Register::ClCx)
-                ))
-                .ui(ui);
-            });
+            label(
+                &mut ui[2],
+                "CX".into(),
+                format!("{:04X}", state.get_word_register_value(Register::ClCx)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("DX").ui(ui);
-                egui::Label::new(format!(
-                    "{:#06X}",
-                    state.get_word_register_value(Register::DlDx)
-                ))
-                .ui(ui);
-            });
+            label(
+                &mut ui[3],
+                "DX".into(),
+                format!("{:04X}", state.get_word_register_value(Register::DlDx)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("SP").ui(ui);
-                egui::Label::new(format!(
-                    "{:#06X}",
-                    state.get_word_register_value(Register::AhSp)
-                ))
-                .ui(ui);
-            });
+            label(
+                &mut ui[4],
+                "SP".into(),
+                format!("{:04X}", state.get_word_register_value(Register::AhSp)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("BP").ui(ui);
-                egui::Label::new(format!(
-                    "{:#06X}",
-                    state.get_word_register_value(Register::ChBp)
-                ))
-                .ui(ui);
-            });
+            label(
+                &mut ui[5],
+                "BP".into(),
+                format!("{:04X}", state.get_word_register_value(Register::ChBp)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("SI").ui(ui);
-                egui::Label::new(format!(
-                    "{:#06X}",
-                    state.get_word_register_value(Register::DhSi)
-                ))
-                .ui(ui);
-            });
+            label(
+                &mut ui[6],
+                "SI".into(),
+                format!("{:04X}", state.get_word_register_value(Register::DhSi)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("DI").ui(ui);
-                egui::Label::new(format!(
-                    "{:#06X}",
-                    state.get_word_register_value(Register::BhDi)
-                ))
-                .ui(ui);
-            });
+            label(
+                &mut ui[7],
+                "DI".into(),
+                format!("{:04X}", state.get_word_register_value(Register::BhDi)),
+            );
         });
 
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                egui::Label::new("ES").ui(ui);
-                egui::Label::new(format!("{:#06X}", state.get_segment_value(Segment::ES))).ui(ui);
-            });
+        ui.columns(8, |ui| {
+            label(
+                &mut ui[0],
+                "ES".into(),
+                format!("{:04X}", state.get_segment_value(Segment::ES)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("CS").ui(ui);
-                egui::Label::new(format!("{:#06X}", state.get_segment_value(Segment::CS))).ui(ui);
-            });
+            label(
+                &mut ui[1],
+                "CS".into(),
+                format!("{:04X}", state.get_segment_value(Segment::CS)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("SS").ui(ui);
-                egui::Label::new(format!("{:#06X}", state.get_segment_value(Segment::SS))).ui(ui);
-            });
+            label(
+                &mut ui[2],
+                "SS".into(),
+                format!("{:04X}", state.get_segment_value(Segment::SS)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("DS").ui(ui);
-                egui::Label::new(format!("{:#06X}", state.get_segment_value(Segment::DS))).ui(ui);
-            });
+            label(
+                &mut ui[3],
+                "DS".into(),
+                format!("{:04X}", state.get_segment_value(Segment::DS)),
+            );
 
-            ui.vertical(|ui| {
-                egui::Label::new("IP").ui(ui);
-                egui::Label::new(format!("{:#06X}", state.ip)).ui(ui);
-            });
+            label(&mut ui[4], "IP".into(), format!("{:04X}", state.ip));
         });
     }
 
@@ -159,27 +149,47 @@ impl Debugger {
 
     pub fn needs_redraw(&mut self, display: &glium::Display) -> bool {
         self.egui.run(&display, |ctx| {
-            let state = &self.state.state;
+            let debugger_state = { self.debugger_state.lock().unwrap().clone() };
+
+            let state = &debugger_state.state;
+
             egui::CentralPanel::default().show(ctx, |ui| {
                 Self::registers(ui, state);
 
-                for line in &self.state.source {
-                    egui::Label::new(line).ui(ui);
+                ui.add_space(10.0);
+
+                for line in &debugger_state.source {
+                    ui.monospace(line);
                 }
 
-                if egui::Button::new("Run").ui(ui).clicked() {
-                    Self::send_command(&self.command_sender, EmulatorCommand::Run);
-                }
+                ui.add_space(10.0);
 
-                if egui::Button::new("Stop").ui(ui).clicked() {
-                    Self::send_command(&self.command_sender, EmulatorCommand::Stop);
-                }
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_sized([100.0, 25.0], Button::new("Run [F5]"))
+                        .clicked()
+                    {
+                        Self::send_command(&self.command_sender, EmulatorCommand::Run);
+                    }
 
-                if egui::Button::new("Step").ui(ui).clicked() {
-                    Self::send_command(&self.command_sender, EmulatorCommand::Step);
-                }
+                    if ui
+                        .add_sized([100.0, 25.0], Button::new("Stop [F12]"))
+                        .clicked()
+                    {
+                        Self::send_command(&self.command_sender, EmulatorCommand::Stop);
+                    }
+
+                    if ui
+                        .add_sized([100.0, 25.0], Button::new("Step [F10]"))
+                        .clicked()
+                    {
+                        Self::send_command(&self.command_sender, EmulatorCommand::Step);
+                    }
+                });
             });
-        })
+        });
+
+        true
     }
 
     pub fn draw(&mut self, display: &Display, frame: &mut Frame) {
@@ -188,9 +198,5 @@ impl Debugger {
 
     pub fn on_event(&mut self, event: &WindowEvent) {
         self.egui.on_event(event);
-    }
-
-    pub fn set_state(&mut self, state: DebuggerState) {
-        self.state = state;
     }
 }

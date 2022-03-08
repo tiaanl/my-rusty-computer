@@ -4,23 +4,25 @@ mod interrupts;
 
 use crate::interrupts::InterruptManager;
 use config::Config;
-use mrc_emulator::components::{
-    cga::Cga, dma::DirectMemoryAccessController, keyboard::Keyboard,
-    pic::ProgrammableInterruptController, pit::ProgrammableIntervalTimer8253, ppi::Latch,
-    ppi::ProgrammablePeripheralInterface,
-};
-
 use mrc_decoder::decode_instruction;
-use mrc_emulator::debugger::{Debugger, DebuggerState, EmulatorCommand};
 use mrc_emulator::{
-    components::{ram::RandomAccessMemory, rom::ReadOnlyMemory},
+    components::{
+        cga::Cga, dma::DirectMemoryAccessController, keyboard::Keyboard,
+        pic::ProgrammableInterruptController, pit::ProgrammableIntervalTimer8253, ppi::Latch,
+        ppi::ProgrammablePeripheralInterface, ram::RandomAccessMemory, rom::ReadOnlyMemory,
+    },
     cpu::{ExecuteResult, CPU},
+    debugger::{Debugger, DebuggerState, EmulatorCommand},
     error::Error,
     segment_and_offset, Address, Bus, Port,
 };
-use mrc_instruction::{RelativeToAddress, Segment};
-use std::sync::mpsc::{Receiver, Sender};
-use std::{cell::RefCell, io::Read, rc::Rc};
+use mrc_instruction::Segment;
+use std::{
+    cell::RefCell,
+    io::Read,
+    rc::Rc,
+    sync::{mpsc::Receiver, Arc, Mutex},
+};
 use structopt::StructOpt;
 
 const MEMORY_MAX: usize = 0x100000;
@@ -225,8 +227,8 @@ fn build_debugger_state<D: Bus<Address>, I: Bus<Port>>(
 
 fn run_emulator(
     bios: ReadOnlyMemory,
+    debugger_state: Arc<Mutex<DebuggerState>>,
     receiver: Receiver<EmulatorCommand>,
-    state_sender: Sender<DebuggerState>,
 ) {
     let memory = Memory::new(bios);
 
@@ -252,19 +254,15 @@ fn run_emulator(
 
     let mut running = false;
 
-    let send_debugger_state = |cpu: &CPU<_, _>| {
-        match build_debugger_state(&cpu) {
-            Ok(debug_state) => {
-                let _ = state_sender.send(debug_state).unwrap();
-            }
+    match build_debugger_state(&cpu) {
+        Ok(ds) => {
+            *debugger_state.lock().unwrap() = ds;
+        }
 
-            Err(_) => {
-                return;
-            }
-        };
+        Err(_) => {
+            return;
+        }
     };
-
-    send_debugger_state(&cpu);
 
     loop {
         pit.borrow_mut().tick();
@@ -291,7 +289,15 @@ fn run_emulator(
             }
         }
 
-        send_debugger_state(&cpu);
+        match build_debugger_state(&cpu) {
+            Ok(ds) => {
+                *debugger_state.lock().unwrap() = ds;
+            }
+
+            Err(_) => {
+                return;
+            }
+        };
     }
 }
 
@@ -322,12 +328,13 @@ fn main() {
         .expect("Could not create display.");
 
     let (command_sender, command_receiver) = std::sync::mpsc::channel();
-    let (state_sender, state_receiver) = std::sync::mpsc::channel();
 
-    let mut debugger = Debugger::new(&display, command_sender);
+    let debugger_state = Arc::new(Mutex::new(DebuggerState::default()));
+
+    let mut debugger = Debugger::new(&display, debugger_state.clone(), command_sender);
 
     std::thread::spawn(move || {
-        run_emulator(bios, command_receiver, state_sender);
+        run_emulator(bios, debugger_state, command_receiver);
     });
 
     event_loop.run(move |event, _, control_flow| {
@@ -366,11 +373,7 @@ fn main() {
                 display.gl_window().window().request_redraw(); // TODO: ask egui if the events warrants a repaint instead
             }
 
-            _ => {
-                if let Ok(incoming_state) = state_receiver.try_recv() {
-                    debugger.set_state(incoming_state);
-                };
-            }
+            _ => {}
         }
     });
 }
