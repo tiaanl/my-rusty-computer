@@ -485,8 +485,8 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             OperandSet::Destination(Operand::Immediate(Immediate::Byte(index))) => {
                 log::info!("Calling interrupt {}", index);
 
-                cpu.push(cpu.state.flags.bits)?;
-                cpu.push(cpu.state.segments.cs)?;
+                cpu.push(cpu.state.flags.bits())?;
+                cpu.push(cpu.state.get_segment_value(Segment::CS))?;
                 cpu.push(cpu.state.ip)?;
 
                 cpu.state.flags.set(Flags::INTERRUPT, false);
@@ -507,7 +507,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 }
 
                 cpu.state.ip = new_ip;
-                cpu.state.segments.cs = new_cs;
+                cpu.state.set_segment_value(Segment::CS, new_cs);
             }
 
             _ => illegal_operands(instruction),
@@ -516,8 +516,9 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::IRET => match instruction.operands {
             OperandSet::None => {
                 cpu.state.ip = cpu.pop()?;
-                cpu.state.segments.cs = cpu.pop()?;
-                cpu.state.flags.bits = cpu.pop()?;
+                let cs = cpu.pop()?;
+                cpu.state.set_segment_value(Segment::CS, cs);
+                cpu.state.flags = Flags::from_bits(cpu.pop()?).unwrap();
             }
 
             _ => illegal_operands(instruction),
@@ -934,7 +935,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::PUSHF => {
-            cpu.push(cpu.state.flags.bits)?;
+            cpu.push(cpu.state.flags.bits())?;
         }
 
         Operation::POP => match &instruction.operands {
@@ -946,7 +947,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::POPF => {
-            cpu.state.flags.bits = cpu.pop()?;
+            cpu.state.flags = Flags::from_bits_truncate(cpu.pop()?);
         }
 
         Operation::RET => {

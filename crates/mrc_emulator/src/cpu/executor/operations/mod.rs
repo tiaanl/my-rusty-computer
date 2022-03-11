@@ -91,7 +91,7 @@ impl StateExt for State {
         // EFLAGS(SF:ZF:0:AF:0:PF:1:CF) = AH;
 
         let ah = self.get_byte_register_value(Register::AhSp);
-        let mut new_flags = Flags::from_bits(u16::from(ah)).unwrap();
+        let mut new_flags = Flags::from_bits_truncate(u16::from(ah));
 
         // Make sure we set/unset the fixed values:
         new_flags.insert(Flags::RESERVED_1);
@@ -109,7 +109,7 @@ impl StateExt for State {
         ah.insert(Flags::RESERVED_1);
         ah.remove(Flags::RESERVED_3 | Flags::RESERVED_5);
 
-        self.set_byte_register_value(Register::AhSp, ah.bits.to_le_bytes()[0]);
+        self.set_byte_register_value(Register::AhSp, ah.bits().to_le_bytes()[0]);
     }
 }
 
