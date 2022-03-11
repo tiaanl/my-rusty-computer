@@ -149,7 +149,7 @@ mod test {
 
     #[test]
     fn test_load_ah_from_flags() {
-        let mut state = State::with_flags(
+        let mut state = State::default().with_flags(
             Flags::SIGN | Flags::ZERO | Flags::AUX_CARRY | Flags::PARITY | Flags::CARRY,
         );
 

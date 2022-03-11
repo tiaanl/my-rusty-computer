@@ -1,9 +1,0 @@
-[package]
-name = "gui_test"
-version = "0.0.1"
-edition = "2021"
-
-[dependencies]
-egui = "0.17"
-egui_glium = "0.17"
-glium = "0.31"

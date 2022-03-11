@@ -88,8 +88,9 @@ fn main() {
         let code = include_bytes!("../assets/main.bin");
 
         let mut data = mrc_emulator::components::ram::RandomAccessMemory::with_capacity(0x100000);
-        for i in 0..code.len() {
-            data.write(i as u32, code[i]).unwrap();
+
+        for (i, &byte) in code.iter().enumerate() {
+            data.write(i as u32, byte).unwrap();
         }
 
         let io = Chipset {
@@ -104,13 +105,13 @@ fn main() {
 
     event_loop.run(move |event, _, control_flow| {
         match event {
-            glutin::event::Event::WindowEvent { event, .. } => match event {
-                glutin::event::WindowEvent::CloseRequested => {
-                    *control_flow = glutin::event_loop::ControlFlow::Exit;
-                    return;
-                }
-                _ => return,
-            },
+            glutin::event::Event::WindowEvent {
+                event: glutin::event::WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = glutin::event_loop::ControlFlow::Exit;
+                return;
+            }
             glutin::event::Event::NewEvents(cause) => match cause {
                 glutin::event::StartCause::ResumeTimeReached { .. } => (),
                 glutin::event::StartCause::Init => (),
@@ -126,7 +127,7 @@ fn main() {
         let mut target = display.draw();
         target.clear_color(0.0, 0.0, 1.0, 1.0);
 
-        let data = { panel.inner.read().unwrap().colors().clone() };
+        let data = { *panel.inner.read().unwrap().colors() };
 
         screen.draw(&mut target, &data);
 

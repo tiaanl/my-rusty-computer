@@ -738,7 +738,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::LODSB | Operation::MOVSB | Operation::STOSB | Operation::SCASB => {
             loop {
                 match instruction.operation {
-                    Operation::LODSB => operations::byte::load(&mut cpu.bus, &mut cpu.state)?,
+                    Operation::LODSB => operations::byte::load(&cpu.bus, &mut cpu.state)?,
                     Operation::MOVSB => operations::byte::mov(&mut cpu.bus, &mut cpu.state)?,
                     Operation::STOSB => operations::byte::store(&mut cpu.bus, &mut cpu.state)?,
                     Operation::SCASB => operations::byte::scan(&mut cpu.bus, &mut cpu.state)?,

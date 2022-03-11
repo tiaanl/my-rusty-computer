@@ -1,5 +1,5 @@
 use crate::cpu::State;
-use egui::{Button, Widget, WidgetText};
+use egui::Button;
 use egui_glium;
 use egui_glium::egui_winit::winit::event::WindowEvent;
 use glium::{Display, Frame};
@@ -14,25 +14,10 @@ pub enum EmulatorCommand {
     Step,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct DebuggerState {
     pub state: State,
     pub source: [String; 5],
-}
-
-impl Default for DebuggerState {
-    fn default() -> Self {
-        Self {
-            state: Default::default(),
-            source: [
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-                String::new(),
-            ],
-        }
-    }
 }
 
 pub struct Debugger {
@@ -148,7 +133,7 @@ impl Debugger {
     }
 
     pub fn needs_redraw(&mut self, display: &glium::Display) -> bool {
-        self.egui.run(&display, |ctx| {
+        self.egui.run(display, |ctx| {
             let debugger_state = { self.debugger_state.lock().unwrap().clone() };
 
             let state = &debugger_state.state;

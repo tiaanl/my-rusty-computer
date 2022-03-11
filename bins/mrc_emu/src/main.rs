@@ -220,7 +220,7 @@ fn build_debugger_state<D: Bus<Address>, I: Bus<Port>>(
     ];
 
     Ok(DebuggerState {
-        state: cpu.state.clone(),
+        state: cpu.state,
         source,
     })
 }

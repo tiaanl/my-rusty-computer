@@ -104,14 +104,12 @@ pub struct State {
 }
 
 impl State {
-    #[cfg(test)]
-    fn with_flags(flags: Flags) -> Self {
-        Self {
-            flags,
-            ..Default::default()
-        }
+    fn with_flags(mut self, flags: Flags) -> Self {
+        self.flags = flags;
+        self
     }
 
+    #[inline(always)]
     pub fn get_byte_register_value(&self, register: Register) -> u8 {
         use Register::*;
 
@@ -129,6 +127,7 @@ impl State {
         }
     }
 
+    #[inline(always)]
     pub fn get_word_register_value(&self, register: Register) -> u16 {
         use Register::*;
 
@@ -146,6 +145,7 @@ impl State {
         }
     }
 
+    #[inline(always)]
     pub fn set_byte_register_value(&mut self, register: Register, value: u8) {
         use Register::*;
 
@@ -161,6 +161,7 @@ impl State {
         };
     }
 
+    #[inline(always)]
     pub fn set_word_register_value(&mut self, register: Register, value: u16) {
         use Register::*;
 
@@ -176,6 +177,7 @@ impl State {
         }
     }
 
+    #[inline(always)]
     pub fn get_segment_value(&self, segment: Segment) -> u16 {
         use Segment::*;
 
@@ -187,6 +189,7 @@ impl State {
         }
     }
 
+    #[inline(always)]
     pub fn set_segment_value(&mut self, segment: Segment, value: u16) {
         use Segment::*;
 
@@ -205,8 +208,7 @@ impl Default for State {
             registers: Registers::default(),
             segments: Segments::default(),
             ip: 0,
-            // By default when the CPU starts, we enable interrupts and the 2nd flag is always set.
-            flags: Flags::RESERVED_1 | Flags::INTERRUPT,
+            flags: Flags::empty(),
         }
     }
 }
@@ -270,7 +272,8 @@ pub struct CPU<D: Bus<Address>, I: Bus<Port>> {
 impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
     pub fn new(bus: D, io_controller: I) -> Self {
         Self {
-            state: Default::default(),
+            // By default when the CPU starts, we enable interrupts and the 2nd flag is always set.
+            state: State::default().with_flags(Flags::RESERVED_1 | Flags::INTERRUPT),
             io_controller,
             bus,
         }
