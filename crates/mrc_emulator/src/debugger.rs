@@ -17,7 +17,7 @@ pub enum EmulatorCommand {
 #[derive(Clone, Default)]
 pub struct DebuggerState {
     pub state: State,
-    pub source: [String; 5],
+    pub source: Vec<String>,
 }
 
 pub struct Debugger {

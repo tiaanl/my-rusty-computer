@@ -177,52 +177,32 @@ impl<'cpu, D: Bus<Address>, I: Bus<Port>> Iterator for CPUIt<'cpu, D, I> {
     }
 }
 
-fn build_debugger_state<D: Bus<Address>, I: Bus<Port>>(
+fn update_debugger_state<D: Bus<Address>, I: Bus<Port>>(
+    debugger_state: &mut DebuggerState,
     cpu: &CPU<D, I>,
-) -> mrc_decoder::Result<DebuggerState> {
+) {
+    debugger_state.state = cpu.state;
+
     let cs = cpu.state.get_segment_value(Segment::CS);
     let mut it = CPUIt {
         cpu,
         address: segment_and_offset(cs, cpu.state.ip),
     };
 
-    let source = [
-        format!(
-            "{:04X}:{:04X} {}",
-            cs,
-            { it.address & !((cs as u32) << 4) },
-            decode_instruction(&mut it)?
-        ),
-        format!(
-            "{:04X}:{:04X} {}",
-            cs,
-            { it.address & !((cs as u32) << 4) },
-            decode_instruction(&mut it)?
-        ),
-        format!(
-            "{:04X}:{:04X} {}",
-            cs,
-            { it.address & !((cs as u32) << 4) },
-            decode_instruction(&mut it)?
-        ),
-        format!(
-            "{:04X}:{:04X} {}",
-            cs,
-            { it.address & !((cs as u32) << 4) },
-            decode_instruction(&mut it)?
-        ),
-        format!(
-            "{:04X}:{:04X} {}",
-            cs,
-            { it.address & !((cs as u32) << 4) },
-            decode_instruction(&mut it)?
-        ),
-    ];
+    debugger_state.source.resize(10, "".to_string());
 
-    Ok(DebuggerState {
-        state: cpu.state,
-        source,
-    })
+    for line in debugger_state.source.iter_mut() {
+        *line = if let Ok(instruction) = decode_instruction(&mut it) {
+            format!(
+                "{:04X}:{:04X} {}",
+                cs,
+                { it.address & !((cs as u32) << 4) },
+                instruction,
+            )
+        } else {
+            format!("ERROR")
+        }
+    }
 }
 
 fn run_emulator(
@@ -254,15 +234,10 @@ fn run_emulator(
 
     let mut running = false;
 
-    match build_debugger_state(&cpu) {
-        Ok(ds) => {
-            *debugger_state.lock().unwrap() = ds;
-        }
-
-        Err(_) => {
-            return;
-        }
-    };
+    {
+        let mut debugger_state = debugger_state.lock().unwrap();
+        update_debugger_state(&mut debugger_state, &cpu);
+    }
 
     loop {
         pit.borrow_mut().tick();
@@ -289,15 +264,10 @@ fn run_emulator(
             }
         }
 
-        match build_debugger_state(&cpu) {
-            Ok(ds) => {
-                *debugger_state.lock().unwrap() = ds;
-            }
-
-            Err(_) => {
-                return;
-            }
-        };
+        {
+            let mut debugger_state = debugger_state.lock().unwrap();
+            update_debugger_state(&mut debugger_state, &cpu);
+        }
     }
 }
 
