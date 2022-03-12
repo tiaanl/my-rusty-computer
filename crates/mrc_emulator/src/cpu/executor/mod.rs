@@ -480,21 +480,21 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 cpu.state.flags.set(Flags::TRAP, false);
 
                 // The very top of memory.
-                let idt = segment_and_offset(0x0000, 0x0000);
-                let addr = idt + 4u32 * index as u32;
+                let interrupt_descriptor_table = segment_and_offset(0x0000, 0x0000);
+                let addr = interrupt_descriptor_table + 4u32 * index as Address;
 
-                let new_ip = word::bus_read(&cpu.bus, addr)?;
-                let new_cs = word::bus_read(&cpu.bus, addr + 2)?;
+                let ip = word::bus_read(&cpu.bus, addr)?;
+                let cs = word::bus_read(&cpu.bus, addr + 2)?;
 
                 // If the far call points to 0000:0000 again, this is probably an invalid interrupt
                 // vector.
-                if new_ip == 0 && new_cs == 0 {
+                if ip == 0 && cs == 0 {
                     // TODO: Probably not the best error to return here.
                     return Err(Error::IllegalInstruction);
                 }
 
-                cpu.state.ip = new_ip;
-                cpu.state.set_segment(CS, new_cs);
+                cpu.state.set_segment(CS, cs);
+                cpu.state.ip = ip;
             }
 
             _ => illegal_operands(instruction),
