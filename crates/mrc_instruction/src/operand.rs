@@ -1,4 +1,4 @@
-use crate::{Segment, SizedRegister};
+use crate::{Segment, SizedRegisterEncoding};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -97,7 +97,7 @@ impl Display for Immediate {
 pub enum Operand {
     Direct(Segment, u16, OperandSize),
     Indirect(Segment, AddressingMode, Displacement, OperandSize),
-    Register(SizedRegister),
+    Register(SizedRegisterEncoding),
     Segment(Segment),
     Immediate(Immediate),
 }
@@ -107,7 +107,7 @@ impl Operand {
         match self {
             Operand::Direct(_, _, operand_size)
             | Operand::Indirect(_, _, _, operand_size)
-            | Operand::Register(SizedRegister(_, operand_size)) => *operand_size,
+            | Operand::Register(SizedRegisterEncoding(_, operand_size)) => *operand_size,
             Operand::Segment(_) => OperandSize::Word,
             Operand::Immediate(immediate) => match immediate {
                 Immediate::Byte(_) => OperandSize::Byte,
@@ -117,8 +117,8 @@ impl Operand {
     }
 }
 
-impl From<SizedRegister> for Operand {
-    fn from(sized_register: SizedRegister) -> Self {
+impl From<SizedRegisterEncoding> for Operand {
+    fn from(sized_register: SizedRegisterEncoding) -> Self {
         Self::Register(sized_register)
     }
 }
@@ -166,8 +166,8 @@ impl Display for Operand {
                 write!(f, "[{}{}]", encoding, displacement)?;
             }
 
-            Operand::Register(SizedRegister(register, operand_size)) => {
-                write!(f, "{}", SizedRegister(*register, *operand_size))?
+            Operand::Register(SizedRegisterEncoding(register, operand_size)) => {
+                write!(f, "{}", SizedRegisterEncoding(*register, *operand_size))?
             }
 
             Operand::Segment(encoding) => write!(f, "{}", encoding)?,

@@ -1,7 +1,7 @@
 use mrc_decoder::decode_instruction;
 use mrc_instruction::{
     Address, AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet,
-    OperandSize, Operation, Register, Segment, SizedRegister,
+    OperandSize, Operation, RegisterEncoding, Segment, SizedRegisterEncoding,
 };
 use std::fs::File;
 use std::io::{Read, Write};
@@ -189,16 +189,19 @@ fn iterate_operand(f: impl Fn(Operand)) {
 
     for operand_size in [OperandSize::Byte, OperandSize::Word] {
         for register in [
-            Register::AlAx,
-            Register::ClCx,
-            Register::DlDx,
-            Register::BlBx,
-            Register::AhSp,
-            Register::ChBp,
-            Register::DhSi,
-            Register::BhDi,
+            RegisterEncoding::AlAx,
+            RegisterEncoding::ClCx,
+            RegisterEncoding::DlDx,
+            RegisterEncoding::BlBx,
+            RegisterEncoding::AhSp,
+            RegisterEncoding::ChBp,
+            RegisterEncoding::DhSi,
+            RegisterEncoding::BhDi,
         ] {
-            f(Operand::Register(SizedRegister(register, operand_size)));
+            f(Operand::Register(SizedRegisterEncoding(
+                register,
+                operand_size,
+            )));
         }
     }
 

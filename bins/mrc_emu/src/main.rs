@@ -24,6 +24,7 @@ use std::{
     sync::{mpsc::Receiver, Arc, Mutex},
 };
 use structopt::StructOpt;
+use Segment::CS;
 
 const MEMORY_MAX: usize = 0x100000;
 const BIOS_SIZE: usize = 0x2000;
@@ -183,7 +184,7 @@ fn update_debugger_state<D: Bus<Address>, I: Bus<Port>>(
 ) {
     debugger_state.state = cpu.state;
 
-    let cs = cpu.state.get_segment_value(Segment::CS);
+    let cs = cpu.state.segment(CS);
     let mut it = CPUIt {
         cpu,
         address: segment_and_offset(cs, cpu.state.ip),
@@ -200,7 +201,7 @@ fn update_debugger_state<D: Bus<Address>, I: Bus<Port>>(
                 instruction,
             )
         } else {
-            format!("ERROR")
+            "ERROR".to_string()
         }
     }
 }

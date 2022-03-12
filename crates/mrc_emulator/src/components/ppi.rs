@@ -1,7 +1,7 @@
 //! Emulation of the Intel 8255 Programmable Peripheral Interface
 
-use crate::{Bus, Port};
 use crate::error::{Error, Result};
+use crate::{Bus, Port};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Mode {
@@ -95,23 +95,21 @@ impl Bus<Port> for Latch {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    #[test]
-    fn set_output_values() {
-        let mut ppi = ProgrammablePeripheralInterface::default();
-
-        // Set all ports to output mode.
-        ppi.write(0x03, 0x80).unwrap();
-
-        // Write values to all ports.
-        ppi.write(0x00, 0x0A).unwrap();
-        ppi.write(0x01, 0x0B).unwrap();
-        ppi.write(0x02, 0x0C).unwrap();
-
-        // Check if the values are persisted.
-        assert_eq!(ppi.read(0x00).unwrap(), 0x0A);
-        assert_eq!(ppi.read(0x01).unwrap(), 0x0B);
-        assert_eq!(ppi.read(0x02).unwrap(), 0x0C);
-    }
+    // #[test]
+    // fn set_output_values() {
+    //     let mut ppi = ProgrammablePeripheralInterface::default();
+    //
+    //     // Set all ports to output mode.
+    //     ppi.write(0x03, 0x80).unwrap();
+    //
+    //     // Write values to all ports.
+    //     ppi.write(0x00, 0x0A).unwrap();
+    //     ppi.write(0x01, 0x0B).unwrap();
+    //     ppi.write(0x02, 0x0C).unwrap();
+    //
+    //     // Check if the values are persisted.
+    //     assert_eq!(ppi.read(0x00).unwrap(), 0x0A);
+    //     assert_eq!(ppi.read(0x01).unwrap(), 0x0B);
+    //     assert_eq!(ppi.read(0x02).unwrap(), 0x0C);
+    // }
 }

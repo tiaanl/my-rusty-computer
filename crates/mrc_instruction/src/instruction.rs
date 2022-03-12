@@ -42,8 +42,8 @@ pub enum Repeat {
 ///     Operation::MOV,
 ///     OperandSet::DestinationAndSource(
 ///         Operand::Register(
-///             SizedRegister(
-///                 Register::AlAx,
+///             SizedRegisterEncoding(
+///                 RegisterEncoding::AlAx,
 ///                 OperandSize::Word,
 ///             )
 ///         ),

@@ -1,8 +1,9 @@
 use mrc_dos::mz;
 use mrc_emulator::components::ram::RandomAccessMemory;
 use mrc_emulator::cpu::ExecuteResult;
+use mrc_emulator::cpu::WordRegister::SP;
 use mrc_emulator::{cpu::CPU, segment_and_offset, Address, Bus, Port};
-use mrc_instruction::{Register, Segment};
+use mrc_instruction::Segment;
 use std::io::{Read, Seek};
 use structopt::StructOpt;
 
@@ -89,9 +90,8 @@ fn main() {
     let mut cpu = CPU::new(memory, io);
     cpu.jump_to(0x1000 + header.initial_cs, header.initial_ip);
     cpu.state
-        .set_segment_value(Segment::SS, 0x1000 + header.initial_ss);
-    cpu.state
-        .set_word_register_value(Register::AhSp, header.initial_sp);
+        .set_segment(Segment::SS, 0x1000 + header.initial_ss);
+    cpu.state.set_register(SP, header.initial_sp);
 
     let t = std::thread::spawn(
         move || {

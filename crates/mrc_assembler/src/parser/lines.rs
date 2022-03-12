@@ -8,7 +8,7 @@ mod parse {
             ParseResult, Span,
         },
     };
-    use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegister};
+    use mrc_instruction::{AddressingMode, OperandSize, Operation, Segment, SizedRegisterEncoding};
     use nom::{
         branch::alt,
         bytes::{complete::tag_no_case, complete::take},
@@ -46,7 +46,7 @@ mod parse {
 
     fn register_operand(input: Span) -> ParseResult<lines::Operand> {
         map_res(identifier, |res| {
-            match SizedRegister::from_str(res.fragment()) {
+            match SizedRegisterEncoding::from_str(res.fragment()) {
                 Ok(sized_register) => Ok(lines::Operand::Register(sized_register)),
                 Err(_) => Err(nom::Err::Error(nom::error::Error::from_error_kind(
                     input,
@@ -233,7 +233,7 @@ mod parse {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use mrc_instruction::{AddressingMode, OperandSize, Register};
+        use mrc_instruction::{AddressingMode, OperandSize, RegisterEncoding};
 
         #[test]
         fn parse_value_or_label() {
@@ -310,7 +310,10 @@ mod parse {
             // Register
             assert_eq!(
                 operand(Span::new("ax")).unwrap().1,
-                lines::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word))
+                lines::Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                ))
             );
 
             // Segment
@@ -347,15 +350,18 @@ mod parse {
             assert_eq!(
                 operand_set(Span::new("ax, [bx+si]")).unwrap().1,
                 lines::OperandSet::DestinationAndSource(
-                    lines::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                    lines::Operand::Register(SizedRegisterEncoding(
+                        RegisterEncoding::AlAx,
+                        OperandSize::Word
+                    )),
                     lines::Operand::Indirect(AddressingMode::BxSi, None, None),
                 )
             );
 
             assert_eq!(
                 operand_set(Span::new("ax")).unwrap().1,
-                lines::OperandSet::Destination(lines::Operand::Register(SizedRegister(
-                    Register::AlAx,
+                lines::OperandSet::Destination(lines::Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
                     OperandSize::Word
                 )))
             );
@@ -373,8 +379,14 @@ mod parse {
                 lines::Instruction::new(
                     Operation::MOV,
                     lines::OperandSet::DestinationAndSource(
-                        lines::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                        lines::Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word))
+                        lines::Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::AlAx,
+                            OperandSize::Word
+                        )),
+                        lines::Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::BlBx,
+                            OperandSize::Word
+                        ))
                     )
                 )
             );
@@ -428,8 +440,14 @@ mod parse {
                 lines::Line::Instruction(lines::Instruction::new(
                     Operation::MOV,
                     lines::OperandSet::DestinationAndSource(
-                        lines::Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                        lines::Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
+                        lines::Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::AlAx,
+                            OperandSize::Word
+                        )),
+                        lines::Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::BlBx,
+                            OperandSize::Word
+                        )),
                     )
                 ))
             );

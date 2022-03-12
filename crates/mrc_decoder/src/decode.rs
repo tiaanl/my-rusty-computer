@@ -6,8 +6,8 @@ use crate::errors::Result;
 use crate::traits::{OpCodeExt, ReadExt};
 use crate::{DecodeError, TryFromEncoding};
 use mrc_instruction::{
-    Address, Immediate, Instruction, Operand, OperandSet, OperandSize, Operation, Register, Repeat,
-    Segment, SizedRegister,
+    Address, Immediate, Instruction, Operand, OperandSet, OperandSize, Operation, RegisterEncoding,
+    Repeat, Segment, SizedRegisterEncoding,
 };
 
 fn group1_operation(op_code: u8) -> Operation {
@@ -136,32 +136,32 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0x40..=0x47 => Ok(Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::try_from_encoding(op_code & 0b111)?,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::try_from_encoding(op_code & 0b111)?,
                 OperandSize::Word,
             ))),
         )),
 
         0x48..=0x4F => Ok(Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::try_from_encoding(op_code & 0b111)?,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::try_from_encoding(op_code & 0b111)?,
                 OperandSize::Word,
             ))),
         )),
 
         0x50..=0x57 => Ok(Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::try_from_encoding(op_code & 0b111)?,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::try_from_encoding(op_code & 0b111)?,
                 OperandSize::Word,
             ))),
         )),
 
         0x58..=0x5F => Ok(Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::try_from_encoding(op_code & 0b111)?,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::try_from_encoding(op_code & 0b111)?,
                 OperandSize::Word,
             ))),
         )),
@@ -306,9 +306,10 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
         0x91..=0x97 => {
             let operand_size = OperandSize::Word;
 
-            let destination = Operand::Register(SizedRegister(Register::AlAx, operand_size));
-            let source = Operand::Register(SizedRegister(
-                Register::try_from_encoding(op_code & 0b111)?,
+            let destination =
+                Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size));
+            let source = Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::try_from_encoding(op_code & 0b111)?,
                 operand_size,
             ));
             Ok(Instruction::new(
@@ -346,7 +347,8 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             let address = it.read_u16()?;
 
-            let reg = Operand::Register(SizedRegister(Register::AlAx, operand_size));
+            let reg =
+                Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size));
             let direct = Operand::Direct(Segment::DS, address, operand_size);
 
             Ok(Instruction::new(
@@ -385,8 +387,11 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             // Special case for reading the [OperandSize] from the 4th bit.
             let operand_size = (op_code >> 3).operand_size();
 
-            let destination =
-                SizedRegister(Register::try_from_encoding(op_code & 0b111)?, operand_size).into();
+            let destination = SizedRegisterEncoding(
+                RegisterEncoding::try_from_encoding(op_code & 0b111)?,
+                operand_size,
+            )
+            .into();
             let source = it.read_immediate(operand_size)?.into();
 
             Ok(Instruction::new(
@@ -460,7 +465,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             // if v = 0 then "count" = 1; if v = 1 then "count" in (CL)
             let source = if (op_code >> 1) & 0b1 == 1 {
-                Operand::Register(SizedRegister(Register::ClCx, operand_size))
+                Operand::Register(SizedRegisterEncoding(RegisterEncoding::ClCx, operand_size))
             } else {
                 Operand::Immediate(Immediate::Byte(1))
             };
@@ -518,7 +523,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             Ok(Instruction::new(
                 Operation::IN,
                 OperandSet::DestinationAndSource(
-                    Operand::Register(SizedRegister(Register::AlAx, operand_size)),
+                    Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size)),
                     it.read_immediate(OperandSize::Byte)?.into(),
                 ),
             ))
@@ -531,7 +536,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
                 Operation::OUT,
                 OperandSet::DestinationAndSource(
                     it.read_immediate(OperandSize::Byte)?.into(),
-                    Operand::Register(SizedRegister(Register::AlAx, operand_size)),
+                    Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size)),
                 ),
             ))
         }
@@ -568,8 +573,11 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             Ok(Instruction::new(
                 Operation::IN,
                 OperandSet::DestinationAndSource(
-                    Operand::Register(SizedRegister(Register::AlAx, operand_size)),
-                    Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                    Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size)),
+                    Operand::Register(SizedRegisterEncoding(
+                        RegisterEncoding::DlDx,
+                        OperandSize::Word,
+                    )),
                 ),
             ))
         }
@@ -580,8 +588,11 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             Ok(Instruction::new(
                 Operation::OUT,
                 OperandSet::DestinationAndSource(
-                    Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
-                    Operand::Register(SizedRegister(Register::AlAx, operand_size)),
+                    Operand::Register(SizedRegisterEncoding(
+                        RegisterEncoding::DlDx,
+                        OperandSize::Word,
+                    )),
+                    Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size)),
                 ),
             ))
         }

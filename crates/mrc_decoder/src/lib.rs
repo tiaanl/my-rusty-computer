@@ -8,23 +8,25 @@ pub use decode::decode_instruction;
 pub use errors::{DecodeError, Result};
 pub use mrrm::{ModRegRM, RegisterOrMemory};
 
-use std::fmt::{Display, Formatter};
 use crate::traits::TryFromEncoding;
-use mrc_instruction::{Address, Displacement, Instruction, OperandSet, Register, RelativeToAddress, Segment};
+use mrc_instruction::{
+    Address, Displacement, Instruction, OperandSet, RegisterEncoding, RelativeToAddress, Segment,
+};
+use std::fmt::{Display, Formatter};
 
-impl TryFromEncoding<Register> for Register {
+impl TryFromEncoding<RegisterEncoding> for RegisterEncoding {
     fn try_from_encoding(encoding: u8) -> Result<Self> {
         debug_assert!(encoding <= 0b111);
 
         match encoding {
-            0b000 => Ok(Register::AlAx),
-            0b001 => Ok(Register::ClCx),
-            0b010 => Ok(Register::DlDx),
-            0b011 => Ok(Register::BlBx),
-            0b100 => Ok(Register::AhSp),
-            0b101 => Ok(Register::ChBp),
-            0b110 => Ok(Register::DhSi),
-            0b111 => Ok(Register::BhDi),
+            0b000 => Ok(RegisterEncoding::AlAx),
+            0b001 => Ok(RegisterEncoding::ClCx),
+            0b010 => Ok(RegisterEncoding::DlDx),
+            0b011 => Ok(RegisterEncoding::BlBx),
+            0b100 => Ok(RegisterEncoding::AhSp),
+            0b101 => Ok(RegisterEncoding::ChBp),
+            0b110 => Ok(RegisterEncoding::DhSi),
+            0b111 => Ok(RegisterEncoding::BhDi),
             _ => Err(DecodeError::InvalidRegisterEncoding(encoding)),
         }
     }
@@ -88,7 +90,9 @@ impl<'a> Display for DecodedInstruction<'a> {
 
         match self.instruction.operands {
             OperandSet::Displacement(displacement) => match displacement {
-                Displacement::None => write!(f, "{}", (self.size as u32).relative_to(&self.address)),
+                Displacement::None => {
+                    write!(f, "{}", (self.size as u32).relative_to(&self.address))
+                }
                 Displacement::Byte(displacement) => {
                     let mut offset = self.address.offset.wrapping_add(self.size as u16);
                     offset = if displacement < 0 {

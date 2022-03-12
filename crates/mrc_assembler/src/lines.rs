@@ -22,7 +22,7 @@
 //! ```
 
 use mrc_instruction::{
-    data, AddressingMode, OperandSize, Operation, Register, Segment, SizedRegister,
+    data, AddressingMode, OperandSize, Operation, RegisterEncoding, Segment, SizedRegisterEncoding,
 };
 use std::fmt::{Display, Formatter};
 
@@ -45,7 +45,7 @@ impl<'s> Display for ValueOrLabel<'s> {
 pub enum Operand<'s> {
     Indirect(AddressingMode, Option<OperandSize>, Option<Segment>),
     Direct(ValueOrLabel<'s>, Option<OperandSize>, Option<Segment>),
-    Register(SizedRegister),
+    Register(SizedRegisterEncoding),
     Segment(Segment),
     Immediate(ValueOrLabel<'s>),
 }
@@ -141,35 +141,53 @@ impl PartialEq<data::InstructionData> for Instruction<'_> {
                     OpCodeReg => false,
                     AL => matches!(
                         destination,
-                        Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte))
+                        Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::AlAx,
+                            OperandSize::Byte
+                        ))
                     ),
                     CL => matches!(
                         destination,
-                        Operand::Register(SizedRegister(Register::ClCx, OperandSize::Byte))
+                        Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::ClCx,
+                            OperandSize::Byte
+                        ))
                     ),
                     DL => matches!(
                         destination,
-                        Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte))
+                        Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::DlDx,
+                            OperandSize::Byte
+                        ))
                     ),
                     AX => matches!(
                         destination,
-                        Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word))
+                        Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::AlAx,
+                            OperandSize::Word
+                        ))
                     ),
                     CX => matches!(
                         destination,
-                        Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word))
+                        Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::ClCx,
+                            OperandSize::Word
+                        ))
                     ),
                     DX => matches!(
                         destination,
-                        Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word))
+                        Operand::Register(SizedRegisterEncoding(
+                            RegisterEncoding::DlDx,
+                            OperandSize::Word
+                        ))
                     ),
                     Reg8 => matches!(
                         destination,
-                        Operand::Register(SizedRegister(_, OperandSize::Byte))
+                        Operand::Register(SizedRegisterEncoding(_, OperandSize::Byte))
                     ),
                     Reg16 => matches!(
                         destination,
-                        Operand::Register(SizedRegister(_, OperandSize::Word))
+                        Operand::Register(SizedRegisterEncoding(_, OperandSize::Word))
                     ),
                     Mem => false,
                     MemFar => false,
@@ -249,7 +267,10 @@ mod tests {
         let ins = Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte,
+                )),
                 Operand::Immediate(ValueOrLabel::Value(0x10)),
             ),
         );

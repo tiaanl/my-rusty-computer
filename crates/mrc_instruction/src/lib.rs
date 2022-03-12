@@ -13,4 +13,4 @@ pub use address::{Address, RelativeToAddress};
 pub use instruction::{Instruction, OperandSet, Repeat};
 pub use operand::{AddressingMode, Displacement, Immediate, Operand, OperandSize};
 pub use operation::Operation;
-pub use register::{Register, Segment, SizedRegister};
+pub use register::{RegisterEncoding, Segment, SizedRegisterEncoding};

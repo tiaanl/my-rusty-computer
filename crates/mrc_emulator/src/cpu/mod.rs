@@ -2,11 +2,12 @@ mod executor;
 mod state;
 
 pub use executor::{execute, ExecuteResult};
-pub use state::{Flags, State};
+pub use state::{ByteRegister, Flags, State, WordRegister};
 
 use crate::{error::Result, Address, Bus, Port};
 use mrc_decoder::{decode_instruction, DecodedInstruction};
 use mrc_instruction::Segment;
+use Segment::CS;
 
 /// An emulated 8086 CPU.  Contains all data and functions to access it.
 pub struct CPU<D: Bus<Address>, I: Bus<Port>> {
@@ -27,14 +28,14 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
     }
 
     pub fn jump_to(&mut self, segment: u16, offset: u16) {
-        self.state.set_segment_value(Segment::CS, segment);
+        self.state.set_segment(CS, segment);
         self.state.ip = offset;
     }
 
     pub fn tick(&mut self) -> Result<ExecuteResult> {
         const PRINT: bool = false;
 
-        let cs = self.state.get_segment_value(Segment::CS);
+        let cs = self.state.segment(CS);
         let ip = self.state.ip;
 
         let instruction = decode_instruction(self)?;
@@ -93,8 +94,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let address =
-            mrc_instruction::Address::new(self.state.get_segment_value(Segment::CS), self.state.ip)
-                .flat();
+            mrc_instruction::Address::new(self.state.segment(CS), self.state.ip).flat();
         if let Ok(byte) = self.bus.read(address) {
             let (new_ip, overflow) = self.state.ip.overflowing_add(1);
             if overflow {

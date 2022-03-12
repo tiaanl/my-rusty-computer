@@ -3,8 +3,8 @@
 use crate::EncodeError::InvalidOperands;
 use mrc_decoder::{ModRegRM, RegisterOrMemory};
 use mrc_instruction::{
-    Displacement, Instruction, Operand, OperandSet, OperandSize, Operation, Register, Segment,
-    SizedRegister,
+    Displacement, Instruction, Operand, OperandSet, OperandSize, Operation, RegisterEncoding,
+    Segment, SizedRegisterEncoding,
 };
 use std::convert::Infallible;
 use std::hash::Hasher;
@@ -20,7 +20,7 @@ pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, EncodeEr
             operation,
             operands:
                 OperandSet::DestinationAndSource(
-                    Operand::Register(SizedRegister(destination, operand_size)),
+                    Operand::Register(SizedRegisterEncoding(destination, operand_size)),
                     source,
                 ),
             ..
@@ -38,7 +38,7 @@ pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, EncodeEr
             operands:
                 OperandSet::DestinationAndSource(
                     destination,
-                    Operand::Register(SizedRegister(source, operand_size)),
+                    Operand::Register(SizedRegisterEncoding(source, operand_size)),
                 ),
             ..
         } if operand_size == destination.operand_size() => {
@@ -56,7 +56,7 @@ pub fn encode_instruction(instruction: &Instruction) -> Result<Vec<u8>, EncodeEr
 
 fn encode_mod_reg_rm(
     op_code: u8,
-    destination: Register,
+    destination: RegisterEncoding,
     source: &Operand,
     operand_size: OperandSize,
 ) -> Result<Vec<u8>, EncodeError> {
@@ -89,7 +89,9 @@ fn encode_mod_reg_rm(
             }
         }
 
-        Operand::Register(SizedRegister(register, _)) => RegisterOrMemory::Register(register),
+        Operand::Register(SizedRegisterEncoding(register, _)) => {
+            RegisterOrMemory::Register(register)
+        }
 
         _ => return Err(InvalidOperands),
     };
@@ -127,15 +129,21 @@ fn encode_immediate_word(bytes: &mut Vec<u8>, value: u16) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use mrc_instruction::{Immediate, Operand, OperandSet, Operation, Register};
+    use mrc_instruction::{Immediate, Operand, OperandSet, Operation, RegisterEncoding};
 
     // #[test]
     fn test_add_reg8_reg_mem_8() {
         let result = encode_instruction(&Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte,
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Byte,
+                )),
             ),
         ))
         .unwrap();
@@ -145,7 +153,10 @@ mod test {
         let result = encode_instruction(&Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte,
+                )),
                 Operand::Direct(Segment::DS, 0x0010, OperandSize::Byte),
             ),
         ))

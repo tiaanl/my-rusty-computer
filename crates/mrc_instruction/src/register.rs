@@ -1,7 +1,7 @@
 use crate::OperandSize;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Register {
+pub enum RegisterEncoding {
     AlAx,
     ClCx,
     DlDx,
@@ -13,11 +13,11 @@ pub enum Register {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SizedRegister(pub Register, pub OperandSize);
+pub struct SizedRegisterEncoding(pub RegisterEncoding, pub OperandSize);
 
-impl std::fmt::Display for SizedRegister {
+impl std::fmt::Display for SizedRegisterEncoding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use Register::*;
+        use RegisterEncoding::*;
 
         match self.1 {
             OperandSize::Byte => match self.0 {
@@ -45,12 +45,12 @@ impl std::fmt::Display for SizedRegister {
     }
 }
 
-impl std::str::FromStr for SizedRegister {
+impl std::str::FromStr for SizedRegisterEncoding {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use OperandSize::*;
-        use Register::*;
+        use RegisterEncoding::*;
 
         match s.to_lowercase().as_str() {
             "al" => Ok(Self(AlAx, Byte)),

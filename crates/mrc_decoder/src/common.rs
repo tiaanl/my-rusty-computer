@@ -1,9 +1,10 @@
 use crate::errors::Result;
 use crate::traits::{OpCodeExt, ReadExt};
-use mrc_instruction::{
-    Instruction, Operand, OperandSet, OperandSize, Operation, Register, Segment, SizedRegister,
-};
 use crate::TryFromEncoding;
+use mrc_instruction::{
+    Instruction, Operand, OperandSet, OperandSize, Operation, RegisterEncoding, Segment,
+    SizedRegisterEncoding,
+};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub(crate) enum Direction {
@@ -38,7 +39,7 @@ pub(crate) fn register_or_memory_and_register(
 
     let (mrrm, _) = it.read_mrrm()?;
 
-    let reg = Operand::Register(SizedRegister(mrrm.register, operand_size));
+    let reg = Operand::Register(SizedRegisterEncoding(mrrm.register, operand_size));
     let reg_mem = mrrm.register_or_memory.into_operand(operand_size);
 
     Ok(Instruction::new(
@@ -102,7 +103,7 @@ pub(crate) fn immediate_to_accumulator(
     Ok(Instruction::new(
         operation,
         OperandSet::DestinationAndSource(
-            Operand::Register(SizedRegister(Register::AlAx, operand_size)),
+            Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size)),
             it.read_immediate(operand_size)?.into(),
         ),
     ))

@@ -1,7 +1,7 @@
 use crate::decode_instruction;
 use mrc_instruction::{
     Address, AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet,
-    OperandSize, Operation, Register, Repeat, Segment, SizedRegister,
+    OperandSize, Operation, RegisterEncoding, Repeat, Segment, SizedRegisterEncoding,
 };
 
 macro_rules! test_decoder {
@@ -21,8 +21,14 @@ fn test_00() {
         (Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Byte
+                )),
             ),
         ))
     );
@@ -32,8 +38,14 @@ fn test_00() {
         Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -52,7 +64,10 @@ fn test_01() {
                     Displacement::Word(0x4f57),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -65,8 +80,14 @@ fn test_02() {
         Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AhSp, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AhSp,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -79,7 +100,10 @@ fn test_03() {
         Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::BpSi,
@@ -98,7 +122,10 @@ fn test_04() {
         Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x27)),
             )
         )
@@ -112,7 +139,10 @@ fn test_05() {
         Instruction::new(
             Operation::ADD,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x57ca)),
             )
         )
@@ -148,8 +178,14 @@ fn test_08() {
         Instruction::new(
             Operation::OR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::AhSp, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AhSp,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -168,7 +204,10 @@ fn test_09() {
                     Displacement::None,
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -181,8 +220,14 @@ fn test_0a() {
         Instruction::new(
             Operation::OR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AhSp, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AhSp,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -195,8 +240,14 @@ fn test_0b() {
         Instruction::new(
             Operation::OR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -209,7 +260,10 @@ fn test_0c() {
         Instruction::new(
             Operation::OR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x9f)),
             )
         )
@@ -223,7 +277,10 @@ fn test_0d() {
         Instruction::new(
             Operation::OR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0xa03a)),
             )
         )
@@ -262,7 +319,10 @@ fn test_10() {
                     Displacement::Word(0x6965),
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -281,7 +341,10 @@ fn test_11() {
                     Displacement::Byte(-0x80),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -294,8 +357,14 @@ fn test_12() {
         Instruction::new(
             Operation::ADC,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -308,8 +377,14 @@ fn test_13() {
         Instruction::new(
             Operation::ADC,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::AhSp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AhSp,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -322,7 +397,10 @@ fn test_14() {
         Instruction::new(
             Operation::ADC,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x15)),
             )
         )
@@ -336,7 +414,10 @@ fn test_15() {
         Instruction::new(
             Operation::ADC,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x6776)),
             )
         )
@@ -378,7 +459,10 @@ fn test_18() {
                     Displacement::None,
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -397,7 +481,10 @@ fn test_19() {
                     Displacement::None,
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -410,7 +497,10 @@ fn test_1a() {
         Instruction::new(
             Operation::SBB,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Byte
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::BpDi,
@@ -429,8 +519,14 @@ fn test_1b() {
         Instruction::new(
             Operation::SBB,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -443,7 +539,10 @@ fn test_1c() {
         Instruction::new(
             Operation::SBB,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x31)),
             )
         )
@@ -457,7 +556,10 @@ fn test_1d() {
         Instruction::new(
             Operation::SBB,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0xd665)),
             )
         )
@@ -499,7 +601,10 @@ fn test_20() {
                     Displacement::None,
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -518,7 +623,10 @@ fn test_21() {
                     Displacement::Word(0x3634),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -531,8 +639,14 @@ fn test_22() {
         Instruction::new(
             Operation::AND,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -545,7 +659,10 @@ fn test_23() {
         Instruction::new(
             Operation::AND,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Word
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::BxDi,
@@ -564,7 +681,10 @@ fn test_24() {
         Instruction::new(
             Operation::AND,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x51)),
             )
         )
@@ -578,7 +698,10 @@ fn test_25() {
         Instruction::new(
             Operation::AND,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x8b27)),
             )
         )
@@ -598,7 +721,10 @@ fn test_26() {
                     Displacement::Word(0x4f57),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -625,7 +751,10 @@ fn test_28() {
                     Displacement::Word(-0x6719),
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -644,7 +773,10 @@ fn test_29() {
                     Displacement::Word(0x5261),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::AhSp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AhSp,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -657,7 +789,10 @@ fn test_2a() {
         Instruction::new(
             Operation::SUB,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Byte
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::BxSi,
@@ -676,7 +811,10 @@ fn test_2b() {
         Instruction::new(
             Operation::SUB,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Word
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::BpDi,
@@ -695,7 +833,10 @@ fn test_2c() {
         Instruction::new(
             Operation::SUB,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x3a)),
             )
         )
@@ -709,7 +850,10 @@ fn test_2d() {
         Instruction::new(
             Operation::SUB,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0xfd6e)),
             )
         )
@@ -729,7 +873,10 @@ fn test_2e() {
                     Displacement::Word(0x4f57),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -756,7 +903,10 @@ fn test_30() {
                     Displacement::Byte(-0x7d),
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -775,7 +925,10 @@ fn test_31() {
                     Displacement::None,
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -788,8 +941,14 @@ fn test_32() {
         Instruction::new(
             Operation::XOR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -802,8 +961,14 @@ fn test_33() {
         Instruction::new(
             Operation::XOR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -816,7 +981,10 @@ fn test_34() {
         Instruction::new(
             Operation::XOR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x30)),
             )
         )
@@ -830,7 +998,10 @@ fn test_35() {
         Instruction::new(
             Operation::XOR,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0xcd6a)),
             )
         )
@@ -850,7 +1021,10 @@ fn test_36() {
                     Displacement::Word(0x4f57),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -877,7 +1051,10 @@ fn test_38() {
                     Displacement::None,
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -896,7 +1073,10 @@ fn test_39() {
                     Displacement::Word(-0x137A),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -909,8 +1089,14 @@ fn test_3a() {
         Instruction::new(
             Operation::CMP,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -923,8 +1109,14 @@ fn test_3b() {
         Instruction::new(
             Operation::CMP,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -937,7 +1129,10 @@ fn test_3c() {
         Instruction::new(
             Operation::CMP,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0xc6)),
             )
         )
@@ -951,7 +1146,10 @@ fn test_3d() {
         Instruction::new(
             Operation::CMP,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0xc8b1)),
             )
         )
@@ -971,7 +1169,10 @@ fn test_3e() {
                     Displacement::Word(0x4f57),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -991,8 +1192,8 @@ fn test_40() {
         [0x40, 0xAB, 0x51, 0x27, 0x6D, 0x9A], // INC        AX
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::AlAx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::AlAx,
                 OperandSize::Word
             )))
         )
@@ -1005,8 +1206,8 @@ fn test_41() {
         [0x41, 0x7A, 0x69, 0xFC, 0xC4, 0x20], // INC        CX
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ClCx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ClCx,
                 OperandSize::Word
             )))
         )
@@ -1019,8 +1220,8 @@ fn test_42() {
         [0x42, 0xBA, 0x7D, 0x24, 0x33, 0x92], // INC        DX
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::DlDx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::DlDx,
                 OperandSize::Word
             )))
         )
@@ -1033,8 +1234,8 @@ fn test_43() {
         [0x43, 0x47, 0x97, 0xB4, 0x68, 0xC8], // INC        BX
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BlBx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BlBx,
                 OperandSize::Word
             )))
         )
@@ -1047,8 +1248,8 @@ fn test_44() {
         [0x44, 0x5A, 0xC2, 0x6A, 0xF7, 0xB8], // INC        SP
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::AhSp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::AhSp,
                 OperandSize::Word
             )))
         )
@@ -1061,8 +1262,8 @@ fn test_45() {
         [0x45, 0x33, 0xA5, 0x42, 0xBC, 0x09], // INC        Bp
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ChBp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ChBp,
                 OperandSize::Word
             )))
         )
@@ -1075,8 +1276,8 @@ fn test_46() {
         [0x46, 0x8E, 0x2B, 0xD8, 0x42, 0x45], // INC        SI
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::DhSi,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::DhSi,
                 OperandSize::Word
             )))
         )
@@ -1089,8 +1290,8 @@ fn test_47() {
         [0x47, 0x63, 0x45, 0xC4, 0x2F, 0x0B], // INC        DI
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BhDi,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BhDi,
                 OperandSize::Word
             )))
         )
@@ -1103,8 +1304,8 @@ fn test_48() {
         [0x48, 0x87, 0xC8, 0x19, 0xE9, 0x75], // DEC        AX
         Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::AlAx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::AlAx,
                 OperandSize::Word
             )))
         )
@@ -1117,8 +1318,8 @@ fn test_49() {
         [0x49, 0xC3, 0xD8, 0x50, 0xE8, 0xCA], // DEC        CX
         Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ClCx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ClCx,
                 OperandSize::Word
             )))
         )
@@ -1131,8 +1332,8 @@ fn test_4a() {
         [0x4A, 0x4E, 0xE9, 0xB9, 0xE5, 0x98], // DEC        DX
         Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::DlDx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::DlDx,
                 OperandSize::Word
             )))
         )
@@ -1145,8 +1346,8 @@ fn test_4b() {
         [0x4B, 0x53, 0x9B, 0x2E, 0x14, 0x4D], // DEC        BX
         Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BlBx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BlBx,
                 OperandSize::Word
             )))
         )
@@ -1159,8 +1360,8 @@ fn test_4c() {
         [0x4C, 0x15, 0x8D, 0x53, 0x84, 0x39], // DEC        SP
         Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::AhSp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::AhSp,
                 OperandSize::Word
             )))
         )
@@ -1173,8 +1374,8 @@ fn test_4d() {
         [0x4D, 0xB5, 0xA8, 0x3E, 0x0B, 0xD7], // DEC        BP
         Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ChBp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ChBp,
                 OperandSize::Word
             )))
         )
@@ -1187,8 +1388,8 @@ fn test_4e() {
         [0x4E, 0xD7, 0x4E, 0x7F, 0x6D, 0xE8], // DEC        SI
         Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::DhSi,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::DhSi,
                 OperandSize::Word
             )))
         )
@@ -1201,8 +1402,8 @@ fn test_4f() {
         [0x4F, 0xAB, 0xD7, 0x16, 0x0C, 0x59], // DEC        DI
         Instruction::new(
             Operation::DEC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BhDi,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BhDi,
                 OperandSize::Word
             )))
         )
@@ -1215,8 +1416,8 @@ fn test_50() {
         [0x50, 0xBB, 0xFF, 0x5A, 0x86, 0xA7], // PUSH       AX
         Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::AlAx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::AlAx,
                 OperandSize::Word
             )))
         )
@@ -1229,8 +1430,8 @@ fn test_51() {
         [0x51, 0x15, 0x08, 0x37, 0xCF, 0xB1], // PUSH       CX
         Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ClCx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ClCx,
                 OperandSize::Word
             )))
         )
@@ -1243,8 +1444,8 @@ fn test_52() {
         [0x52, 0x84, 0xC5, 0x4E, 0x55, 0x82], // PUSH       DX
         Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::DlDx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::DlDx,
                 OperandSize::Word
             )))
         )
@@ -1257,8 +1458,8 @@ fn test_53() {
         [0x53, 0x90, 0xD6, 0x62, 0x9D, 0x00], // PUSH       BX
         Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BlBx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BlBx,
                 OperandSize::Word
             )))
         )
@@ -1271,8 +1472,8 @@ fn test_54() {
         [0x54, 0x07, 0xB8, 0x32, 0x4B, 0xF8], // PUSH       SP
         Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::AhSp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::AhSp,
                 OperandSize::Word
             )))
         )
@@ -1285,8 +1486,8 @@ fn test_55() {
         [0x55, 0x92, 0xB0, 0xFF, 0x8E, 0x55], // PUSH       BP
         Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ChBp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ChBp,
                 OperandSize::Word
             )))
         )
@@ -1299,8 +1500,8 @@ fn test_56() {
         [0x56, 0x50, 0xE1, 0x00, 0x28, 0x4B], // PUSH       SI
         Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::DhSi,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::DhSi,
                 OperandSize::Word
             )))
         )
@@ -1313,8 +1514,8 @@ fn test_57() {
         [0x57, 0xE5, 0x26, 0x32, 0x89, 0x00], // PUSH       DI
         Instruction::new(
             Operation::PUSH,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BhDi,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BhDi,
                 OperandSize::Word
             )))
         )
@@ -1327,8 +1528,8 @@ fn test_58() {
         [0x58, 0x18, 0xE9, 0xC6, 0x71, 0x50], // POP        AX
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::AlAx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::AlAx,
                 OperandSize::Word
             )))
         )
@@ -1341,8 +1542,8 @@ fn test_59() {
         [0x59, 0xA1, 0x49, 0x14, 0x00, 0xC7], // POP        CX
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ClCx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ClCx,
                 OperandSize::Word
             )))
         )
@@ -1355,8 +1556,8 @@ fn test_5a() {
         [0x5A, 0xD7, 0xF7, 0x7C, 0xE8, 0x5A], // POP        DX
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::DlDx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::DlDx,
                 OperandSize::Word
             )))
         )
@@ -1369,8 +1570,8 @@ fn test_5b() {
         [0x5B, 0x35, 0xBB, 0x67, 0x87, 0x32], // POP        BX
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BlBx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BlBx,
                 OperandSize::Word
             )))
         )
@@ -1383,8 +1584,8 @@ fn test_5c() {
         [0x5C, 0xD0, 0x6C, 0x59, 0xB4, 0x41], // POP        SP
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::AhSp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::AhSp,
                 OperandSize::Word
             )))
         )
@@ -1397,8 +1598,8 @@ fn test_5d() {
         [0x5D, 0x07, 0xFA, 0x7A, 0x5B, 0xB2], // POP        BP
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ChBp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ChBp,
                 OperandSize::Word
             )))
         )
@@ -1411,8 +1612,8 @@ fn test_5e() {
         [0x5E, 0x4A, 0x30, 0x5D, 0x74, 0x76], // POP        SI
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::DhSi,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::DhSi,
                 OperandSize::Word
             )))
         )
@@ -1425,8 +1626,8 @@ fn test_5f() {
         [0x5F, 0xC1, 0xDC, 0x74, 0xE5, 0x51], // POP        DI
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BhDi,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BhDi,
                 OperandSize::Word
             )))
         )
@@ -1844,7 +2045,10 @@ fn test_84() {
                     Displacement::Byte(-0x3),
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -1863,7 +2067,10 @@ fn test_85() {
                     Displacement::None,
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -1882,7 +2089,10 @@ fn test_86() {
                     Displacement::Word(0x5c96),
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -1901,7 +2111,10 @@ fn test_87() {
                     Displacement::Byte(0x4e),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -1920,7 +2133,10 @@ fn test_88() {
                     Displacement::Word(-0x12E4),
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -1939,7 +2155,10 @@ fn test_89() {
                     Displacement::Byte(-0x40),
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -1952,7 +2171,10 @@ fn test_8a() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Byte
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::BpDi,
@@ -1971,7 +2193,10 @@ fn test_8b() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Word
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::Si,
@@ -1990,7 +2215,10 @@ fn test_8c() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Segment(Segment::CS),
             ),
         )
@@ -2004,7 +2232,10 @@ fn test_8d() {
         Instruction::new(
             Operation::LEA,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::Si,
@@ -2024,7 +2255,10 @@ fn test_8e() {
             Operation::MOV,
             OperandSet::DestinationAndSource(
                 Operand::Segment(Segment::DS),
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2036,8 +2270,8 @@ fn test_8f() {
         [0x8F, 0xC5, 0xF8, 0xF1, 0x43, 0xE6], // POP        BP
         Instruction::new(
             Operation::POP,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::ChBp,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::ChBp,
                 OperandSize::Word
             )))
         )
@@ -2059,8 +2293,14 @@ fn test_91() {
         Instruction::new(
             Operation::XCHG,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2073,8 +2313,14 @@ fn test_92() {
         Instruction::new(
             Operation::XCHG,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2087,8 +2333,14 @@ fn test_93() {
         Instruction::new(
             Operation::XCHG,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2101,8 +2353,14 @@ fn test_94() {
         Instruction::new(
             Operation::XCHG,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::AhSp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AhSp,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2115,8 +2373,14 @@ fn test_95() {
         Instruction::new(
             Operation::XCHG,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2129,8 +2393,14 @@ fn test_96() {
         Instruction::new(
             Operation::XCHG,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2143,8 +2413,14 @@ fn test_97() {
         Instruction::new(
             Operation::XCHG,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2224,7 +2500,10 @@ fn test_a0() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Direct(Segment::DS, 0x430c, OperandSize::Byte),
             )
         )
@@ -2238,7 +2517,10 @@ fn test_a1() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Direct(Segment::DS, 0x8be5, OperandSize::Word),
             )
         )
@@ -2253,7 +2535,10 @@ fn test_a2() {
             Operation::MOV,
             OperandSet::DestinationAndSource(
                 Operand::Direct(Segment::DS, 0x9d98, OperandSize::Byte),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -2267,7 +2552,10 @@ fn test_a3() {
             Operation::MOV,
             OperandSet::DestinationAndSource(
                 Operand::Direct(Segment::DS, 0xf847, OperandSize::Word),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -2312,7 +2600,10 @@ fn test_a8() {
         Instruction::new(
             Operation::TEST,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x53)),
             )
         )
@@ -2326,7 +2617,10 @@ fn test_a9() {
         Instruction::new(
             Operation::TEST,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x9a0d)),
             )
         )
@@ -2388,7 +2682,10 @@ fn test_b0() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x3d)),
             )
         )
@@ -2402,7 +2699,10 @@ fn test_b1() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x92)),
             )
         )
@@ -2416,7 +2716,10 @@ fn test_b2() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x3A)),
             )
         )
@@ -2430,7 +2733,10 @@ fn test_b3() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x12)),
             )
         )
@@ -2444,7 +2750,10 @@ fn test_b4() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AhSp, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AhSp,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x41)),
             )
         )
@@ -2458,7 +2767,10 @@ fn test_b5() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x2D)),
             )
         )
@@ -2472,7 +2784,10 @@ fn test_b6() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x9A)),
             )
         )
@@ -2486,7 +2801,10 @@ fn test_b7() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x80)),
             )
         )
@@ -2500,7 +2818,10 @@ fn test_b8() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x3672)),
             )
         )
@@ -2514,7 +2835,10 @@ fn test_b9() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0xEB70)),
             )
         )
@@ -2528,7 +2852,10 @@ fn test_ba() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x5637)),
             )
         )
@@ -2542,7 +2869,10 @@ fn test_bb() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0xAFD5)),
             )
         )
@@ -2556,7 +2886,10 @@ fn test_bc() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AhSp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AhSp,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x1B07)),
             )
         )
@@ -2570,7 +2903,10 @@ fn test_bd() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::ChBp, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ChBp,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x353D)),
             )
         )
@@ -2584,7 +2920,10 @@ fn test_be() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DhSi, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DhSi,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x988A)),
             )
         )
@@ -2598,7 +2937,10 @@ fn test_bf() {
         Instruction::new(
             Operation::MOV,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BhDi, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BhDi,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Word(0x1DAD)),
             )
         )
@@ -2669,7 +3011,10 @@ fn test_c4() {
         Instruction::new(
             Operation::LES,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::BlBx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::BlBx,
+                    OperandSize::Word
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::Si,
@@ -2688,7 +3033,10 @@ fn test_c5() {
         Instruction::new(
             Operation::LDS,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Indirect(
                     Segment::DS,
                     AddressingMode::Di,
@@ -2861,7 +3209,10 @@ fn test_d2() {
                     Displacement::Byte(-0x47),
                     OperandSize::Byte
                 ),
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -2880,7 +3231,10 @@ fn test_d3() {
                     Displacement::None,
                     OperandSize::Word
                 ),
-                Operand::Register(SizedRegister(Register::ClCx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::ClCx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -3039,7 +3393,10 @@ fn test_e4() {
         Instruction::new(
             Operation::IN,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
                 Operand::Immediate(Immediate::Byte(0x30)),
             )
         )
@@ -3053,7 +3410,10 @@ fn test_e5() {
         Instruction::new(
             Operation::IN,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
                 Operand::Immediate(Immediate::Byte(0x70)),
             )
         )
@@ -3068,7 +3428,10 @@ fn test_e6() {
             Operation::OUT,
             OperandSet::DestinationAndSource(
                 Operand::Immediate(Immediate::Byte(0x82)),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -3082,7 +3445,10 @@ fn test_e7() {
             Operation::OUT,
             OperandSet::DestinationAndSource(
                 Operand::Immediate(Immediate::Byte(0x26)),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -3139,8 +3505,14 @@ fn test_ec() {
         Instruction::new(
             Operation::IN,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -3153,8 +3525,14 @@ fn test_ed() {
         Instruction::new(
             Operation::IN,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -3167,8 +3545,14 @@ fn test_ee() {
         Instruction::new(
             Operation::OUT,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Byte)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Byte
+                )),
             )
         )
     );
@@ -3181,8 +3565,14 @@ fn test_ef() {
         Instruction::new(
             Operation::OUT,
             OperandSet::DestinationAndSource(
-                Operand::Register(SizedRegister(Register::DlDx, OperandSize::Word)),
-                Operand::Register(SizedRegister(Register::AlAx, OperandSize::Word)),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::DlDx,
+                    OperandSize::Word
+                )),
+                Operand::Register(SizedRegisterEncoding(
+                    RegisterEncoding::AlAx,
+                    OperandSize::Word
+                )),
             )
         )
     );
@@ -3244,7 +3634,7 @@ fn test_f5() {
 //         Instruction::new(
 //             Operation::TEST,
 //             OperandSet::DestinationAndSource(
-//                 Operand(OperandKind::Register(Register::AlAx), OperandSize::Byte),
+//                 Operand(OperandKind::Register(RegisterEncoding::AlAx), OperandSize::Byte),
 //                 Operand(OperandKind::Immediate(Immediate::Byte(0xF0)), OperandSize::Byte)
 //             )
 //         )
@@ -3255,7 +3645,7 @@ fn test_f5() {
 //         Instruction::new(
 //             Operation::NOT,
 //             OperandSet::Destination(Operand(
-//                 OperandKind::Register(Register::AlAx),
+//                 OperandKind::Register(RegisterEncoding::AlAx),
 //                 OperandSize::Byte
 //             ))
 //         )
@@ -3347,8 +3737,8 @@ fn test_ff() {
         [0xFF, 0xC3, 0x19, 0xB8, 0x3F, 0x23], // INC        BX
         Instruction::new(
             Operation::INC,
-            OperandSet::Destination(Operand::Register(SizedRegister(
-                Register::BlBx,
+            OperandSet::Destination(Operand::Register(SizedRegisterEncoding(
+                RegisterEncoding::BlBx,
                 OperandSize::Word
             )))
         )

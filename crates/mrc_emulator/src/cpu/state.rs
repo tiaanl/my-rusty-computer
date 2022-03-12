@@ -1,6 +1,32 @@
 use bitflags::bitflags;
-use mrc_instruction::{Register, Segment};
+use mrc_instruction::{RegisterEncoding, Segment};
 use std::fmt::{Display, Formatter};
+
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum ByteRegister {
+    AL = 0,
+    CL = 1,
+    DL = 2,
+    BL = 3,
+    AH = 4,
+    CH = 5,
+    DH = 6,
+    BH = 7,
+}
+
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum WordRegister {
+    AX = 0,
+    CX = 1,
+    DX = 2,
+    BX = 3,
+    SP = 4,
+    BP = 5,
+    SI = 6,
+    DI = 7,
+}
 
 bitflags! {
     pub struct Flags : u16 {
@@ -64,6 +90,131 @@ union Registers {
     word: WordRegisters,
 }
 
+pub trait RegisterAccess<T> {
+    fn get_value(&self, state: &State) -> T;
+    fn set_value(&self, state: &mut State, value: T);
+}
+
+impl RegisterAccess<u8> for ByteRegister {
+    #[inline(always)]
+    fn get_value(&self, state: &State) -> u8 {
+        unsafe {
+            match self {
+                ByteRegister::AL => state.registers.byte.al,
+                ByteRegister::CL => state.registers.byte.cl,
+                ByteRegister::DL => state.registers.byte.dl,
+                ByteRegister::BL => state.registers.byte.bl,
+                ByteRegister::AH => state.registers.byte.ah,
+                ByteRegister::CH => state.registers.byte.ch,
+                ByteRegister::DH => state.registers.byte.dh,
+                ByteRegister::BH => state.registers.byte.bh,
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn set_value(&self, state: &mut State, value: u8) {
+        match self {
+            ByteRegister::AL => state.registers.byte.al = value,
+            ByteRegister::CL => state.registers.byte.cl = value,
+            ByteRegister::DL => state.registers.byte.dl = value,
+            ByteRegister::BL => state.registers.byte.bl = value,
+            ByteRegister::AH => state.registers.byte.ah = value,
+            ByteRegister::CH => state.registers.byte.ch = value,
+            ByteRegister::DH => state.registers.byte.dh = value,
+            ByteRegister::BH => state.registers.byte.bh = value,
+        }
+    }
+}
+
+impl RegisterAccess<u16> for WordRegister {
+    #[inline(always)]
+    fn get_value(&self, state: &State) -> u16 {
+        unsafe {
+            match self {
+                WordRegister::AX => state.registers.word.ax,
+                WordRegister::CX => state.registers.word.cx,
+                WordRegister::DX => state.registers.word.dx,
+                WordRegister::BX => state.registers.word.bx,
+                WordRegister::SP => state.registers.word.sp,
+                WordRegister::BP => state.registers.word.bp,
+                WordRegister::SI => state.registers.word.si,
+                WordRegister::DI => state.registers.word.di,
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn set_value(&self, state: &mut State, value: u16) {
+        match self {
+            WordRegister::AX => state.registers.word.ax = value,
+            WordRegister::CX => state.registers.word.cx = value,
+            WordRegister::DX => state.registers.word.dx = value,
+            WordRegister::BX => state.registers.word.bx = value,
+            WordRegister::SP => state.registers.word.sp = value,
+            WordRegister::BP => state.registers.word.bp = value,
+            WordRegister::SI => state.registers.word.si = value,
+            WordRegister::DI => state.registers.word.di = value,
+        }
+    }
+}
+
+impl RegisterAccess<u8> for RegisterEncoding {
+    fn get_value(&self, state: &State) -> u8 {
+        match self {
+            RegisterEncoding::AlAx => state.register(ByteRegister::AL),
+            RegisterEncoding::ClCx => state.register(ByteRegister::CL),
+            RegisterEncoding::DlDx => state.register(ByteRegister::DL),
+            RegisterEncoding::BlBx => state.register(ByteRegister::BL),
+            RegisterEncoding::AhSp => state.register(ByteRegister::AH),
+            RegisterEncoding::ChBp => state.register(ByteRegister::CH),
+            RegisterEncoding::DhSi => state.register(ByteRegister::DH),
+            RegisterEncoding::BhDi => state.register(ByteRegister::BH),
+        }
+    }
+
+    fn set_value(&self, state: &mut State, value: u8) {
+        match self {
+            RegisterEncoding::AlAx => state.set_register(ByteRegister::AL, value),
+            RegisterEncoding::ClCx => state.set_register(ByteRegister::CL, value),
+            RegisterEncoding::DlDx => state.set_register(ByteRegister::DL, value),
+            RegisterEncoding::BlBx => state.set_register(ByteRegister::BL, value),
+            RegisterEncoding::AhSp => state.set_register(ByteRegister::AH, value),
+            RegisterEncoding::ChBp => state.set_register(ByteRegister::CH, value),
+            RegisterEncoding::DhSi => state.set_register(ByteRegister::DH, value),
+            RegisterEncoding::BhDi => state.set_register(ByteRegister::BH, value),
+        }
+    }
+}
+
+impl RegisterAccess<u16> for RegisterEncoding {
+    fn get_value(&self, state: &State) -> u16 {
+        match self {
+            RegisterEncoding::AlAx => state.register(WordRegister::AX),
+            RegisterEncoding::ClCx => state.register(WordRegister::CX),
+            RegisterEncoding::DlDx => state.register(WordRegister::DX),
+            RegisterEncoding::BlBx => state.register(WordRegister::BX),
+            RegisterEncoding::AhSp => state.register(WordRegister::SP),
+            RegisterEncoding::ChBp => state.register(WordRegister::BP),
+            RegisterEncoding::DhSi => state.register(WordRegister::SI),
+            RegisterEncoding::BhDi => state.register(WordRegister::DI),
+        }
+    }
+
+    fn set_value(&self, state: &mut State, value: u16) {
+        match self {
+            RegisterEncoding::AlAx => state.set_register(WordRegister::AX, value),
+            RegisterEncoding::ClCx => state.set_register(WordRegister::CX, value),
+            RegisterEncoding::DlDx => state.set_register(WordRegister::DX, value),
+            RegisterEncoding::BlBx => state.set_register(WordRegister::BX, value),
+            RegisterEncoding::AhSp => state.set_register(WordRegister::SP, value),
+            RegisterEncoding::ChBp => state.set_register(WordRegister::BP, value),
+            RegisterEncoding::DhSi => state.set_register(WordRegister::SI, value),
+            RegisterEncoding::BhDi => state.set_register(WordRegister::DI, value),
+        }
+    }
+}
+
 impl Default for Registers {
     fn default() -> Self {
         Self {
@@ -104,75 +255,16 @@ impl State {
     }
 
     #[inline(always)]
-    pub fn get_byte_register_value(&self, register: Register) -> u8 {
-        use Register::*;
+    pub fn register<T, A: RegisterAccess<T>>(&self, register: A) -> T {
+        register.get_value(self)
+    }
 
-        unsafe {
-            match register {
-                AlAx => self.registers.byte.al,
-                AhSp => self.registers.byte.ah,
-                ClCx => self.registers.byte.cl,
-                ChBp => self.registers.byte.ch,
-                DlDx => self.registers.byte.dl,
-                DhSi => self.registers.byte.dh,
-                BlBx => self.registers.byte.bl,
-                BhDi => self.registers.byte.bh,
-            }
-        }
+    pub fn set_register<T, A: RegisterAccess<T>>(&mut self, register: A, value: T) {
+        register.set_value(self, value);
     }
 
     #[inline(always)]
-    pub fn get_word_register_value(&self, register: Register) -> u16 {
-        use Register::*;
-
-        unsafe {
-            match register {
-                AlAx => self.registers.word.ax,
-                ClCx => self.registers.word.cx,
-                DlDx => self.registers.word.dx,
-                BlBx => self.registers.word.bx,
-                AhSp => self.registers.word.sp,
-                ChBp => self.registers.word.bp,
-                DhSi => self.registers.word.si,
-                BhDi => self.registers.word.di,
-            }
-        }
-    }
-
-    #[inline(always)]
-    pub fn set_byte_register_value(&mut self, register: Register, value: u8) {
-        use Register::*;
-
-        match register {
-            AlAx => self.registers.byte.al = value,
-            AhSp => self.registers.byte.ah = value,
-            ClCx => self.registers.byte.cl = value,
-            ChBp => self.registers.byte.ch = value,
-            DlDx => self.registers.byte.dl = value,
-            DhSi => self.registers.byte.dh = value,
-            BlBx => self.registers.byte.bl = value,
-            BhDi => self.registers.byte.bh = value,
-        };
-    }
-
-    #[inline(always)]
-    pub fn set_word_register_value(&mut self, register: Register, value: u16) {
-        use Register::*;
-
-        match register {
-            AlAx => self.registers.word.ax = value,
-            AhSp => self.registers.word.sp = value,
-            ClCx => self.registers.word.cx = value,
-            ChBp => self.registers.word.bp = value,
-            DlDx => self.registers.word.dx = value,
-            DhSi => self.registers.word.si = value,
-            BlBx => self.registers.word.bx = value,
-            BhDi => self.registers.word.di = value,
-        }
-    }
-
-    #[inline(always)]
-    pub fn get_segment_value(&self, segment: Segment) -> u16 {
+    pub fn segment(&self, segment: Segment) -> u16 {
         use Segment::*;
 
         match segment {
@@ -184,7 +276,7 @@ impl State {
     }
 
     #[inline(always)]
-    pub fn set_segment_value(&mut self, segment: Segment, value: u16) {
+    pub fn set_segment(&mut self, segment: Segment, value: u16) {
         use Segment::*;
 
         match segment {

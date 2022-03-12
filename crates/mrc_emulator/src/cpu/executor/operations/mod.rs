@@ -1,5 +1,5 @@
+use crate::cpu::state::ByteRegister::AH;
 use crate::cpu::{Flags, State};
-use mrc_instruction::Register;
 
 mod arithmetic;
 mod logic;
@@ -90,7 +90,7 @@ impl StateExt for State {
     fn store_ah_into_flags(&mut self) {
         // EFLAGS(SF:ZF:0:AF:0:PF:1:CF) = AH;
 
-        let ah = self.get_byte_register_value(Register::AhSp);
+        let ah = self.register(AH);
         let mut new_flags = Flags::from_bits_truncate(u16::from(ah));
 
         // Make sure we set/unset the fixed values:
@@ -109,13 +109,14 @@ impl StateExt for State {
         ah.insert(Flags::RESERVED_1);
         ah.remove(Flags::RESERVED_3 | Flags::RESERVED_5);
 
-        self.set_byte_register_value(Register::AhSp, ah.bits().to_le_bytes()[0]);
+        self.set_register(AH, ah.bits().to_le_bytes()[0]);
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::cpu::state::ByteRegister::AH;
 
     pub fn test_flags(
         flags: &Flags,
@@ -138,7 +139,7 @@ mod test {
     fn test_store_ah_into_flags() {
         let mut state = State::default();
 
-        state.set_byte_register_value(Register::AhSp, 0xD5);
+        state.set_register(AH, 0xD5);
         state.store_ah_into_flags();
         assert!(state.flags.contains(Flags::SIGN));
         assert!(state.flags.contains(Flags::ZERO));
@@ -155,6 +156,6 @@ mod test {
 
         state.load_ah_from_flags();
 
-        assert_eq!(0xD7, state.get_byte_register_value(Register::AhSp));
+        assert_eq!(0xD7, state.register(AH));
     }
 }

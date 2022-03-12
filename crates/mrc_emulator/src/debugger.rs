@@ -1,11 +1,14 @@
-use crate::cpu::State;
+use crate::cpu::{State, WordRegister::*};
 use egui::Button;
 use egui_glium;
 use egui_glium::egui_winit::winit::event::WindowEvent;
 use glium::{Display, Frame};
-use mrc_instruction::{Register, Segment};
-use std::sync::mpsc::{SendError, Sender};
-use std::sync::{Arc, Mutex};
+use mrc_instruction::Segment;
+use std::sync::{
+    mpsc::{SendError, Sender},
+    Arc, Mutex,
+};
+use Segment::*;
 
 #[derive(Debug)]
 pub enum EmulatorCommand {
@@ -51,49 +54,49 @@ impl Debugger {
             label(
                 &mut ui[0],
                 "AX".into(),
-                format!("{:04X}", state.get_word_register_value(Register::AlAx)),
+                format!("{:04X}", state.register(AX)),
             );
 
             label(
                 &mut ui[1],
                 "BX".into(),
-                format!("{:04X}", state.get_word_register_value(Register::BlBx)),
+                format!("{:04X}", state.register(BX)),
             );
 
             label(
                 &mut ui[2],
                 "CX".into(),
-                format!("{:04X}", state.get_word_register_value(Register::ClCx)),
+                format!("{:04X}", state.register(CX)),
             );
 
             label(
                 &mut ui[3],
                 "DX".into(),
-                format!("{:04X}", state.get_word_register_value(Register::DlDx)),
+                format!("{:04X}", state.register(DX)),
             );
 
             label(
                 &mut ui[4],
                 "SP".into(),
-                format!("{:04X}", state.get_word_register_value(Register::AhSp)),
+                format!("{:04X}", state.register(SP)),
             );
 
             label(
                 &mut ui[5],
                 "BP".into(),
-                format!("{:04X}", state.get_word_register_value(Register::ChBp)),
+                format!("{:04X}", state.register(BP)),
             );
 
             label(
                 &mut ui[6],
                 "SI".into(),
-                format!("{:04X}", state.get_word_register_value(Register::DhSi)),
+                format!("{:04X}", state.register(SI)),
             );
 
             label(
                 &mut ui[7],
                 "DI".into(),
-                format!("{:04X}", state.get_word_register_value(Register::BhDi)),
+                format!("{:04X}", state.register(DI)),
             );
         });
 
@@ -101,25 +104,25 @@ impl Debugger {
             label(
                 &mut ui[0],
                 "ES".into(),
-                format!("{:04X}", state.get_segment_value(Segment::ES)),
+                format!("{:04X}", state.segment(ES)),
             );
 
             label(
                 &mut ui[1],
                 "CS".into(),
-                format!("{:04X}", state.get_segment_value(Segment::CS)),
+                format!("{:04X}", state.segment(CS)),
             );
 
             label(
                 &mut ui[2],
                 "SS".into(),
-                format!("{:04X}", state.get_segment_value(Segment::SS)),
+                format!("{:04X}", state.segment(SS)),
             );
 
             label(
                 &mut ui[3],
                 "DS".into(),
-                format!("{:04X}", state.get_segment_value(Segment::DS)),
+                format!("{:04X}", state.segment(DS)),
             );
 
             label(&mut ui[4], "IP".into(), format!("{:04X}", state.ip));
