@@ -242,8 +242,6 @@ pub struct State {
     registers: Registers,
     segments: Segments,
 
-    // TODO: Do not have this public.  Right now it is required to set the reset vector. Maybe set
-    //       with a builder config?
     pub ip: u16,
     pub flags: Flags,
 }

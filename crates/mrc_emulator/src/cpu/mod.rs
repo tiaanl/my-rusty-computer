@@ -11,7 +11,6 @@ use Segment::CS;
 
 /// An emulated 8086 CPU.  Contains all data and functions to access it.
 pub struct CPU<D: Bus<Address>, I: Bus<Port>> {
-    // TODO: This is public because ip is public.
     pub state: State,
     io_controller: I,
     bus: D,
@@ -93,8 +92,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let address =
-            mrc_instruction::Address::new(self.state.segment(CS), self.state.ip).flat();
+        let address = mrc_instruction::Address::new(self.state.segment(CS), self.state.ip).flat();
         if let Ok(byte) = self.bus.read(address) {
             let (new_ip, overflow) = self.state.ip.overflowing_add(1);
             if overflow {

@@ -301,7 +301,6 @@ fn main() {
     let (command_sender, command_receiver) = std::sync::mpsc::channel();
 
     let debugger_state = Arc::new(Mutex::new(DebuggerState::default()));
-
     let mut debugger = Debugger::new(&display, debugger_state.clone(), command_sender);
 
     std::thread::spawn(move || {
