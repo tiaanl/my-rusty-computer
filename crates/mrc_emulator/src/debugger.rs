@@ -17,10 +17,25 @@ pub enum EmulatorCommand {
     Step,
 }
 
+#[derive(Clone)]
+pub struct SourceLine {
+    pub address: mrc_instruction::Address,
+    pub instruction: String,
+}
+
+impl Default for SourceLine {
+    fn default() -> Self {
+        Self {
+            address: mrc_instruction::Address::new(0, 0),
+            instruction: "".to_string(),
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct DebuggerState {
     pub state: State,
-    pub source: Vec<String>,
+    pub source: Vec<SourceLine>,
 }
 
 pub struct Debugger {
@@ -135,7 +150,7 @@ impl Debugger {
         }
     }
 
-    pub fn needs_redraw(&mut self, display: &glium::Display) -> bool {
+    pub fn needs_redraw(&mut self, display: &glium::Display) {
         self.egui.run(display, |ctx| {
             let debugger_state = { self.debugger_state.lock().unwrap().clone() };
 
@@ -147,7 +162,12 @@ impl Debugger {
                 ui.add_space(10.0);
 
                 for line in &debugger_state.source {
-                    ui.monospace(line);
+                    ui.horizontal(|ui| {
+                        if ui.button(line.address.to_string()).clicked() {
+                            println!("Breakpoint: {}", line.address.to_string());
+                        }
+                        ui.monospace(&line.instruction);
+                    });
                 }
 
                 ui.add_space(10.0);
@@ -176,8 +196,6 @@ impl Debugger {
                 });
             });
         });
-
-        true
     }
 
     pub fn draw(&mut self, display: &Display, frame: &mut Frame) {
