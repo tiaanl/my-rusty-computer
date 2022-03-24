@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-// TODO: Needs updating
 //! ```text
 //! Grammar:
 //!
@@ -10,15 +9,19 @@
 //!   |     if left is not valid, use right
 //!   CAP   type of token
 //!
-//! <program>       ::= <instruction> {, <instruction>}
-//! <instruction>   ::= <operation>, {<operand_set>}
-//! <operand_set>   ::= <operand>, {<operand>}
-//! <operand>       ::= <immediate> | <register> | <segment> | <direct> | <indirect>
-//! <immediate>     ::= NUM
-//! <register>      ::= al, bl, cl, dl, ah, bh, ch, dh, ax, bx, cx, dx, bp, sp, si, di
-//! <segment>       ::= es, cs, ss, ds
-//! <direct>        ::= "[" IDENT | NUM "]"
-//! <indirect>      ::= "[" <addressing-mode> "]"
+//! <program>         ::= <instruction> {<instruction>}
+//! <instruction>     ::= <operation>, {<operand_set>}
+//! <operand_set>     ::= [<operand>{, <operand>}]
+//! <operand>         ::= <immediate> | <register> | <segment> | <direct> | <indirect>
+//! <immediate>       ::= NUM
+//! <register>        ::= "al" | "bl" | "cl" | "dl" | "ah" | "bh" | "ch" | "dh" | "ax" | "bx" |
+//!                       "cx" | "dx" | "bp" | "sp" | "si" | "di"
+//! <segment>         ::= "es" | "cs" | "ss" | "ds"
+//! <direct>          ::= "[" <address> "]"
+//! <indirect>        ::= "[" <addressing-mode> "+" <displacement> "]"
+//! <address>         ::= IDENT | NUM
+//! <addressing-mode> ::= "bx+si" | "bx+di" | "bp+si" | "bp+di" | "si" | "di" | "bp" | "bx"
+//! <displacement>    ::= <byte-displacement> | <word-displacement>
 //! ```
 
 use mrc_instruction::{

@@ -23,6 +23,7 @@ use std::{
     rc::Rc,
     sync::{mpsc::Receiver, Arc, Mutex},
 };
+use std::convert::Infallible;
 use structopt::StructOpt;
 use Segment::CS;
 
@@ -194,12 +195,7 @@ fn update_debugger_state<D: Bus<Address>, I: Bus<Port>>(
 
     for line in debugger_state.source.iter_mut() {
         *line = if let Ok(instruction) = decode_instruction(&mut it) {
-            format!(
-                "{:04X}:{:04X} {}",
-                cs,
-                { it.address & !((cs as u32) << 4) },
-                instruction,
-            )
+            format!("{:04X}:{:04X} {}", cs, cpu.state.ip, instruction,)
         } else {
             "ERROR".to_string()
         }
@@ -246,28 +242,24 @@ fn run_emulator(
             break;
         }
 
-        if running {
-            if let Ok(command) = receiver.try_recv() {
-                match command {
-                    EmulatorCommand::Run => running = true,
-                    EmulatorCommand::Stop => running = false,
-                    EmulatorCommand::Step => running = false,
-                }
-            }
-        } else {
-            // Send a new state to the debugger and wait for a command:
-            if let Ok(command) = receiver.recv() {
-                match command {
-                    EmulatorCommand::Run => running = true,
-                    EmulatorCommand::Stop => running = false,
-                    EmulatorCommand::Step => running = false,
-                }
+        if let Ok(command) = match running {
+            true => receiver.try_recv().or::<Infallible>(Ok(EmulatorCommand::Stop)),
+            false => receiver.recv().or(Ok(EmulatorCommand::Stop)),
+        } {
+            match command {
+                EmulatorCommand::Run => running = true,
+                EmulatorCommand::Stop => running = false,
+                EmulatorCommand::Step => running = false,
             }
         }
 
         {
             let mut debugger_state = debugger_state.lock().unwrap();
             update_debugger_state(&mut debugger_state, &cpu);
+        }
+
+        if segment_and_offset(cpu.state.segment(CS), cpu.state.ip) == 0xFE0B0 {
+            running = false;
         }
     }
 }
