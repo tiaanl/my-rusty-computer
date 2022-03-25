@@ -164,7 +164,7 @@ impl Debugger {
                 for line in &debugger_state.source {
                     ui.horizontal(|ui| {
                         if ui.button(line.address.to_string()).clicked() {
-                            println!("Breakpoint: {}", line.address.to_string());
+                            println!("Breakpoint: {}", line.address);
                         }
                         ui.monospace(&line.instruction);
                     });

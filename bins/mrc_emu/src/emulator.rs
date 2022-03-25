@@ -1,5 +1,5 @@
 use crate::InterruptManager;
-use mrc_decoder::{decode_instruction, DecodeError};
+use mrc_decoder::decode_instruction;
 use mrc_emulator::{
     components::{
         cga::Cga,
@@ -16,12 +16,10 @@ use mrc_emulator::{
     error::Error,
     segment_and_offset, Address, Bus, Port,
 };
-use mrc_instruction::Instruction;
 use mrc_instruction::Segment::CS;
-use std::sync::mpsc::{RecvError, TryRecvError};
+use std::sync::mpsc::TryRecvError;
 use std::{
     cell::RefCell,
-    convert::Infallible,
     rc::Rc,
     sync::{mpsc::Receiver, Arc, Mutex},
 };
@@ -183,7 +181,7 @@ impl Emulator {
                 break;
             }
 
-            let command = if running {
+            if running {
                 match receiver.try_recv() {
                     Ok(command) => match command {
                         EmulatorCommand::Run => running = true,

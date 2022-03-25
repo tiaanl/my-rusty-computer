@@ -3,11 +3,10 @@ mod config;
 mod emulator;
 mod interrupts;
 
+use crate::config::Config;
 use crate::emulator::BIOS_SIZE;
 use crate::interrupts::InterruptManager;
-use config::Config;
-use glutin::dpi::LogicalSize;
-use glutin::GlProfile;
+use glium::glutin;
 use mrc_emulator::components::rom::ReadOnlyMemory;
 use mrc_emulator::debugger::{Debugger, DebuggerState};
 use std::{
@@ -55,22 +54,32 @@ fn create_bios(path: Option<String>) -> ReadOnlyMemory {
 fn main() {
     pretty_env_logger::init();
 
-    let event_loop = glutin::event_loop::EventLoop::new();
+    let config = match Config::load() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            log::error!("Could not load configuration! {:?}", err);
+            std::process::exit(1);
+        }
+    };
 
-    let config = Config::from_args();
+    let event_loop = glutin::event_loop::EventLoop::new();
 
     let bios = create_bios(config.bios);
 
     let window_builder = glutin::window::WindowBuilder::new()
         .with_resizable(false)
-        .with_inner_size(LogicalSize {
+        .with_position(glutin::dpi::LogicalPosition::new(
+            config.debugger_position[0],
+            config.debugger_position[1],
+        ))
+        .with_inner_size(glutin::dpi::LogicalSize {
             width: 600.0,
             height: 800.0,
         })
         .with_title("My Rusty Computer (Debugger)");
 
     let context_builder = glutin::ContextBuilder::new()
-        .with_gl_profile(GlProfile::Core)
+        .with_gl_profile(glutin::GlProfile::Core)
         .with_depth_buffer(0)
         .with_srgb(true)
         .with_stencil_buffer(0)
