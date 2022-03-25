@@ -6,6 +6,7 @@ mod interrupts;
 use crate::emulator::BIOS_SIZE;
 use crate::interrupts::InterruptManager;
 use config::Config;
+use glutin::dpi::LogicalSize;
 use glutin::GlProfile;
 use mrc_emulator::components::rom::ReadOnlyMemory;
 use mrc_emulator::debugger::{Debugger, DebuggerState};
@@ -54,17 +55,17 @@ fn create_bios(path: Option<String>) -> ReadOnlyMemory {
 fn main() {
     pretty_env_logger::init();
 
+    let event_loop = glutin::event_loop::EventLoop::new();
+
     let config = Config::from_args();
 
     let bios = create_bios(config.bios);
 
-    let event_loop = glutin::event_loop::EventLoop::new();
-
     let window_builder = glutin::window::WindowBuilder::new()
-        .with_resizable(true)
-        .with_inner_size(glutin::dpi::LogicalSize {
-            width: 800.0,
-            height: 600.0,
+        .with_resizable(false)
+        .with_inner_size(LogicalSize {
+            width: 600.0,
+            height: 800.0,
         })
         .with_title("My Rusty Computer (Debugger)");
 
@@ -84,7 +85,7 @@ fn main() {
     let mut debugger = Debugger::new(&display, debugger_state.clone(), command_sender);
 
     std::thread::spawn(move || {
-        emulator::Emulator::new(bios, |cpu| {
+        emulator::Emulator::new(bios, debugger_state, |cpu| {
             // Set the CPU reset vector: 0xFFFF0
             cpu.jump_to(0xF000, 0xFFF0);
         })
@@ -101,28 +102,21 @@ fn main() {
             glutin::event::Event::WindowEvent { event, .. } => match event {
                 glutin::event::WindowEvent::CloseRequested => {
                     *control_flow = glutin::event_loop::ControlFlow::Exit;
-                    return;
                 }
                 _ => {
                     debugger.on_event(&event);
                 }
             },
 
-            glutin::event::Event::NewEvents(cause) => match cause {
-                glutin::event::StartCause::ResumeTimeReached { .. } => (),
-                glutin::event::StartCause::Init => (),
-                _ => return,
-            },
+            glutin::event::Event::MainEventsCleared => {
+                debugger.update(&display);
 
-            _ => {
-                return;
+                let mut frame = display.draw();
+                debugger.draw(&display, &mut frame);
+                frame.finish().unwrap();
             }
+
+            _ => {}
         }
-
-        debugger.needs_redraw(&display);
-
-        let mut frame = display.draw();
-        debugger.draw(&display, &mut frame);
-        frame.finish().unwrap();
     })
 }

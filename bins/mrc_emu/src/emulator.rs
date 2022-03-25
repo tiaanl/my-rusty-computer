@@ -1,8 +1,5 @@
 use crate::InterruptManager;
-use mrc_decoder::decode_instruction;
-use mrc_emulator::cpu::{ExecuteResult, CPU};
-use mrc_emulator::debugger::{DebuggerState, EmulatorCommand, SourceLine};
-use mrc_emulator::error::Error;
+use mrc_decoder::{decode_instruction, DecodeError};
 use mrc_emulator::{
     components::{
         cga::Cga,
@@ -14,12 +11,20 @@ use mrc_emulator::{
         ram::RandomAccessMemory,
         rom::ReadOnlyMemory,
     },
+    cpu::{ExecuteResult, CPU},
+    debugger::{DebuggerState, EmulatorCommand, SourceLine},
+    error::Error,
     segment_and_offset, Address, Bus, Port,
 };
+use mrc_instruction::Instruction;
 use mrc_instruction::Segment::CS;
-use std::convert::Infallible;
-use std::sync::mpsc::Receiver;
-use std::{cell::RefCell, rc::Rc};
+use std::sync::mpsc::{RecvError, TryRecvError};
+use std::{
+    cell::RefCell,
+    convert::Infallible,
+    rc::Rc,
+    sync::{mpsc::Receiver, Arc, Mutex},
+};
 
 pub const MEMORY_MAX: usize = 0x100000;
 pub const BIOS_SIZE: usize = 0x2000;
@@ -121,10 +126,15 @@ pub struct InputOutputBus {
 pub struct Emulator {
     cpu: CPU<DataBus, InputOutputBus>,
     pit: Rc<RefCell<ProgrammableIntervalTimer8253>>,
+    debugger_state: Arc<Mutex<DebuggerState>>,
 }
 
 impl Emulator {
-    pub fn new(bios: ReadOnlyMemory, init: impl FnOnce(&mut CPU<DataBus, InputOutputBus>)) -> Self {
+    pub fn new(
+        bios: ReadOnlyMemory,
+        debugger_state: Arc<Mutex<DebuggerState>>,
+        init: impl FnOnce(&mut CPU<DataBus, InputOutputBus>),
+    ) -> Self {
         let data_bus = DataBus::new(bios);
 
         let interrupt_manager = Rc::new(RefCell::new(InterruptManager { allow_nmi: true }));
@@ -150,76 +160,99 @@ impl Emulator {
 
         init(&mut cpu);
 
-        Self { cpu, pit }
+        Self {
+            cpu,
+            pit,
+            debugger_state,
+        }
     }
 
     pub fn run(&mut self, receiver: Receiver<EmulatorCommand>) {
         let mut running = false;
 
-        // let update_debugger = |cpu: &mut CPU<DataBus, InputOutputBus>| {
-        //     let mut debugger_state = debugger_state.lock().unwrap();
-        //     update_debugger_state(&mut debugger_state, cpu);
-        // };
+        let update_debugger = |cpu: &mut CPU<DataBus, InputOutputBus>| {
+            let mut debugger_state = self.debugger_state.lock().unwrap();
+            update_debugger_state(&mut debugger_state, cpu);
+        };
+
+        update_debugger(&mut self.cpu);
 
         loop {
-            // TODO: Update debug state.
-
             self.pit.borrow_mut().tick();
             if !matches!(self.cpu.tick(), Ok(ExecuteResult::Continue)) {
                 break;
             }
 
-            if let Ok(command) = match running {
-                true => receiver
-                    .try_recv()
-                    .or::<Infallible>(Ok(EmulatorCommand::Stop)),
-                false => receiver.recv().or(Ok(EmulatorCommand::Stop)),
-            } {
-                match command {
-                    EmulatorCommand::Run => running = true,
-                    EmulatorCommand::Stop => running = false,
-                    EmulatorCommand::Step => running = false,
-                }
-            }
+            let command = if running {
+                match receiver.try_recv() {
+                    Ok(command) => match command {
+                        EmulatorCommand::Run => running = true,
+                        EmulatorCommand::Stop => running = false,
+                        EmulatorCommand::Step => running = false,
+                    },
 
-            // TODO: Update debug state.
+                    // Ignore errors when we try to fetch from an empty queue.
+                    Err(TryRecvError::Empty) => {}
+                    Err(err) => {
+                        log::warn!("Could not receive emulator command! ({})", err);
+                        continue;
+                    }
+                }
+            } else {
+                match receiver.recv() {
+                    Ok(command) => match command {
+                        EmulatorCommand::Run => running = true,
+                        EmulatorCommand::Stop => running = false,
+                        EmulatorCommand::Step => running = false,
+                    },
+                    Err(err) => {
+                        log::warn!("Could not receive emulator command! ({})", err);
+                        continue;
+                    }
+                }
+            };
+
+            update_debugger(&mut self.cpu);
         }
     }
 }
 
-fn _update_debugger_state<D: Bus<Address>, I: Bus<Port>>(
+struct CPUIt<'cpu, D: Bus<Address>, I: Bus<Port>> {
+    cpu: &'cpu CPU<D, I>,
+    pub address: Address,
+}
+
+impl<'cpu, D: Bus<Address>, I: Bus<Port>> CPUIt<'cpu, D, I> {
+    fn new(cpu: &'cpu CPU<D, I>, address: Address) -> Self {
+        Self { cpu, address }
+    }
+}
+
+impl<'cpu, D: Bus<Address>, I: Bus<Port>> Iterator for CPUIt<'cpu, D, I> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.cpu.read_from_bus(self.address) {
+            Ok(byte) => {
+                self.address = self.address.wrapping_add(1);
+                Some(byte)
+            }
+            Err(_) => None,
+        }
+    }
+}
+
+fn update_debugger_state<D: Bus<Address>, I: Bus<Port>>(
     debugger_state: &mut DebuggerState,
     cpu: &CPU<D, I>,
 ) {
-    struct CPUIt<'cpu, D: Bus<Address>, I: Bus<Port>> {
-        cpu: &'cpu CPU<D, I>,
-        pub address: Address,
-    }
-
-    impl<'cpu, D: Bus<Address>, I: Bus<Port>> Iterator for CPUIt<'cpu, D, I> {
-        type Item = u8;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            match self.cpu.read_from_bus(self.address) {
-                Ok(byte) => {
-                    self.address = self.address.wrapping_add(1);
-                    Some(byte)
-                }
-                Err(_) => None,
-            }
-        }
-    }
-
     debugger_state.state = cpu.state;
+    debugger_state.source.resize(5, SourceLine::default());
 
     let cs = cpu.state.segment(CS);
     let ip = cpu.state.ip;
-    let mut it = CPUIt {
-        cpu,
-        address: segment_and_offset(cs, ip),
-    };
 
-    debugger_state.source.resize(10, SourceLine::default());
+    let mut it = CPUIt::new(cpu, segment_and_offset(cs, ip));
 
     for line in debugger_state.source.iter_mut() {
         let address = mrc_instruction::Address::new(cs, (it.address & !((cs as u32) << 4)) as u16);

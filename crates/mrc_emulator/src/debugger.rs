@@ -150,7 +150,7 @@ impl Debugger {
         }
     }
 
-    pub fn needs_redraw(&mut self, display: &glium::Display) {
+    pub fn update(&mut self, display: &glium::Display) -> bool {
         self.egui.run(display, |ctx| {
             let debugger_state = { self.debugger_state.lock().unwrap().clone() };
 
@@ -195,7 +195,7 @@ impl Debugger {
                     }
                 });
             });
-        });
+        })
     }
 
     pub fn draw(&mut self, display: &Display, frame: &mut Frame) {
