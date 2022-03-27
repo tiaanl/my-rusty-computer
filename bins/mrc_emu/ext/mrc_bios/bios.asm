@@ -1,5 +1,5 @@
-	BITS 16
-	ORG 0xFFFF0000
+        BITS 16
+        ORG 0xFE000
 
 boot:
 	cli
@@ -44,7 +44,7 @@ boot:
 	call	print_message
 	hlt
 
-.continue_1
+.continue_1:
 	mov	si, msg_welcome_string
 	call	print_message
 
@@ -93,9 +93,9 @@ msg_cpu_test_failed	db	"CPU test failed!",0
 msg_welcome_string	db	"Ok!",0
 
 	; pad the file so that the reset_vector starts at F000:E000
-	TIMES   0xFFF0-($-$$) DB 0xFF
+	TIMES   0x1FF0-($-$$) DB 0xFF
 
 reset_vector:  ; F000:E000
 	jmp	boot
 
-	TIMES	0x10000-($-$$) db 0xFF
+	TIMES	0x2000-($-$$) db 0xFF

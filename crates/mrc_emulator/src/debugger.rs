@@ -1,26 +1,34 @@
-use crate::cpu::{State, WordRegister::*};
-use egui::Button;
+use crate::cpu::Flags;
+use crate::{
+    cpu::{State, WordRegister::*},
+    Address,
+};
+use egui::{Button, Color32, Key, Label, Modifiers, RichText, Widget, WidgetText};
 use egui_glium;
 use egui_glium::egui_winit::winit::event::WindowEvent;
 use glium::{Display, Frame};
 use mrc_instruction::Segment;
+use std::collections::LinkedList;
 use std::sync::{
     mpsc::{SendError, Sender},
     Arc, Mutex,
 };
 use Segment::*;
 
+pub const DEBUGGER_HISTORY_SIZE: usize = 10;
+
 #[derive(Debug)]
 pub enum EmulatorCommand {
     Run,
-    Stop,
     Step,
+    Reset,
+    SetBreakpoint(Address),
 }
 
 #[derive(Clone)]
 pub struct SourceLine {
-    pub address: mrc_instruction::Address,
-    pub instruction: String,
+    address: mrc_instruction::Address,
+    instruction: String,
 }
 
 impl Default for SourceLine {
@@ -32,10 +40,37 @@ impl Default for SourceLine {
     }
 }
 
-#[derive(Clone, Default)]
+impl SourceLine {
+    pub fn new(address: mrc_instruction::Address, instruction: String) -> Self {
+        Self {
+            address,
+            instruction,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct DebuggerState {
     pub state: State,
     pub source: Vec<SourceLine>,
+    pub history: LinkedList<SourceLine>,
+    pub breakpoints: Vec<String>,
+}
+
+impl Default for DebuggerState {
+    fn default() -> Self {
+        let mut history = LinkedList::new();
+        for _ in 0..DEBUGGER_HISTORY_SIZE {
+            history.push_back(SourceLine::default());
+        }
+
+        Self {
+            state: State::default(),
+            source: vec![SourceLine::default(); 5],
+            history,
+            breakpoints: vec![],
+        }
+    }
 }
 
 pub struct Debugger {
@@ -47,7 +82,10 @@ pub struct Debugger {
 fn label(ui: &mut egui::Ui, label: String, value: String) {
     ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
         ui.heading(value);
-        ui.label(label);
+        Label::new(WidgetText::RichText(
+            RichText::new(label).color(Color32::DARK_GRAY),
+        ))
+        .ui(ui);
     });
 }
 
@@ -141,6 +179,29 @@ impl Debugger {
             );
 
             label(&mut ui[4], "IP".into(), format!("{:04X}", state.ip));
+
+            ui[5].horizontal(|ui| {
+                fn flag(ui: &mut egui::Ui, is_set: bool, label: &'static str) {
+                    egui::Label::new(WidgetText::RichText(RichText::new(label).heading().color(
+                        if is_set {
+                            Color32::LIGHT_GREEN
+                        } else {
+                            Color32::DARK_GRAY
+                        },
+                    )))
+                    .ui(ui);
+                }
+
+                flag(ui, state.flags.contains(Flags::CARRY), "C");
+                flag(ui, state.flags.contains(Flags::PARITY), "P");
+                flag(ui, state.flags.contains(Flags::AUX_CARRY), "A");
+                flag(ui, state.flags.contains(Flags::ZERO), "Z");
+                flag(ui, state.flags.contains(Flags::SIGN), "S");
+                flag(ui, state.flags.contains(Flags::TRAP), "T");
+                flag(ui, state.flags.contains(Flags::INTERRUPT), "I");
+                flag(ui, state.flags.contains(Flags::DIRECTION), "D");
+                flag(ui, state.flags.contains(Flags::OVERFLOW), "O");
+            });
         });
     }
 
@@ -161,37 +222,96 @@ impl Debugger {
 
                 ui.add_space(10.0);
 
-                for line in &debugger_state.source {
+                let source_line = |ui: &mut egui::Ui,
+                                   command_sender: &Sender<EmulatorCommand>,
+                                   line: &SourceLine,
+                                   color: Color32| {
                     ui.horizontal(|ui| {
-                        if ui.button(line.address.to_string()).clicked() {
+                        if ui
+                            .button(WidgetText::RichText(
+                                RichText::new(line.address.to_string()).monospace(),
+                            ))
+                            .clicked()
+                        {
+                            Self::send_command(
+                                command_sender,
+                                EmulatorCommand::SetBreakpoint(line.address.flat()),
+                            );
                             println!("Breakpoint: {}", line.address);
                         }
-                        ui.monospace(&line.instruction);
+
+                        Label::new(WidgetText::RichText(
+                            RichText::new(&line.instruction).color(color).monospace(),
+                        ))
+                        .ui(ui);
                     });
+
+                    ui.add_space(3.0);
+                };
+
+                for line in &debugger_state.history {
+                    source_line(ui, &self.command_sender, line, Color32::DARK_GRAY);
+                }
+
+                for (i, line) in debugger_state.source.iter().enumerate() {
+                    source_line(
+                        ui,
+                        &self.command_sender,
+                        line,
+                        if i == 0 {
+                            Color32::LIGHT_GREEN
+                        } else {
+                            Color32::LIGHT_GRAY
+                        },
+                    );
                 }
 
                 ui.add_space(10.0);
 
                 ui.horizontal(|ui| {
+                    {
+                        let mut input = ui.input_mut();
+
+                        if input.consume_key(Modifiers::NONE, Key::S) {
+                            Self::send_command(&self.command_sender, EmulatorCommand::Step);
+                        }
+
+                        if input.consume_key(Modifiers::NONE, Key::R) {
+                            Self::send_command(&self.command_sender, EmulatorCommand::Run);
+                        }
+
+                        if input.consume_key(Modifiers::NONE, Key::J) {
+                            Self::send_command(&self.command_sender, EmulatorCommand::Reset);
+                        }
+                    }
+
                     if ui
-                        .add_sized([100.0, 25.0], Button::new("Run [F5]"))
+                        .add_sized([100.0, 25.0], Button::new("Run [R]"))
                         .clicked()
                     {
                         Self::send_command(&self.command_sender, EmulatorCommand::Run);
                     }
 
                     if ui
-                        .add_sized([100.0, 25.0], Button::new("Stop [F12]"))
-                        .clicked()
-                    {
-                        Self::send_command(&self.command_sender, EmulatorCommand::Stop);
-                    }
-
-                    if ui
-                        .add_sized([100.0, 25.0], Button::new("Step [F10]"))
+                        .add_sized([100.0, 25.0], Button::new("Step [S]"))
                         .clicked()
                     {
                         Self::send_command(&self.command_sender, EmulatorCommand::Step);
+                    }
+
+                    if ui
+                        .add_sized([100.0, 25.0], Button::new("Reset [J]"))
+                        .clicked()
+                    {
+                        Self::send_command(&self.command_sender, EmulatorCommand::Reset);
+                    }
+                });
+
+                ui.add_space(10.0);
+
+                ui.vertical(|ui| {
+                    for addr in debugger_state.breakpoints {
+                        ui.monospace(addr);
                     }
                 });
             });

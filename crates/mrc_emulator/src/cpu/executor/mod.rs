@@ -145,8 +145,8 @@ mod byte {
         match operand_type {
             Operand::Direct(segment, offset, OperandSize::Byte) => {
                 // TODO: Handle segment override.
-                let ds = cpu.state.segment(*segment);
-                let address = segment_and_offset(ds, *offset);
+                let segment_value = cpu.state.segment(*segment);
+                let address = segment_and_offset(segment_value, *offset);
                 byte::bus_read(&cpu.bus, address)
             }
 
@@ -694,10 +694,12 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
         Operation::LOOP => match instruction.operands {
             OperandSet::Displacement(ref displacement) => {
-                cpu.state
-                    .set_register(CX, cpu.state.register(CX).wrapping_sub(1));
+                let cx = cpu.state.register(CX).wrapping_sub(1);
 
-                if cpu.state.register(CX).wrapping_sub(1) != 0 {
+                cpu.state
+                    .set_register(CX, cx);
+
+                if cx != 0 {
                     cpu.displace_ip(displacement)?;
                 }
             }

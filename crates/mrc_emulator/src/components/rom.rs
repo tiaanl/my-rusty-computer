@@ -20,9 +20,7 @@ impl Bus<Address> for ReadOnlyMemory {
         }
     }
 
-    fn write(&mut self, address: Address, value: u8) -> Result<()> {
-        log::warn!("Writing {:#02x} to ROM at {:05x}", value, address);
-        self.data[address as usize] = value;
-        Ok(())
+    fn write(&mut self, address: Address, _value: u8) -> Result<()> {
+        Err(Error::AddressOutOfRange(address))
     }
 }

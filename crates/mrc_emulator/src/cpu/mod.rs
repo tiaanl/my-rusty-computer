@@ -26,6 +26,12 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.state = State::default();
+        self.state.set_segment(CS, 0xF000);
+        self.state.ip = 0xFFF0;
+    }
+
     pub fn jump_to(&mut self, segment: u16, offset: u16) {
         self.state.set_segment(CS, segment);
         self.state.ip = offset;

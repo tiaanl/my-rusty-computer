@@ -13,7 +13,6 @@ use std::{
     io::Read,
     sync::{Arc, Mutex},
 };
-use structopt::StructOpt;
 
 fn load_rom(path: impl AsRef<std::path::Path>) -> std::io::Result<Vec<u8>> {
     let metadata = std::fs::metadata(&path)?;
@@ -29,7 +28,8 @@ fn load_rom(path: impl AsRef<std::path::Path>) -> std::io::Result<Vec<u8>> {
 /// Create a [ReadOnlyMemory] instance that has a fixed `size`.  If the path is valid and could
 /// be loaded from disk, then it will be mapped to the beginning of the block.
 fn create_bios(path: Option<String>) -> ReadOnlyMemory {
-    let bios = if let Some(path) = path {
+    if let Some(path) = path {
+        log::info!("Loading BIOS from: {path}");
         if let Ok(mut data) = load_rom(&path) {
             if data.len() > BIOS_SIZE {
                 log::warn!(
@@ -40,15 +40,13 @@ fn create_bios(path: Option<String>) -> ReadOnlyMemory {
                 );
             }
             data.resize(BIOS_SIZE, 0);
-            Some(ReadOnlyMemory::from_vec(data))
-        } else {
-            None
+            return ReadOnlyMemory::from_vec(data);
         }
-    } else {
-        None
-    };
+    }
 
-    bios.unwrap_or_else(|| ReadOnlyMemory::from_vec(vec![0u8; BIOS_SIZE as usize]))
+    log::info!("Using internal BIOS.");
+    let bytes = include_bytes!("../ext/mrc_bios/bios.bin");
+    ReadOnlyMemory::from_vec(Vec::from(&bytes[..]))
 }
 
 fn main() {

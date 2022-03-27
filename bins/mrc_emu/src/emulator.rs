@@ -1,5 +1,7 @@
 use crate::InterruptManager;
 use mrc_decoder::decode_instruction;
+use mrc_emulator::cpu::ExecuteResult;
+use mrc_emulator::debugger::DEBUGGER_HISTORY_SIZE;
 use mrc_emulator::{
     components::{
         cga::Cga,
@@ -11,16 +13,16 @@ use mrc_emulator::{
         ram::RandomAccessMemory,
         rom::ReadOnlyMemory,
     },
-    cpu::{ExecuteResult, CPU},
+    cpu::CPU,
     debugger::{DebuggerState, EmulatorCommand, SourceLine},
     error::Error,
     segment_and_offset, Address, Bus, Port,
 };
 use mrc_instruction::Segment::CS;
-use std::sync::mpsc::TryRecvError;
 use std::{
     cell::RefCell,
     rc::Rc,
+    sync::mpsc::TryRecvError,
     sync::{mpsc::Receiver, Arc, Mutex},
 };
 
@@ -125,6 +127,9 @@ pub struct Emulator {
     cpu: CPU<DataBus, InputOutputBus>,
     pit: Rc<RefCell<ProgrammableIntervalTimer8253>>,
     debugger_state: Arc<Mutex<DebuggerState>>,
+    breakpoints: Vec<Address>,
+
+    running: bool,
 }
 
 impl Emulator {
@@ -162,32 +167,30 @@ impl Emulator {
             cpu,
             pit,
             debugger_state,
+            breakpoints: vec![],
+            running: false,
         }
     }
 
     pub fn run(&mut self, receiver: Receiver<EmulatorCommand>) {
-        let mut running = false;
-
-        let update_debugger = |cpu: &mut CPU<DataBus, InputOutputBus>| {
-            let mut debugger_state = self.debugger_state.lock().unwrap();
-            update_debugger_state(&mut debugger_state, cpu);
-        };
-
-        update_debugger(&mut self.cpu);
+        self.update_debugger_state();
 
         loop {
-            self.pit.borrow_mut().tick();
-            if !matches!(self.cpu.tick(), Ok(ExecuteResult::Continue)) {
-                break;
+            if let Some(_) = self
+                .breakpoints
+                .iter()
+                .find(|&&a| a == segment_and_offset(self.cpu.state.segment(CS), self.cpu.state.ip))
+            {
+                self.running = false;
             }
 
-            if running {
+            if self.running {
+                self.cycle();
+            }
+
+            if self.running {
                 match receiver.try_recv() {
-                    Ok(command) => match command {
-                        EmulatorCommand::Run => running = true,
-                        EmulatorCommand::Stop => running = false,
-                        EmulatorCommand::Step => running = false,
-                    },
+                    Ok(command) => self.handle_command(command),
 
                     // Ignore errors when we try to fetch from an empty queue.
                     Err(TryRecvError::Empty) => {}
@@ -198,11 +201,7 @@ impl Emulator {
                 }
             } else {
                 match receiver.recv() {
-                    Ok(command) => match command {
-                        EmulatorCommand::Run => running = true,
-                        EmulatorCommand::Stop => running = false,
-                        EmulatorCommand::Step => running = false,
-                    },
+                    Ok(command) => self.handle_command(command),
                     Err(err) => {
                         log::warn!("Could not receive emulator command! ({})", err);
                         continue;
@@ -210,7 +209,91 @@ impl Emulator {
                 }
             };
 
-            update_debugger(&mut self.cpu);
+            if let Some(address) = self.breakpoints.iter().find(|bp| {
+                **bp == segment_and_offset(self.cpu.state.segment(CS), self.cpu.state.ip)
+            }) {
+                log::trace!("Breakpoint: {:#07X}", address);
+                self.running = false;
+            }
+        }
+    }
+
+    /// Perform a single tick of the CPU.  Typically executes a single instruction.
+    fn cycle(&mut self) {
+        self.pit.borrow_mut().tick();
+        match self.cpu.tick() {
+            Ok(ExecuteResult::Stop) => {
+                self.running = false;
+            }
+            _ => {}
+        }
+        self.update_debugger_state();
+    }
+
+    fn update_debugger_state(&mut self) {
+        if let Ok(mut debugger_state) = self.debugger_state.lock() {
+            debugger_state.state = self.cpu.state;
+
+            while debugger_state.history.len() > DEBUGGER_HISTORY_SIZE - 1 {
+                debugger_state.history.pop_front();
+            }
+
+            let mut first = None;
+            if let Some(line) = debugger_state.source.get(0) {
+                first = Some(line.clone())
+            };
+            if let Some(line) = first {
+                debugger_state.history.push_back(line);
+            }
+
+            let cs = self.cpu.state.segment(CS);
+            let ip = self.cpu.state.ip;
+
+            let mut it = CPUIt::new(&self.cpu, segment_and_offset(cs, ip));
+
+            for line in debugger_state.source.iter_mut() {
+                let address =
+                    mrc_instruction::Address::new(cs, (it.address & !((cs as u32) << 4)) as u16);
+                *line = if let Ok(instruction) = decode_instruction(&mut it) {
+                    SourceLine::new(address, format!("{}", instruction))
+                } else {
+                    SourceLine::default()
+                }
+            }
+
+            // Copy over the breakpoint data.
+            debugger_state.breakpoints = self
+                .breakpoints
+                .iter()
+                .map(|a| format!("{a:05X}"))
+                .collect();
+        }
+    }
+
+    fn handle_command(&mut self, command: EmulatorCommand) {
+        match command {
+            EmulatorCommand::Run => {
+                self.running = true;
+            }
+
+            EmulatorCommand::Step => {
+                self.pit.borrow_mut().tick();
+                let _ = self.cpu.tick();
+                self.update_debugger_state();
+
+                self.running = false;
+            }
+
+            EmulatorCommand::Reset => {
+                self.running = false;
+                self.cpu.reset();
+                *self.debugger_state.lock().unwrap() = DebuggerState::default();
+                self.update_debugger_state();
+            }
+
+            EmulatorCommand::SetBreakpoint(address) => {
+                self.breakpoints.push(address);
+            }
         }
     }
 }
@@ -236,34 +319,6 @@ impl<'cpu, D: Bus<Address>, I: Bus<Port>> Iterator for CPUIt<'cpu, D, I> {
                 Some(byte)
             }
             Err(_) => None,
-        }
-    }
-}
-
-fn update_debugger_state<D: Bus<Address>, I: Bus<Port>>(
-    debugger_state: &mut DebuggerState,
-    cpu: &CPU<D, I>,
-) {
-    debugger_state.state = cpu.state;
-    debugger_state.source.resize(5, SourceLine::default());
-
-    let cs = cpu.state.segment(CS);
-    let ip = cpu.state.ip;
-
-    let mut it = CPUIt::new(cpu, segment_and_offset(cs, ip));
-
-    for line in debugger_state.source.iter_mut() {
-        let address = mrc_instruction::Address::new(cs, (it.address & !((cs as u32) << 4)) as u16);
-        *line = if let Ok(instruction) = decode_instruction(&mut it) {
-            SourceLine {
-                address,
-                instruction: format!("{}", instruction),
-            }
-        } else {
-            SourceLine {
-                address,
-                instruction: "ERR!".to_owned(),
-            }
         }
     }
 }
