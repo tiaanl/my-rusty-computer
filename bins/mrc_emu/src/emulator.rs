@@ -257,7 +257,7 @@ impl Emulator {
                 *line = if let Ok(instruction) = decode_instruction(&mut it) {
                     SourceLine::new(address, format!("{}", instruction))
                 } else {
-                    SourceLine::default()
+                    SourceLine::new(address, format!("ERR!"))
                 }
             }
 
