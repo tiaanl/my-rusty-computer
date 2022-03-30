@@ -82,22 +82,22 @@ fn indirect_address_for<D: Bus<Address>, I: Bus<Port>>(
         AddressingMode::BxSi => {
             let bx = cpu.state.register(BX);
             let si = cpu.state.register(SI);
-            segment_and_offset(seg, bx + si)
+            segment_and_offset(seg, bx.wrapping_add(si))
         }
         AddressingMode::BxDi => {
             let bx = cpu.state.register(BX);
             let di = cpu.state.register(DI);
-            segment_and_offset(seg, bx + di)
+            segment_and_offset(seg, bx.wrapping_add(di))
         }
         AddressingMode::BpSi => {
             let bp = cpu.state.register(BP);
             let si = cpu.state.register(SI);
-            segment_and_offset(seg, bp + si)
+            segment_and_offset(seg, bp.wrapping_add(si))
         }
         AddressingMode::BpDi => {
             let bp = cpu.state.register(BP);
             let di = cpu.state.register(DI);
-            segment_and_offset(seg, bp + di)
+            segment_and_offset(seg, bp.wrapping_add(di))
         }
         AddressingMode::Si => {
             let si = cpu.state.register(DI);

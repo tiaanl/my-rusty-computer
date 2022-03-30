@@ -83,10 +83,13 @@ impl Bus<Port> for InputOutputBus {
 
             0x03B0..=0x03BF => Ok(()),
 
-            _ => panic!(
-                "Writing {:#04x} to unsupported port: {:#06X}",
-                value, address
-            ),
+            _ => {
+                // panic!(
+                //     "Writing {:#04x} to unsupported port: {:#06X}",
+                //     value, address
+                // );
+                Ok(())
+            }
         }
     }
 }
