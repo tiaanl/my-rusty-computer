@@ -51,6 +51,7 @@ impl SourceLine {
 
 #[derive(Clone)]
 pub struct DebuggerState {
+    pub status: String,
     pub state: State,
     pub source: Vec<SourceLine>,
     pub history: LinkedList<SourceLine>,
@@ -65,6 +66,7 @@ impl Default for DebuggerState {
         }
 
         Self {
+            status: "Unknown".to_owned(),
             state: State::default(),
             source: vec![SourceLine::default(); 5],
             history,
@@ -218,6 +220,8 @@ impl Debugger {
             let state = &debugger_state.state;
 
             egui::CentralPanel::default().show(ctx, |ui| {
+                ui.label(debugger_state.status);
+
                 Self::registers(ui, state);
 
                 ui.add_space(10.0);

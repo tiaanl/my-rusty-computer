@@ -6,7 +6,7 @@ mod interrupts;
 use crate::config::Config;
 use crate::emulator::BIOS_SIZE;
 use crate::interrupts::InterruptManager;
-use glium::glutin;
+use glium::{glutin, Surface};
 use mrc_emulator::components::rom::ReadOnlyMemory;
 use mrc_emulator::debugger::{Debugger, DebuggerState};
 use std::{
@@ -65,7 +65,7 @@ fn main() {
     let bios = create_bios(config.bios);
 
     let window_builder = glutin::window::WindowBuilder::new()
-        .with_resizable(false)
+        .with_resizable(true)
         .with_position(glutin::dpi::LogicalPosition::new(
             config.debugger_position[0],
             config.debugger_position[1],
@@ -81,7 +81,7 @@ fn main() {
         .with_depth_buffer(0)
         .with_srgb(true)
         .with_stencil_buffer(0)
-        .with_vsync(false);
+        .with_vsync(true);
 
     let display = glium::Display::new(window_builder, context_builder, &event_loop)
         .expect("Could not create display.");
@@ -101,9 +101,10 @@ fn main() {
 
     event_loop.run(move |event, _, control_flow| {
         // The default action for the next frame is to wait.
-        let next_frame_time =
-            std::time::Instant::now() + std::time::Duration::from_nanos(16_666_667);
-        *control_flow = glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
+        // let next_frame_time =
+        //     std::time::Instant::now() + std::time::Duration::from_nanos(16_666_667);
+        // *control_flow = glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
+        *control_flow = glutin::event_loop::ControlFlow::Poll;
 
         match event {
             glutin::event::Event::WindowEvent { event, .. } => match event {
@@ -119,6 +120,7 @@ fn main() {
                 debugger.update(&display);
 
                 let mut frame = display.draw();
+                frame.clear_color(0.0, 0.0, 0.0, 1.0);
                 debugger.draw(&display, &mut frame);
                 frame.finish().unwrap();
             }

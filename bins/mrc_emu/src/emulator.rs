@@ -45,6 +45,38 @@ impl DataBus {
     }
 }
 
+impl Bus<Address> for DataBus {
+    fn read(&self, address: Address) -> mrc_emulator::error::Result<u8> {
+        if address >= BIOS_START {
+            self.bios.read(address - BIOS_START)
+        } else if address < 0xA0000 {
+            self.ram.read(address)
+        } else {
+            Err(Error::AddressOutOfRange(address))
+        }
+    }
+
+    fn write(&mut self, address: Address, value: u8) -> mrc_emulator::error::Result<()> {
+        if address >= BIOS_START {
+            self.bios.write(address - BIOS_START, value)
+        } else if address < 0xA0000 {
+            self.ram.write(address, value)
+        } else {
+            Err(Error::AddressOutOfRange(address))
+        }
+    }
+}
+
+pub struct InputOutputBus {
+    interrupt_manager: Rc<RefCell<InterruptManager>>,
+
+    dma: DirectMemoryAccessController,
+    cga: Cga,
+    pic: ProgrammableInterruptController,
+    pit: Rc<RefCell<ProgrammableIntervalTimer8253>>,
+    ppi: ProgrammablePeripheralInterface<Latch, Keyboard, Latch>,
+}
+
 impl Bus<Port> for InputOutputBus {
     fn read(&self, address: Port) -> mrc_emulator::error::Result<u8> {
         match address {
@@ -94,36 +126,10 @@ impl Bus<Port> for InputOutputBus {
     }
 }
 
-impl Bus<Address> for DataBus {
-    fn read(&self, address: Address) -> mrc_emulator::error::Result<u8> {
-        if address >= BIOS_START {
-            self.bios.read(address - BIOS_START)
-        } else if address < 0xA0000 {
-            self.ram.read(address)
-        } else {
-            Err(Error::AddressOutOfRange(address))
-        }
-    }
-
-    fn write(&mut self, address: Address, value: u8) -> mrc_emulator::error::Result<()> {
-        if address >= BIOS_START {
-            self.bios.write(address - BIOS_START, value)
-        } else if address < 0xA0000 {
-            self.ram.write(address, value)
-        } else {
-            Err(Error::AddressOutOfRange(address))
-        }
-    }
-}
-
-pub struct InputOutputBus {
-    interrupt_manager: Rc<RefCell<InterruptManager>>,
-
-    dma: DirectMemoryAccessController,
-    cga: Cga,
-    pic: ProgrammableInterruptController,
-    pit: Rc<RefCell<ProgrammableIntervalTimer8253>>,
-    ppi: ProgrammablePeripheralInterface<Latch, Keyboard, Latch>,
+#[derive(Debug)]
+pub enum EmulatorStatus {
+    Running,
+    Paused,
 }
 
 pub struct Emulator {
@@ -132,7 +138,7 @@ pub struct Emulator {
     debugger_state: Arc<Mutex<DebuggerState>>,
     breakpoints: Vec<Address>,
 
-    running: bool,
+    status: EmulatorStatus,
 }
 
 impl Emulator {
@@ -171,7 +177,7 @@ impl Emulator {
             pit,
             debugger_state,
             breakpoints: vec![],
-            running: false,
+            status: EmulatorStatus::Paused,
         }
     }
 
@@ -184,15 +190,15 @@ impl Emulator {
                 .iter()
                 .find(|&&a| a == segment_and_offset(self.cpu.state.segment(CS), self.cpu.state.ip))
             {
-                self.running = false;
+                self.status = EmulatorStatus::Paused;
             }
 
-            if self.running {
+            if matches!(self.status, EmulatorStatus::Running) {
                 self.cycle();
             }
 
-            if self.running {
-                match receiver.try_recv() {
+            match self.status {
+                EmulatorStatus::Running => match receiver.try_recv() {
                     Ok(command) => self.handle_command(command),
 
                     // Ignore errors when we try to fetch from an empty queue.
@@ -201,22 +207,22 @@ impl Emulator {
                         log::warn!("Could not receive emulator command! ({})", err);
                         continue;
                     }
-                }
-            } else {
-                match receiver.recv() {
+                },
+
+                EmulatorStatus::Paused => match receiver.recv() {
                     Ok(command) => self.handle_command(command),
                     Err(err) => {
                         log::warn!("Could not receive emulator command! ({})", err);
                         continue;
                     }
-                }
+                },
             };
 
             if let Some(address) = self.breakpoints.iter().find(|bp| {
                 **bp == segment_and_offset(self.cpu.state.segment(CS), self.cpu.state.ip)
             }) {
                 log::trace!("Breakpoint: {:#07X}", address);
-                self.running = false;
+                self.status = EmulatorStatus::Paused;
             }
         }
     }
@@ -226,7 +232,7 @@ impl Emulator {
         self.pit.borrow_mut().tick();
         match self.cpu.tick() {
             Ok(ExecuteResult::Stop) => {
-                self.running = false;
+                self.status = EmulatorStatus::Paused;
             }
             _ => {}
         }
@@ -235,6 +241,7 @@ impl Emulator {
 
     fn update_debugger_state(&mut self) {
         if let Ok(mut debugger_state) = self.debugger_state.lock() {
+            debugger_state.status = format!("{:?}", self.status);
             debugger_state.state = self.cpu.state;
 
             while debugger_state.history.len() > DEBUGGER_HISTORY_SIZE - 1 {
@@ -276,7 +283,7 @@ impl Emulator {
     fn handle_command(&mut self, command: EmulatorCommand) {
         match command {
             EmulatorCommand::Run => {
-                self.running = true;
+                self.status = EmulatorStatus::Running;
             }
 
             EmulatorCommand::Step => {
@@ -284,11 +291,11 @@ impl Emulator {
                 let _ = self.cpu.tick();
                 self.update_debugger_state();
 
-                self.running = false;
+                self.status = EmulatorStatus::Paused;
             }
 
             EmulatorCommand::Reset => {
-                self.running = false;
+                self.status = EmulatorStatus::Paused;
                 self.cpu.reset();
                 *self.debugger_state.lock().unwrap() = DebuggerState::default();
                 self.update_debugger_state();
