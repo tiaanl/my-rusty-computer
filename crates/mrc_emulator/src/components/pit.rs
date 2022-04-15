@@ -17,6 +17,8 @@ use crate::{
 };
 use std::cell::RefCell;
 
+const COUNTER_COUNT: u8 = 3;
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ReadWrite {
     Latch,
@@ -81,7 +83,7 @@ struct ControlRegister {
 #[cfg(test)]
 impl ControlRegister {
     fn new(select_counter: u8, read_write: ReadWrite, mode: u8, bcd: bool) -> Self {
-        debug_assert!(select_counter < 3);
+        debug_assert!(select_counter < COUNTER_COUNT);
         debug_assert!(mode < 6);
         Self {
             select_counter,
@@ -155,9 +157,18 @@ impl Default for Counter {
     }
 }
 
+impl Counter {
+    fn tick(&mut self) {
+        self.count = self.count.wrapping_sub(1);
+        if self.count == 0 && self.mode == 0 {
+            println!("TRIGGERING INTERRUPT 0");
+        }
+    }
+}
+
 #[derive(Default)]
 struct Inner {
-    counters: [Counter; 3],
+    counters: [Counter; COUNTER_COUNT as usize],
 }
 
 #[derive(Default)]
@@ -167,9 +178,11 @@ pub struct ProgrammableIntervalTimer8253 {
 
 impl ProgrammableIntervalTimer8253 {
     pub fn tick(&mut self) {
-        self.inner.borrow_mut().counters.iter_mut().for_each(|c| {
-            c.count = c.count.wrapping_sub(1);
-        });
+        self.inner
+            .borrow_mut()
+            .counters
+            .iter_mut()
+            .for_each(Counter::tick);
     }
 }
 
@@ -177,7 +190,7 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
     fn read(&self, port: u16) -> Result<u8> {
         let counter = port & 0b11;
 
-        if counter == 4 {
+        if counter == 0b11 {
             return Err(Error::Unspecified("Only the 3 counters can be read from."));
         }
 
@@ -204,16 +217,16 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
     }
 
     fn write(&mut self, port: u16, value: u8) -> Result<()> {
-        log::info!("Writing to timer port: {:#06X} <= {:#04X}", port, value);
+        // log::info!("Writing to timer port: {:#06X} <= {:#04X}", port, value);
 
         let counter = port & 0b11;
 
         if counter == 0x03 {
+            // Writing to the Mode/Command register.
             let control_register = ControlRegister::try_from(value)?;
+            debug_assert!(control_register.select_counter < COUNTER_COUNT);
             let counter =
                 &mut self.inner.borrow_mut().counters[control_register.select_counter as usize];
-
-            log::info!("Control register: {:?}", control_register);
 
             if matches!(control_register.read_write, ReadWrite::Latch) {
                 let latched_count = counter.count;
@@ -258,7 +271,7 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
                 }
             }
 
-            log::info!("Set counter {} to {:?}", port & 0b11, counter,);
+            log::info!("Set counter {} to {:?}", port & 0b11, counter);
         }
 
         Ok(())

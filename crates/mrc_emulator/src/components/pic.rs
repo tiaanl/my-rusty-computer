@@ -46,31 +46,15 @@ impl ProgrammableInterruptController {
     }
 
     fn write_high(&mut self, value: u8) -> Result<()> {
-        log::info!("Writing to PIC high port: {:#04X}", value);
-
         if self.icw2_expected {
             self.write_icw2(value)?;
         } else if self.icw4_expected {
             self.write_icw4(value)?;
+        } else {
+            // We have all the ICW's, so this must be an OCW1 write.
+            log::info!("Setting interrupt mask register to: {:08b}", value);
+            self.interrupt_mask_register = value;
         }
-
-        // if self._icw_current < 4 {
-        //     self._icw[self._icw_current as usize] = value;
-        //     self._icw_current += 1;
-        //     if self._icw_current == 2 && (self._icw[0] & 0x02 != 0) {
-        //         self._icw_current += 1;
-        //     }
-        //     if self._icw_current == 3 && (self._icw[0] & 0x01) == 0 {
-        //         self._icw_current += 1;
-        //     }
-        // } else {
-        //     // We have all the ICW's, so this must be an OCW1 write.
-        //     self.interrupt_mask_register = value;
-        //
-        //     // TODO: Delay the cpu interrupts here?
-        //
-        //     //self.check_irr();
-        // }
 
         Ok(())
     }
@@ -125,10 +109,16 @@ impl ProgrammableInterruptController {
     }
 
     fn write_icw2(&mut self, value: u8) -> Result<()> {
+        debug_assert!(
+            self.icw2_expected,
+            "ICW2 with value {:#04X} not expected to be written!",
+            value
+        );
+
         log::info!("ICW2 received");
 
         // If bit 0, 1 and 2 are set to 0, then we are in 8086/8088 mode and can process icw2.
-        if value & 0x07 == 0 && self.icw2_expected {
+        if value & 0x07 == 0 {
             // TODO update isr base
             self.icw2_expected = false;
         }
@@ -137,6 +127,12 @@ impl ProgrammableInterruptController {
     }
 
     fn write_icw4(&mut self, value: u8) -> Result<()> {
+        debug_assert!(
+            self.icw4_expected,
+            "ICW4 with value {:#04X} not expected to be written!",
+            value
+        );
+
         log::info!(
             "ICW4: {} | {}",
             if value & 0x01 != 0 {

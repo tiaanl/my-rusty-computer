@@ -185,11 +185,37 @@ impl Emulator {
         self.update_debugger_state();
 
         loop {
-            if let Some(_) = self
-                .breakpoints
-                .iter()
-                .find(|&&a| a == segment_and_offset(self.cpu.state.segment(CS), self.cpu.state.ip))
-            {
+            let so = segment_and_offset(self.cpu.state.segment(CS), self.cpu.state.ip);
+
+            if let Some(_) = self.breakpoints.iter().find(|&&a| a == so) {
+                self.status = EmulatorStatus::Paused;
+            }
+
+            const TEST_07: u32 = 0xfe285;
+
+            const CHECKPOINTS: [(u32, &'static str); 15] = [
+                (0xfe05b, "test_01"),
+                (0xfe0b0, "test_02"),
+                (0xfe0da, "test_03"),
+                (0xfe158, "test_04"),
+                (0xfe33b, "test_05"),
+                (0xfe235, "test_06"),
+                (TEST_07, "test_07"),
+                (0xfe352, "test_08"),
+                (0xfe3af, "test_09"),
+                (0xfe3c0, "test_10"),
+                (0xfe3f8, "test_11"),
+                (0xfe4c7, "test_12"),
+                (0xfe51e, "test_13"),
+                (0xfe55c, "test_14"),
+                (0xfe630, "INITIAL RELIABILITY TEST -- SUBROUTINES"),
+            ];
+            if let Some((addr, label)) = CHECKPOINTS.iter().find(|(addr, _)| *addr == so) {
+                println!("CHECKPOINT REACHED: {:#06X} = {}", addr, label);
+            }
+
+            if so == TEST_07 {
+                println!("BREAK!");
                 self.status = EmulatorStatus::Paused;
             }
 
