@@ -1,6 +1,3 @@
-        BITS    16
-        ORG     0x100
-
 start:
         mov     ax, cs
         mov     ds, ax

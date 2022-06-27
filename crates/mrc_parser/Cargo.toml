@@ -1,9 +1,7 @@
 [package]
-name = "mrc_assembler"
-version = "0.0.1"
+name = "mrc_parser"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 mrc_instruction = { path = "../mrc_instruction" }
-nom = "7.1"
-nom_locate = "4.0"

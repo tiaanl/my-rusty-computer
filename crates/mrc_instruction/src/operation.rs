@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Operation {
     // Data transfer
     MOV,   // Move
@@ -226,7 +226,7 @@ impl std::fmt::Display for Operation {
 }
 
 impl std::str::FromStr for Operation {
-    type Err = String;
+    type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use Operation::*;
@@ -343,7 +343,7 @@ impl std::str::FromStr for Operation {
             "xchg" => XCHG,
             "xlat" => XLAT,
             "xor" => XOR,
-            _ => return Err(s.to_string()),
+            _ => return Err(()),
         })
     }
 }
