@@ -29,26 +29,17 @@ impl Address {
     }
 
     /// Displace the offset within the same segment.
-    pub fn displace(&self, displacement: Displacement) -> Self {
-        let displacement = match displacement {
-            Displacement::None => 0,
-            Displacement::Byte(displacement) => displacement.into(),
-            Displacement::Word(displacement) => displacement,
-        };
-
-        let offset = if displacement < 0 {
-            if let Some(neg) = displacement.checked_neg() {
-                self.offset.wrapping_sub(neg as u16)
-            } else {
-                self.offset.wrapping_sub(128)
-            }
-        } else {
-            self.offset.wrapping_add(displacement as u16)
-        };
-
-        Self {
-            segment: self.segment,
-            offset,
+    pub fn displace(&self, displacement: &Displacement) -> Self {
+        match displacement {
+            Displacement::None => self.clone(),
+            Displacement::Byte(d) => Self {
+                segment: self.segment,
+                offset: self.offset.wrapping_add(*d as i16 as u16),
+            },
+            Displacement::Word(d) => Self {
+                segment: self.segment,
+                offset: self.offset.wrapping_add(*d as u16),
+            },
         }
     }
 }
@@ -78,5 +69,31 @@ mod tests {
     fn flat() {
         let a = Address::new(0x1000, 0x0010);
         assert_eq!(a.flat(), 0x10010);
+    }
+
+    macro_rules! assert_displacement {
+        ($initial_seg:expr, $initial:expr, $displacement:expr, $expected_seg:expr, $expected:expr) => {{
+            assert_eq!(
+                Address::new($initial_seg, $initial).displace(&Displacement::Byte($displacement)),
+                Address::new($expected_seg, $expected),
+            );
+            assert_eq!(
+                Address::new($initial_seg, $initial).displace(&Displacement::Word($displacement)),
+                Address::new($expected_seg, $expected),
+            );
+        }};
+    }
+
+    #[test]
+    fn displace() {
+        // No wrapping.
+        assert_displacement!(0x0000, 0x0010, 10, 0x0000, 0x001A);
+        assert_displacement!(0x0000, 0xFFFE, -10, 0x0000, 0xFFF4);
+
+        // Wrapping add.
+        assert_displacement!(0x0000, 0xFFFE, 10, 0x0000, 0x0008);
+
+        // Wrapping subtract.
+        assert_displacement!(0x0000, 0x0008, -10, 0x0000, 0xFFFE);
     }
 }
