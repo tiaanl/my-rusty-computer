@@ -263,17 +263,17 @@ fn main() {
         // OperandSet::SegmentAndOffset
         test_instruction(Instruction::new(
             *operation,
-            OperandSet::SegmentAndOffset(Address::new(0, 0)),
+            OperandSet::Destination(Operand::SegmentAndOffset(Address::new(0, 0))),
         ));
 
         // OperandSet::Displacement
         test_instruction(Instruction::new(
             *operation,
-            OperandSet::Displacement(Displacement::Byte(-1)),
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-1))),
         ));
         test_instruction(Instruction::new(
             *operation,
-            OperandSet::Displacement(Displacement::Word(-1)),
+            OperandSet::Destination(Operand::Displacement(Displacement::Word(-1))),
         ));
 
         // OperandSet::Destination

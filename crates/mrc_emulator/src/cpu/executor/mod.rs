@@ -373,7 +373,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
     match instruction.operation {
         Operation::CALL => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 // Store the current IP (which is after this CALL) on the stack. So that RET
                 // can pop it.
                 cpu.push(cpu.state.ip)?;
@@ -512,7 +512,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JB => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::CARRY) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -521,7 +521,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JBE => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::CARRY | Flags::ZERO) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -530,7 +530,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JCXZ => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.register(CX) == 0 {
                     cpu.displace_ip(displacement)?;
                 }
@@ -539,7 +539,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JE => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::ZERO) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -548,7 +548,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JL => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::SIGN)
                     != cpu.state.flags.contains(Flags::OVERFLOW)
                 {
@@ -559,7 +559,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JNL => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::SIGN)
                     == cpu.state.flags.contains(Flags::OVERFLOW)
                 {
@@ -570,7 +570,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JLE => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::ZERO)
                     || cpu.state.flags.contains(Flags::SIGN)
                         != cpu.state.flags.contains(Flags::OVERFLOW)
@@ -582,10 +582,13 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JMP => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 cpu.displace_ip(displacement)?;
             }
-            OperandSet::SegmentAndOffset(mrc_instruction::Address { segment, offset }) => {
+            OperandSet::Destination(Operand::SegmentAndOffset(mrc_instruction::Address {
+                segment,
+                offset,
+            })) => {
                 cpu.state.set_segment(CS, *segment);
                 cpu.state.ip = *offset;
             }
@@ -593,7 +596,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JNB => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if !cpu.state.flags.contains(Flags::CARRY) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -602,7 +605,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JNBE => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if !cpu.state.flags.contains(Flags::CARRY) && !cpu.state.flags.contains(Flags::ZERO)
                 {
                     cpu.displace_ip(displacement)?;
@@ -612,7 +615,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JNE => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if !cpu.state.flags.contains(Flags::ZERO) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -621,7 +624,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JNO => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if !cpu.state.flags.contains(Flags::OVERFLOW) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -630,7 +633,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JNP => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if !cpu.state.flags.contains(Flags::PARITY) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -639,7 +642,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JNS => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if !cpu.state.flags.contains(Flags::SIGN) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -648,7 +651,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JO => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::OVERFLOW) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -657,7 +660,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JP => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::PARITY) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -666,7 +669,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::JS => match &instruction.operands {
-            OperandSet::Displacement(displacement) => {
+            OperandSet::Destination(Operand::Displacement(displacement)) => {
                 if cpu.state.flags.contains(Flags::SIGN) {
                     cpu.displace_ip(displacement)?;
                 }
@@ -693,11 +696,10 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         },
 
         Operation::LOOP => match instruction.operands {
-            OperandSet::Displacement(ref displacement) => {
+            OperandSet::Destination(Operand::Displacement(ref displacement)) => {
                 let cx = cpu.state.register(CX).wrapping_sub(1);
 
-                cpu.state
-                    .set_register(CX, cx);
+                cpu.state.set_register(CX, cx);
 
                 if cx != 0 {
                     cpu.displace_ip(displacement)?;

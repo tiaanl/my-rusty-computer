@@ -177,7 +177,7 @@ mod test {
 
     #[test]
     fn test_init() {
-        pretty_env_logger::init();
+        // pretty_env_logger::init();
 
         let mut pic = ProgrammableInterruptController::default();
 

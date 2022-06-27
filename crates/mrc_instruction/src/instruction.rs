@@ -1,4 +1,4 @@
-use crate::{Address, Displacement, Operand, Operation};
+use crate::{Operand, Operation};
 use std::fmt::Display;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -6,22 +6,16 @@ pub enum OperandSet {
     None,
     Destination(Operand),
     DestinationAndSource(Operand, Operand),
-    Displacement(Displacement),
-    SegmentAndOffset(Address),
 }
 
 impl Display for OperandSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OperandSet::None => Ok(()),
-            OperandSet::Destination(destination) => write!(f, "{}", destination),
+            OperandSet::Destination(destination) => destination.fmt(f),
             OperandSet::DestinationAndSource(destination, source) => {
                 write!(f, "{}, {}", destination, source)
             }
-            OperandSet::SegmentAndOffset(address) => {
-                write!(f, "{}", address)
-            }
-            OperandSet::Displacement(displacement) => write!(f, "{}", displacement),
         }
     }
 }
@@ -96,7 +90,7 @@ impl Display for Instruction {
                     Repeat::Equal => write!(f, "rep "),
                     Repeat::NotEqual => write!(f, "repz "),
                 }?;
-                write!(f, "{}", self.operation)
+                self.operation.fmt(f)
             }
         }
     }

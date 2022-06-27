@@ -1784,7 +1784,7 @@ fn test_70() {
         [0x70, 0x71, 0x48, 0xAE, 0xB3, 0xAB],
         Instruction::new(
             Operation::JO,
-            OperandSet::Displacement(Displacement::Byte(0x71))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x71)))
         )
     );
 }
@@ -1795,7 +1795,7 @@ fn test_71() {
         [0x71, 0xB7, 0x1D, 0xAC, 0xBC, 0x73],
         Instruction::new(
             Operation::JNO,
-            OperandSet::Displacement(Displacement::Byte(-0x49))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x49)))
         )
     );
 }
@@ -1806,7 +1806,7 @@ fn test_72() {
         [0x72, 0x56, 0x3F, 0x26, 0xBD, 0x03],
         Instruction::new(
             Operation::JB,
-            OperandSet::Displacement(Displacement::Byte(0x56))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x56)))
         )
     );
 }
@@ -1817,7 +1817,7 @@ fn test_73() {
         [0x73, 0x08, 0x4E, 0x74, 0x6C, 0x77],
         Instruction::new(
             Operation::JNB,
-            OperandSet::Displacement(Displacement::Byte(0x08))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x08)))
         )
     );
 }
@@ -1828,7 +1828,7 @@ fn test_74() {
         [0x74, 0x99, 0xDB, 0xCB, 0x45, 0x22],
         Instruction::new(
             Operation::JE,
-            OperandSet::Displacement(Displacement::Byte(-0x67))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x67)))
         )
     );
 }
@@ -1839,7 +1839,7 @@ fn test_75() {
         [0x75, 0x55, 0x87, 0xFD, 0x1C, 0xDE],
         Instruction::new(
             Operation::JNE,
-            OperandSet::Displacement(Displacement::Byte(0x55))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x55)))
         )
     );
 }
@@ -1850,7 +1850,7 @@ fn test_76() {
         [0x76, 0x9F, 0xA9, 0x37, 0x99, 0x10],
         Instruction::new(
             Operation::JBE,
-            OperandSet::Displacement(Displacement::Byte(-0x61))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x61)))
         )
     );
 }
@@ -1861,7 +1861,7 @@ fn test_77() {
         [0x77, 0xAF, 0x90, 0x5E, 0xD1, 0x33],
         Instruction::new(
             Operation::JNBE,
-            OperandSet::Displacement(Displacement::Byte(-0x51))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x51)))
         )
     );
 }
@@ -1872,7 +1872,7 @@ fn test_78() {
         [0x78, 0x99, 0x7C, 0x0D, 0x5C, 0x0E],
         Instruction::new(
             Operation::JS,
-            OperandSet::Displacement(Displacement::Byte(-0x67))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x67)))
         )
     );
 }
@@ -1883,7 +1883,7 @@ fn test_79() {
         [0x79, 0x38, 0x60, 0xBD, 0x6B, 0x09],
         Instruction::new(
             Operation::JNS,
-            OperandSet::Displacement(Displacement::Byte(0x38))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x38)))
         )
     );
 }
@@ -1894,7 +1894,7 @@ fn test_7a() {
         [0x7A, 0x0A, 0xC2, 0x33, 0x7B, 0x23],
         Instruction::new(
             Operation::JP,
-            OperandSet::Displacement(Displacement::Byte(0x0A))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x0A)))
         )
     );
 }
@@ -1905,7 +1905,7 @@ fn test_7b() {
         [0x7B, 0xC3, 0xB9, 0x28, 0xF5, 0x64],
         Instruction::new(
             Operation::JNP,
-            OperandSet::Displacement(Displacement::Byte(-0x3D))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x3D)))
         )
     );
 }
@@ -1916,7 +1916,7 @@ fn test_7c() {
         [0x7C, 0x2E, 0xCB, 0x5A, 0x0A, 0x32],
         Instruction::new(
             Operation::JL,
-            OperandSet::Displacement(Displacement::Byte(0x2E))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x2E)))
         )
     );
 }
@@ -1927,7 +1927,7 @@ fn test_7d() {
         [0x7D, 0xB9, 0x3C, 0x7A, 0x28, 0xE6],
         Instruction::new(
             Operation::JNL,
-            OperandSet::Displacement(Displacement::Byte(-0x47))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x47)))
         )
     );
 }
@@ -1938,7 +1938,7 @@ fn test_7e() {
         [0x7E, 0x82, 0x6D, 0xFE, 0x49, 0x00],
         Instruction::new(
             Operation::JLE,
-            OperandSet::Displacement(Displacement::Byte(-0x7E))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x7E)))
         )
     );
 }
@@ -1949,7 +1949,7 @@ fn test_7f() {
         [0x7F, 0xFA, 0x30, 0x70, 0xB8, 0x34],
         Instruction::new(
             Operation::JNLE,
-            OperandSet::Displacement(Displacement::Byte(-0x06))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x06)))
         )
     );
 }
@@ -2448,7 +2448,7 @@ fn test_9a() {
         [0x9A, 0x50, 0xDC, 0xD8, 0xA4, 0x10], // CALLF      b000:29d0
         Instruction::new(
             Operation::CALL,
-            OperandSet::SegmentAndOffset(Address::new(0xA4D8, 0xDC50))
+            OperandSet::Destination(Operand::SegmentAndOffset(Address::new(0xA4D8, 0xDC50)))
         )
     );
 }
@@ -2991,7 +2991,7 @@ fn test_c2() {
         [0xC2, 0x0F, 0xC7, 0x19, 0x12, 0xFC], // RET        0xc70f
         Instruction::new(
             Operation::RET,
-            OperandSet::Displacement(Displacement::Word(-0x38F1))
+            OperandSet::Destination(Operand::Displacement(Displacement::Word(-0x38F1)))
         )
     );
 }
@@ -3348,7 +3348,7 @@ fn test_e0() {
         [0xE0, 0x0B, 0xD9, 0xC2, 0x3F, 0x84], // LOOPNZ     LAB_0000_08d1
         Instruction::new(
             Operation::LOOPNE,
-            OperandSet::Displacement(Displacement::Byte(0x0B))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x0B)))
         )
     );
 }
@@ -3359,7 +3359,7 @@ fn test_e1() {
         [0xE1, 0xCB, 0x51, 0x61, 0x17, 0x3F], // LOOPZ      LAB_0000_089b
         Instruction::new(
             Operation::LOOPE,
-            OperandSet::Displacement(Displacement::Byte(-0x35))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x35)))
         )
     );
 }
@@ -3370,7 +3370,7 @@ fn test_e2() {
         [0xE2, 0x7F, 0x78, 0xC9, 0xEB, 0x5E], // LOOP       LAB_0000_0959
         Instruction::new(
             Operation::LOOP,
-            OperandSet::Displacement(Displacement::Byte(0x7F))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x7F)))
         )
     );
 }
@@ -3381,7 +3381,7 @@ fn test_e3() {
         [0xE3, 0xBA, 0x46, 0x18, 0x67, 0xE6], // JCXZ       LAB_0000_089e
         Instruction::new(
             Operation::JCXZ,
-            OperandSet::Displacement(Displacement::Byte(-0x46))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x46)))
         )
     );
 }
@@ -3460,7 +3460,7 @@ fn test_e8() {
         [0xE8, 0xF6, 0x79, 0x84, 0x52, 0x0D], // CALL       SUB_0000_830d
         Instruction::new(
             Operation::CALL,
-            OperandSet::Displacement(Displacement::Word(0x79F6))
+            OperandSet::Destination(Operand::Displacement(Displacement::Word(0x79F6)))
         )
     );
 }
@@ -3471,7 +3471,7 @@ fn test_e9() {
         [0xE9, 0x43, 0x51, 0xFB, 0xE1, 0x6D], // JMP        LAB_0000_5a64
         Instruction::new(
             Operation::JMP,
-            OperandSet::Displacement(Displacement::Word(0x5143))
+            OperandSet::Destination(Operand::Displacement(Displacement::Word(0x5143)))
         )
     );
 }
@@ -3482,7 +3482,7 @@ fn test_ea() {
         [0xEA, 0x78, 0xEB, 0x22, 0x1A, 0x7D], // JMPF       LAB_2000_8d98
         Instruction::new(
             Operation::JMP,
-            OperandSet::SegmentAndOffset(Address::new(0x1A22, 0xEB78))
+            OperandSet::Destination(Operand::SegmentAndOffset(Address::new(0x1A22, 0xEB78)))
         )
     );
 }
@@ -3493,7 +3493,7 @@ fn test_eb() {
         [0xEB, 0x5B, 0x6F, 0x21, 0x86, 0x92], // JMP        LAB_0000_098f
         Instruction::new(
             Operation::JMP,
-            OperandSet::Displacement(Displacement::Byte(0x5B))
+            OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x5B)))
         )
     );
 }

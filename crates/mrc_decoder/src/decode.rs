@@ -168,82 +168,114 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0x70 => Ok(Instruction::new(
             Operation::JO,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x71 => Ok(Instruction::new(
             Operation::JNO,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x72 => Ok(Instruction::new(
             Operation::JB,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x73 => Ok(Instruction::new(
             Operation::JNB,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x74 => Ok(Instruction::new(
             Operation::JE,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x75 => Ok(Instruction::new(
             Operation::JNE,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x76 => Ok(Instruction::new(
             Operation::JBE,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x77 => Ok(Instruction::new(
             Operation::JNBE,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x78 => Ok(Instruction::new(
             Operation::JS,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x79 => Ok(Instruction::new(
             Operation::JNS,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x7A => Ok(Instruction::new(
             Operation::JP,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x7B => Ok(Instruction::new(
             Operation::JNP,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x7C => Ok(Instruction::new(
             Operation::JL,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x7D => Ok(Instruction::new(
             Operation::JNL,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x7E => Ok(Instruction::new(
             Operation::JLE,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x7F => Ok(Instruction::new(
             Operation::JNLE,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0x80..=0x82 => immediate_to_register_or_memory(
@@ -327,7 +359,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
             let segment = it.read_u16()?;
             Ok(Instruction::new(
                 Operation::CALL,
-                OperandSet::SegmentAndOffset(Address::new(segment, offset)),
+                OperandSet::Destination(Operand::SegmentAndOffset(Address::new(segment, offset))),
             ))
         }
 
@@ -416,7 +448,9 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0xC2 => Ok(Instruction::new(
             Operation::RET,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Word)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Word)?,
+            )),
         )),
 
         0xC3 => Ok(Instruction::new(Operation::RET, OperandSet::None)),
@@ -499,22 +533,30 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0xE0 => Ok(Instruction::new(
             Operation::LOOPNE,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0xE1 => Ok(Instruction::new(
             Operation::LOOPE,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0xE2 => Ok(Instruction::new(
             Operation::LOOP,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0xE3 => Ok(Instruction::new(
             Operation::JCXZ,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0xE4 | 0xE5 => {
@@ -543,12 +585,16 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0xE8 => Ok(Instruction::new(
             Operation::CALL,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Word)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Word)?,
+            )),
         )),
 
         0xE9 => Ok(Instruction::new(
             Operation::JMP,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Word)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Word)?,
+            )),
         )),
 
         0xEA => {
@@ -558,13 +604,15 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
             Ok(Instruction::new(
                 Operation::JMP,
-                OperandSet::SegmentAndOffset(Address::new(segment, offset)),
+                OperandSet::Destination(Operand::SegmentAndOffset(Address::new(segment, offset))),
             ))
         }
 
         0xEB => Ok(Instruction::new(
             Operation::JMP,
-            OperandSet::Displacement(it.read_displacement(OperandSize::Byte)?),
+            OperandSet::Destination(Operand::Displacement(
+                it.read_displacement(OperandSize::Byte)?,
+            )),
         )),
 
         0xEC | 0xED => {

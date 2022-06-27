@@ -10,7 +10,8 @@ pub use mrrm::{ModRegRM, RegisterOrMemory};
 
 use crate::traits::TryFromEncoding;
 use mrc_instruction::{
-    Address, Displacement, Instruction, OperandSet, RegisterEncoding, RelativeToAddress, Segment,
+    Address, Displacement, Instruction, Operand, OperandSet, RegisterEncoding, RelativeToAddress,
+    Segment,
 };
 use std::fmt::{Display, Formatter};
 
@@ -89,7 +90,7 @@ impl<'a> Display for DecodedInstruction<'a> {
         }
 
         match self.instruction.operands {
-            OperandSet::Displacement(displacement) => match displacement {
+            OperandSet::Destination(Operand::Displacement(displacement)) => match displacement {
                 Displacement::None => {
                     write!(f, "{}", (self.size as u32).relative_to(&self.address))
                 }
