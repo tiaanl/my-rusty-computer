@@ -2,7 +2,7 @@
 //! microprocessor (and friends).
 
 mod address;
-mod db;
+pub mod db;
 mod instruction;
 mod operand;
 mod operation;

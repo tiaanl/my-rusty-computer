@@ -1,5 +1,8 @@
+#![allow(dead_code)]
+
 use crate::Operation;
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum OperandEncoding {
     None,
 
@@ -18,10 +21,17 @@ pub enum OperandEncoding {
     Mem16,
 }
 
+#[derive(Debug)]
 pub struct InstructionData {
-    operation: Operation,
-    destination: OperandEncoding,
-    source: OperandEncoding,
+    pub operation: Operation,
+    pub destination: OperandEncoding,
+    pub source: OperandEncoding,
+}
+
+#[derive(Debug)]
+pub enum Code {
+    Byte(u8),
+    ImmediateByte,
 }
 
 mod private {
@@ -63,6 +73,8 @@ mod private {
         id!(MOV, Mem16, Imm16, &[]), // [mi: o16  c7   /0 iw ]
         id!(MOV, Mem8,  Imm8,  &[]), // [mi: c6   /0   ib ]
         id!(MOV, Mem16, Imm16, &[]), // [mi: o16  c7   /0 iw ]
+        
+        id!(INT, Imm8, None, &[Byte(0xCD), ImmediateByte]), // THIS IS FROM MY HEAD
     ];
 }
 

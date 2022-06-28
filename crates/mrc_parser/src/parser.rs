@@ -10,6 +10,9 @@ pub enum ParserError {
     IdentifierOrLabelExpected(ast::Span, String),
     InvalidPrefixOperator(ast::Span),
     DataDefinitionWithoutData(ast::Span),
+
+    /// The LineConsumer asked that the parsing be stopped.
+    Stopped(ast::Span),
 }
 
 impl ParserError {
@@ -18,7 +21,8 @@ impl ParserError {
             ParserError::Expected(span, _)
             | ParserError::IdentifierOrLabelExpected(span, _)
             | ParserError::InvalidPrefixOperator(span)
-            | ParserError::DataDefinitionWithoutData(span) => span,
+            | ParserError::DataDefinitionWithoutData(span)
+            | ParserError::Stopped(span) => span,
         }
     }
 }
@@ -32,6 +36,7 @@ impl Display for ParserError {
             }
             ParserError::InvalidPrefixOperator(_) => write!(f, "Invalid prefix operator"),
             ParserError::DataDefinitionWithoutData(_) => write!(f, "Data definition without data"),
+            ParserError::Stopped(_) => write!(f, "Parsing stopped"),
         }
     }
 }
@@ -66,57 +71,35 @@ impl<'a> Display for FoundToken<'a> {
     }
 }
 
-pub trait LineConsumer<'a> {
-    fn consume(&mut self, line: ast::Line);
+pub trait LineConsumer {
+    /// Should return true if the parser should continue with the next line, otherwise it will
+    /// break out.
+    #[must_use]
+    fn consume(&mut self, line: ast::Line) -> bool;
 }
 
 /// Allow lambdas to be passed as `LineConsumer`s
-impl<'a, T: FnMut(ast::Line)> LineConsumer<'a> for T {
-    fn consume(&mut self, line: ast::Line) {
+impl<'a, T: FnMut(ast::Line) -> bool> LineConsumer for T {
+    fn consume(&mut self, line: ast::Line) -> bool {
         self(line)
     }
 }
 
 #[inline]
-pub fn parse<'a>(source: &'a str, consumer: &mut impl LineConsumer<'a>) -> Result<(), ParserError> {
+pub fn parse(source: &str, consumer: &mut impl LineConsumer) -> Result<(), ParserError> {
     Parser::new(source).parse(consumer)
 }
 
-// impl ast::Operator {
-//     fn evaluate(&self, left: i32, right: i32) -> i32 {
-//         match self {
-//             ast::Operator::Add => left + right,
-//             ast::Operator::Subtract => left - right,
-//             ast::Operator::Multiply => left * right,
-//             ast::Operator::Divide => left / right,
-//         }
-//     }
-// }
-
-// impl ast::Expression {
-//     fn evaluate(&mut self) {
-//         match self {
-//             ast::Expression::PrefixOperator(_, _) => {}
-//
-//             ast::Expression::InfixOperator(operator, left, right) => {
-//                 left.evaluate();
-//                 right.evaluate();
-//
-//                 if let (
-//                     ast::Expression::Term(_, ast::Value::Constant(left_value)),
-//                     ast::Expression::Term(_, ast::Value::Constant(right_value)),
-//                 ) = (left.as_ref(), right.as_ref())
-//                 {
-//                     *self = ast::Expression::Term(ast::Value::Constant(
-//                         operator.evaluate(*left_value, *right_value),
-//                     ));
-//                 }
-//             }
-//
-//             ast::Expression::Term(_, _) => {}
-//         }
-//     }
-// }
+impl ast::Operator {
+    pub fn evaluate(&self, left: i32, right: i32) -> i32 {
+        match self {
+            ast::Operator::Add => left + right,
+            ast::Operator::Subtract => left - right,
+            ast::Operator::Multiply => left * right,
+            ast::Operator::Divide => left / right,
+        }
+    }
+}
 
 struct Parser<'a> {
     cursor: Cursor<'a>,
@@ -150,7 +133,17 @@ impl<'a> Parser<'a> {
         self.cursor.source_at(self.token_start, self.token.len())
     }
 
-    fn parse(&mut self, consumer: &mut impl LineConsumer<'a>) -> Result<(), ParserError> {
+    fn parse(&mut self, consumer: &mut impl LineConsumer) -> Result<(), ParserError> {
+        macro_rules! push_and_check {
+            ($line:expr) => {{
+                if !consumer.consume($line) {
+                    return Err(ParserError::Stopped(
+                        self.token_start..self.token_start + self.token.len(),
+                    ));
+                }
+            }};
+        }
+
         loop {
             match self.token {
                 Token::NewLine(_) => {
@@ -161,40 +154,40 @@ impl<'a> Parser<'a> {
                 Token::Identifier(_) => {
                     let identifier = self.token_source();
                     if let Ok(operation) = Operation::from_str(identifier) {
-                        let instruction = self.parse_instruction(operation)?;
-                        consumer.consume(instruction);
+                        let line = self.parse_instruction(operation)?;
+                        push_and_check!(line);
                     } else {
                         match identifier.to_lowercase().as_str() {
                             "equ" => {
                                 let line = self.parse_equ()?;
-                                consumer.consume(line);
+                                push_and_check!(line);
                             }
 
                             "db" => {
                                 let line = self.parse_data(1)?;
-                                consumer.consume(line);
+                                push_and_check!(line);
                             }
 
                             "dw" => {
                                 let line = self.parse_data(2)?;
-                                consumer.consume(line);
+                                push_and_check!(line);
                             }
 
                             "dd" => {
                                 let line = self.parse_data(4)?;
-                                consumer.consume(line);
+                                push_and_check!(line);
                             }
 
                             "times" => {
                                 let line = self.parse_times()?;
-                                consumer.consume(line);
+                                push_and_check!(line);
                             }
 
                             _ => {
                                 // If no known keyword is found, we assume the identifier is a
                                 // label.
                                 let line = self.parse_label(identifier)?;
-                                consumer.consume(line);
+                                push_and_check!(line);
                             }
                         }
                     }

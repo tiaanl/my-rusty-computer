@@ -9,6 +9,7 @@ members = [
     "bins/pop",
     "bins/romcheck",
     "bins/tests",
+    "crates/mrc_compiler",
     "crates/mrc_decoder",
     "crates/mrc_dos",
     "crates/mrc_emulator",

@@ -1,5 +1,6 @@
+use mrc_compiler::Compiler;
 use mrc_parser::ast::Span;
-use std::path::Path;
+use mrc_parser::ParserError;
 use structopt::StructOpt;
 
 fn print_source_pos(source: &str, span: &Span, path: Option<&str>) {
@@ -39,40 +40,41 @@ fn print_source_pos(source: &str, span: &Span, path: Option<&str>) {
     println!();
 }
 
-fn parse_file<P: AsRef<Path> + std::fmt::Display>(path: P) {
-    let data = match std::fs::read_to_string(path.as_ref()) {
+#[derive(StructOpt)]
+struct Opt {
+    /// Source file to compile.
+    source: String,
+}
+
+fn main() {
+    let opts = Opt::from_args();
+
+    let data = match std::fs::read_to_string(&opts.source) {
         Ok(data) => data,
         Err(err) => {
-            eprintln!("Could not parse file: {} ({})", path, err);
+            eprintln!("Could not open source file: {} ({})", opts.source, err);
             return;
         }
     };
 
     let source = data.as_str();
 
-    if let Err(err) = mrc_parser::parse(source, &mut |l| println!("{}", l)) {
-        eprintln!("ERROR: {}", err);
-        print_source_pos(source, err.span(), None);
-    }
-}
+    let mut compiler = Compiler::default();
 
-#[derive(StructOpt)]
-struct Opt {
-    /// Sources files to assemble
-    sources: Vec<String>,
-}
+    if let Err(err) = mrc_parser::parse(source, &mut compiler) {
+        match err {
+            ParserError::Stopped(_) => {}
+            e => {
+                println!("PARSER ERROR: {}", e);
+                print_source_pos(source, e.span(), Some(opts.source.as_str()));
+            }
+        }
 
-fn main() {
-    let opts = Opt::from_args();
-
-    // TODO: Can `structopt` handle this case?
-    if opts.sources.is_empty() {
-        eprintln!("At least one source file is required");
         return;
     }
 
-    // We can unwrap here, because `min_values` is set to at least 1.
-    for file in opts.sources {
-        parse_file(file);
+    if let Err(err) = compiler.compile() {
+        eprintln!("COMPILE ERROR: {}", err);
+        print_source_pos(source, err.span(), Some(opts.source.as_str()));
     }
 }

@@ -4,5 +4,6 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+mrc_compiler = { path = "../../crates/mrc_compiler" }
 mrc_parser = { path = "../../crates/mrc_parser" }
 structopt = "0.3"
