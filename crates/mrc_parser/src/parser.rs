@@ -5,29 +5,29 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum ParserError {
+pub enum ParserError<E> {
     Expected(ast::Span, String),
     IdentifierOrLabelExpected(ast::Span, String),
     InvalidPrefixOperator(ast::Span),
     DataDefinitionWithoutData(ast::Span),
 
     /// The LineConsumer asked that the parsing be stopped.
-    Stopped(ast::Span),
+    Stopped(ast::Span, E),
 }
 
-impl ParserError {
+impl<E> ParserError<E> {
     pub fn span(&self) -> &ast::Span {
         match self {
             ParserError::Expected(span, _)
             | ParserError::IdentifierOrLabelExpected(span, _)
             | ParserError::InvalidPrefixOperator(span)
             | ParserError::DataDefinitionWithoutData(span)
-            | ParserError::Stopped(span) => span,
+            | ParserError::Stopped(span, _) => span,
         }
     }
 }
 
-impl Display for ParserError {
+impl<E: Display> Display for ParserError<E> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ParserError::Expected(_, expected) => write!(f, "expected {}", expected),
@@ -36,7 +36,7 @@ impl Display for ParserError {
             }
             ParserError::InvalidPrefixOperator(_) => write!(f, "Invalid prefix operator"),
             ParserError::DataDefinitionWithoutData(_) => write!(f, "Data definition without data"),
-            ParserError::Stopped(_) => write!(f, "Parsing stopped"),
+            ParserError::Stopped(_, e) => write!(f, "Parsing stopped: {}", e),
         }
     }
 }
@@ -72,21 +72,25 @@ impl<'a> Display for FoundToken<'a> {
 }
 
 pub trait LineConsumer {
-    /// Should return true if the parser should continue with the next line, otherwise it will
-    /// break out.
-    #[must_use]
-    fn consume(&mut self, line: ast::Line) -> bool;
+    type Err;
+
+    fn consume(&mut self, line: ast::Line) -> Result<(), Self::Err>;
 }
 
 /// Allow lambdas to be passed as `LineConsumer`s
-impl<'a, T: FnMut(ast::Line) -> bool> LineConsumer for T {
-    fn consume(&mut self, line: ast::Line) -> bool {
+impl<'a, E, T: FnMut(ast::Line) -> Result<(), E>> LineConsumer for T {
+    type Err = E;
+
+    fn consume(&mut self, line: ast::Line) -> Result<(), E> {
         self(line)
     }
 }
 
 #[inline]
-pub fn parse(source: &str, consumer: &mut impl LineConsumer) -> Result<(), ParserError> {
+pub fn parse<E>(
+    source: &str,
+    consumer: &mut impl LineConsumer<Err = E>,
+) -> Result<(), ParserError<E>> {
     Parser::new(source).parse(consumer)
 }
 
@@ -133,12 +137,16 @@ impl<'a> Parser<'a> {
         self.cursor.source_at(self.token_start, self.token.len())
     }
 
-    fn parse(&mut self, consumer: &mut impl LineConsumer) -> Result<(), ParserError> {
+    fn parse<E>(
+        &mut self,
+        consumer: &mut impl LineConsumer<Err = E>,
+    ) -> Result<(), ParserError<E>> {
         macro_rules! push_and_check {
             ($line:expr) => {{
-                if !consumer.consume($line) {
+                if let Err(err) = consumer.consume($line) {
                     return Err(ParserError::Stopped(
                         self.token_start..self.token_start + self.token.len(),
+                        err,
                     ));
                 }
             }};
@@ -228,7 +236,7 @@ impl<'a> Parser<'a> {
 
     /// The current token is required to be a new line.  If it is, then consume it, otherwise we
     /// report an error.
-    fn require_new_line(&mut self) -> Result<(), ParserError> {
+    fn require_new_line<E>(&mut self) -> Result<(), ParserError<E>> {
         if let Token::NewLine(_) = self.token {
             self.next_token();
             Ok(())
@@ -239,7 +247,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_label(&mut self, name: &'a str) -> Result<ast::Line, ParserError> {
+    fn parse_label<E>(&mut self, name: &'a str) -> Result<ast::Line, ParserError<E>> {
         let start = self.token_start;
 
         // We only capture the label part.
@@ -261,7 +269,7 @@ impl<'a> Parser<'a> {
         Ok(ast::Line::Label(start..end, name.to_owned()))
     }
 
-    fn parse_instruction(&mut self, operation: Operation) -> Result<ast::Line, ParserError> {
+    fn parse_instruction<E>(&mut self, operation: Operation) -> Result<ast::Line, ParserError<E>> {
         let start = self.token_start;
 
         // Consume the operation.
@@ -282,7 +290,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_operands(&mut self) -> Result<ast::Operands, ParserError> {
+    fn parse_operands<E>(&mut self) -> Result<ast::Operands, ParserError<E>> {
         if matches!(self.token, Token::NewLine(_) | Token::EndOfFile(_)) {
             Ok(ast::Operands::None(
                 self.last_token_end..self.last_token_end,
@@ -313,10 +321,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_operand(
+    fn parse_operand<E>(
         &mut self,
         data_size: Option<ast::DataSize>,
-    ) -> Result<ast::Operand, ParserError> {
+    ) -> Result<ast::Operand, ParserError<E>> {
         let start = self.token_start;
         match self.token {
             Token::Punctuation(_, PunctuationKind::OpenBracket) => {
@@ -354,14 +362,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression(&mut self) -> Result<ast::Expression, ParserError> {
+    fn parse_expression<E>(&mut self) -> Result<ast::Expression, ParserError<E>> {
         self.parse_expression_with_precedence(0)
     }
 
-    fn parse_memory_operand(
+    fn parse_memory_operand<E>(
         &mut self,
         data_size: Option<ast::DataSize>,
-    ) -> Result<ast::Operand, ParserError> {
+    ) -> Result<ast::Operand, ParserError<E>> {
         assert!(matches!(
             self.token,
             Token::Punctuation(_, PunctuationKind::OpenBracket)
@@ -413,7 +421,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_equ(&mut self) -> Result<ast::Line, ParserError> {
+    fn parse_equ<E>(&mut self) -> Result<ast::Line, ParserError<E>> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
 
         let start = self.token_start;
@@ -430,7 +438,7 @@ impl<'a> Parser<'a> {
         Ok(ast::Line::Constant(start..end, expression))
     }
 
-    fn parse_data(&mut self, bytes_per_value: usize) -> Result<ast::Line, ParserError> {
+    fn parse_data<E>(&mut self, bytes_per_value: usize) -> Result<ast::Line, ParserError<E>> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
 
         let data_definition_token_span = self.token_start..self.token_start + self.token.len();
@@ -491,7 +499,7 @@ impl<'a> Parser<'a> {
         Ok(ast::Line::Data(start..end, data))
     }
 
-    fn parse_times(&mut self) -> Result<ast::Line, ParserError> {
+    fn parse_times<E>(&mut self) -> Result<ast::Line, ParserError<E>> {
         self.next_token();
 
         let expression = self.parse_expression()?;
@@ -499,7 +507,7 @@ impl<'a> Parser<'a> {
         Ok(ast::Line::Times(expression))
     }
 
-    fn expected(&self, message: String) -> ParserError {
+    fn expected<E>(&self, message: String) -> ParserError<E> {
         ParserError::Expected(0..0, message)
     }
 }
@@ -521,7 +529,7 @@ impl Token {
 }
 
 impl<'a> Parser<'a> {
-    fn prefix_precedence(operator: ast::Operator) -> Result<((), u8), ParserError> {
+    fn prefix_precedence<E>(operator: ast::Operator) -> Result<((), u8), ParserError<E>> {
         Ok(match operator {
             ast::Operator::Add | ast::Operator::Subtract => ((), 5),
             _ => return Err(ParserError::InvalidPrefixOperator(0..0)),
@@ -535,10 +543,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression_with_precedence(
+    fn parse_expression_with_precedence<E>(
         &mut self,
         precedence: u8,
-    ) -> Result<ast::Expression, ParserError> {
+    ) -> Result<ast::Expression, ParserError<E>> {
         let mut left = match &self.token {
             Token::Punctuation(_, PunctuationKind::OpenParenthesis) => {
                 self.next_token();
@@ -595,7 +603,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_atom(&mut self) -> Result<ast::Value, ParserError> {
+    fn parse_atom<E>(&mut self) -> Result<ast::Value, ParserError<E>> {
         match self.token {
             Token::Literal(_, LiteralKind::Number(value)) => {
                 self.next_token();

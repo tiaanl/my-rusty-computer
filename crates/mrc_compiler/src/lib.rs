@@ -1,43 +1,42 @@
 use mrc_instruction::db::OperandEncoding;
 use mrc_instruction::{Instruction as OutInstruction, OperandSet as OutOperandSet};
-use mrc_parser::ast;
+use mrc_parser::{ast, ParserError};
 use std::collections::HashMap;
 use std::fmt::Formatter;
 
 #[derive(Debug)]
 pub enum CompileError {
-    ParserError(mrc_parser::ParserError),
+    ParseError(ast::Span, Box<ParserError<CompileError>>),
     InvalidOperands(ast::Span, ast::Operands),
     LabelNotFound(String),
+    ConstantValueContainsVariables(ast::Span),
     Unknown,
 }
 
 impl CompileError {
     pub fn span(&self) -> &ast::Span {
         match self {
-            CompileError::ParserError(_) => todo!(),
+            CompileError::ParseError(span, _) => span,
             CompileError::InvalidOperands(span, _) => span,
             CompileError::LabelNotFound(_) => todo!(),
             CompileError::Unknown => todo!(),
+            CompileError::ConstantValueContainsVariables(span) => span,
         }
-    }
-}
-
-impl From<mrc_parser::ParserError> for CompileError {
-    fn from(other: mrc_parser::ParserError) -> Self {
-        CompileError::ParserError(other)
     }
 }
 
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CompileError::ParserError(err) => err.fmt(f),
+            CompileError::ParseError(_, err) => err.fmt(f),
             CompileError::InvalidOperands(_, operands) => {
                 write!(f, "Invalid operands: {}", operands)
             }
             CompileError::LabelNotFound(label) => write!(f, "Label \"{}\" not found.", label),
-            CompileError::Unknown => write!(f, "Unknown compiler error"),
+            CompileError::ConstantValueContainsVariables(_) => {
+                write!(f, "Constant value contains variables.")
+            }
+            CompileError::Unknown => write!(f, "Unknown compile error."),
         }
     }
 }
@@ -61,8 +60,6 @@ impl Compiler {
         for output in &self.outputs {
             match &output._line {
                 ast::Line::Instruction(span, instruction) => {
-                    println!("{:?}", instruction);
-
                     self.compile_instruction(span, instruction)?;
                 }
 
@@ -212,7 +209,9 @@ impl Compiler {
 }
 
 impl mrc_parser::LineConsumer for Compiler {
-    fn consume(&mut self, mut line: ast::Line) -> bool {
+    type Err = CompileError;
+
+    fn consume(&mut self, mut line: ast::Line) -> Result<(), Self::Err> {
         match &mut line {
             ast::Line::Label(_, label) => self.current_labels.push(label.clone()),
 
@@ -251,11 +250,8 @@ impl mrc_parser::LineConsumer for Compiler {
                 self.current_labels.clear();
             }
 
-            ast::Line::Constant(_, expr) => {
-                if let Err(err) = self.evaluate_expression(expr) {
-                    eprintln!("{}", err);
-                    return false;
-                }
+            ast::Line::Constant(span, expr) => {
+                self.evaluate_expression(expr)?;
 
                 if let ast::Expression::Term(ast::Value::Constant(value)) = expr {
                     for label in &self.current_labels {
@@ -263,22 +259,22 @@ impl mrc_parser::LineConsumer for Compiler {
                     }
                     self.current_labels.clear();
                 } else {
-                    println!("Constant value contains variables!");
-                    return false;
+                    return Err(CompileError::ConstantValueContainsVariables(span.clone()));
                 }
             }
 
             ast::Line::Times(_) => todo!(),
         }
 
-        true
+        Ok(())
     }
 }
 
 pub fn compile(source: &str) -> Result<(), CompileError> {
     let mut compiler = Compiler::default();
 
-    mrc_parser::parse(source, &mut compiler)?;
+    let _ = mrc_parser::parse(source, &mut compiler)
+        .map_err(|err| CompileError::ParseError(err.span().clone(), Box::new(err)));
 
     println!("{:?}", compiler.labels);
     println!("{:?}", compiler.constants);

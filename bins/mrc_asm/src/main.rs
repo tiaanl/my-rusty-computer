@@ -63,10 +63,14 @@ fn main() {
 
     if let Err(err) = mrc_parser::parse(source, &mut compiler) {
         match err {
-            ParserError::Stopped(_) => {}
-            e => {
-                println!("PARSER ERROR: {}", e);
-                print_source_pos(source, e.span(), Some(opts.source.as_str()));
+            ParserError::Stopped(span, err) => {
+                eprintln!("PARSER ERROR: {}", err);
+                print_source_pos(source, &span, Some(opts.source.as_str()));
+            }
+
+            err => {
+                eprintln!("PARSER ERROR: {}", err);
+                print_source_pos(source, err.span(), Some(opts.source.as_str()));
             }
         }
 
