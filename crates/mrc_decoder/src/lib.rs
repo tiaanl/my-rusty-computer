@@ -8,7 +8,7 @@ pub use decode::decode_instruction;
 pub use errors::{DecodeError, Result};
 pub use mrrm::{ModRegRM, RegisterOrMemory};
 
-use crate::traits::TryFromEncoding;
+pub use crate::traits::TryFromEncoding;
 use mrc_instruction::{
     Address, Displacement, Instruction, Operand, OperandSet, RegisterEncoding, RelativeToAddress,
     Segment,

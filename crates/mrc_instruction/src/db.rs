@@ -19,13 +19,9 @@ pub enum OperandEncoding {
 
     Mem8,
     Mem16,
-}
 
-#[derive(Debug)]
-pub struct InstructionData {
-    pub operation: Operation,
-    pub destination: OperandEncoding,
-    pub source: OperandEncoding,
+    Disp8,
+    Disp16,
 }
 
 #[derive(Debug)]
@@ -34,8 +30,17 @@ pub enum Code {
     ImmediateByte,
 }
 
+#[derive(Debug)]
+pub struct InstructionData {
+    pub operation: Operation,
+    pub destination: OperandEncoding,
+    pub source: OperandEncoding,
+    pub codes: &'static [Code],
+}
+
 mod private {
     use super::*;
+    use Code::*;
 
     macro_rules! id {
         ($operation:ident, $destination:ident, $source:ident, $codes:expr) => {{
@@ -43,6 +48,7 @@ mod private {
                 operation: Operation::$operation,
                 destination: OperandEncoding::$destination,
                 source: OperandEncoding::$source,
+                codes: $codes,
             }
         }};
     }
@@ -75,6 +81,7 @@ mod private {
         id!(MOV, Mem16, Imm16, &[]), // [mi: o16  c7   /0 iw ]
         
         id!(INT, Imm8, None, &[Byte(0xCD), ImmediateByte]), // THIS IS FROM MY HEAD
+        id!(CALL, Disp8, None, &[]),
     ];
 }
 

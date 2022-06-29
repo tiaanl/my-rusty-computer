@@ -1,5 +1,6 @@
-use mrc_instruction::db::OperandEncoding;
-use mrc_instruction::{Instruction as OutInstruction, OperandSet as OutOperandSet};
+use mrc_decoder::TryFromEncoding;
+use mrc_instruction as out;
+use mrc_instruction::db::{Code, OperandEncoding};
 use mrc_parser::{ast, ParserError};
 use std::collections::HashMap;
 use std::fmt::Formatter;
@@ -43,7 +44,8 @@ impl std::fmt::Display for CompileError {
 
 #[derive(Debug)]
 struct Output {
-    _line: ast::Line,
+    size_in_bytes: u8,
+    line: ast::Line,
 }
 
 #[derive(Default)]
@@ -56,23 +58,62 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile(&self) -> Result<Vec<mrc_instruction::Instruction>, CompileError> {
-        for output in &self.outputs {
-            match &output._line {
-                ast::Line::Instruction(span, instruction) => {
-                    self.compile_instruction(span, instruction)?;
-                }
+    pub fn compile(&mut self) -> Result<Vec<mrc_instruction::Instruction>, CompileError> {
+        self.resolve_labels()?;
 
-                _ => unreachable!(),
+        Ok(vec![])
+    }
+
+    fn resolve_labels(&mut self) -> Result<(), CompileError> {
+        let outputs = unsafe {
+            &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
+        };
+
+        for output in outputs.iter_mut() {
+            if let ast::Line::Instruction(_, instruction) = &mut output.line {
+                if let Some(size_in_bytes) = self.size_in_bytes(instruction) {
+                    output.size_in_bytes = size_in_bytes;
+                }
             }
         }
 
-        Ok(vec![])
+        for output in outputs.iter_mut() {
+            if let ast::Line::Instruction(_, ast::Instruction { operands, .. }) = &mut output.line {
+                match operands {
+                    ast::Operands::None(_) => {}
+                    ast::Operands::Destination(_, destination) => {
+                        self.evaluate_operand(destination)?;
+                    }
+                    ast::Operands::DestinationAndSource(_, destination, source) => {
+                        self.evaluate_operand(destination)?;
+                        self.evaluate_operand(source)?;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
 impl Compiler {
-    fn _evaluate_operand(&self, operand: &mut ast::Operand) -> Result<(), CompileError> {
+    pub fn size_in_bytes(&self, instruction: &ast::Instruction) -> Option<u8> {
+        let id = self.find_instruction_data(instruction)?;
+
+        let mut total = 0;
+        for code in id.codes {
+            match code {
+                Code::Byte(_) => total += 1,
+                Code::ImmediateByte => total += 1,
+            }
+        }
+
+        Some(total)
+    }
+}
+
+impl Compiler {
+    fn evaluate_operand(&self, operand: &mut ast::Operand) -> Result<(), CompileError> {
         match operand {
             ast::Operand::Immediate(_, expr) => self.evaluate_expression(expr)?,
             ast::Operand::Address(_, _, expr, _) => self.evaluate_expression(expr)?,
@@ -126,6 +167,17 @@ fn operand_matches_operand_encoding(
 ) -> bool {
     match operand_encoding {
         OperandEncoding::Imm8 => matches!(operand, ast::Operand::Immediate(_, _)),
+        OperandEncoding::Reg8 => {
+            matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
+        }
+        OperandEncoding::Reg16 => {
+            matches!(operand, ast::Operand::Register(_, ast::Register::Word(_)))
+        }
+        OperandEncoding::Seg => {
+            matches!(operand, ast::Operand::Segment(_, _))
+        }
+        OperandEncoding::Disp8 => matches!(operand, ast::Operand::Immediate(_, _)),
+        OperandEncoding::Disp16 => matches!(operand, ast::Operand::Immediate(_, _)),
 
         _ => false,
     }
@@ -142,48 +194,112 @@ fn operand_set_matches_operand_encodings(
         }
 
         ast::Operands::Destination(_, d) => {
-            *source == OperandEncoding::None && operand_matches_operand_encoding(&d, destination)
+            *source == OperandEncoding::None && operand_matches_operand_encoding(d, destination)
         }
 
         ast::Operands::DestinationAndSource(_, d, s) => {
-            operand_matches_operand_encoding(&d, destination)
-                && operand_matches_operand_encoding(&s, source)
+            operand_matches_operand_encoding(d, destination)
+                && operand_matches_operand_encoding(s, source)
         }
     }
 }
 
 impl Compiler {
-    fn compile_instruction(
+    fn _compile_instruction(
         &self,
         _span: &ast::Span,
         instruction: &ast::Instruction,
-    ) -> Result<OutInstruction, CompileError> {
+    ) -> Result<out::Instruction, CompileError> {
         let instruction_data = match self.find_instruction_data(instruction) {
             Some(instruction_data) => instruction_data,
             None => {
                 return Err(CompileError::InvalidOperands(
                     instruction.operands.span().clone(),
                     instruction.operands.clone(),
-                ))
+                ));
             }
         };
 
         match (&instruction_data.destination, &instruction_data.source) {
-            (OperandEncoding::Imm8, OperandEncoding::None) => {
-                return Ok(OutInstruction::new(
-                    instruction.operation,
-                    OutOperandSet::Destination(mrc_instruction::Operand::Immediate(
-                        mrc_instruction::Immediate::Byte(0),
-                    )),
-                ));
-            }
+            (OperandEncoding::Imm8, OperandEncoding::None) => match &instruction.operands {
+                ast::Operands::Destination(_, ast::Operand::Immediate(_, _)) => {
+                    todo!()
+                    // Ok(out::Instruction::new(
+                    //     instruction.operation,
+                    //     out::OperandSet::Destination(out::Operand::Immediate(
+                    //         out::Immediate::Byte(0),
+                    //     )),
+                    // ))
+                }
+                _ => unreachable!(),
+            },
 
-            _ => todo!(),
+            (OperandEncoding::Reg16, OperandEncoding::Seg) => match &instruction.operands {
+                ast::Operands::DestinationAndSource(
+                    _,
+                    ast::Operand::Register(_, register),
+                    ast::Operand::Segment(_, segment),
+                ) => {
+                    let reg =
+                        out::RegisterEncoding::try_from_encoding(register.encoding()).unwrap();
+                    let seg = out::Segment::try_from_encoding(segment.encoding()).unwrap();
+
+                    Ok(out::Instruction::new(
+                        instruction.operation,
+                        out::OperandSet::DestinationAndSource(
+                            out::Operand::Register(out::SizedRegisterEncoding(
+                                reg,
+                                out::OperandSize::Word,
+                            )),
+                            out::Operand::Segment(seg),
+                        ),
+                    ))
+                }
+                _ => unreachable!(),
+            },
+
+            (OperandEncoding::Seg, OperandEncoding::Reg16) => match &instruction.operands {
+                ast::Operands::DestinationAndSource(
+                    _,
+                    ast::Operand::Segment(_, segment),
+                    ast::Operand::Register(_, register),
+                ) => {
+                    let seg = out::Segment::try_from_encoding(segment.encoding()).unwrap();
+                    let reg =
+                        out::RegisterEncoding::try_from_encoding(register.encoding()).unwrap();
+
+                    Ok(out::Instruction::new(
+                        instruction.operation,
+                        out::OperandSet::DestinationAndSource(
+                            out::Operand::Segment(seg),
+                            out::Operand::Register(out::SizedRegisterEncoding(
+                                reg,
+                                out::OperandSize::Word,
+                            )),
+                        ),
+                    ))
+                }
+                _ => unreachable!(),
+            },
+
+            // (OperandEncoding::Disp8, OperandEncoding::None) => match &instruction.operands {
+            //     ast::Operands::Destination(
+            //         _,
+            //         ast::Operand::Immediate(
+            //             _,
+            //             ast::Expression::Term(ast::Value::Constant(output_num)),
+            //         ),
+            //     ) => {
+            //         dbg!(output_num);
+            //         todo!()
+            //     }
+            //     _ => unreachable!(),
+            // },
+            _ => Err(CompileError::InvalidOperands(
+                instruction.operands.span().clone(),
+                instruction.operands.clone(),
+            )),
         }
-
-        //println!("{:?}", instruction_data);
-
-        //todo!()
     }
 
     fn find_instruction_data(
@@ -215,38 +331,14 @@ impl mrc_parser::LineConsumer for Compiler {
         match &mut line {
             ast::Line::Label(_, label) => self.current_labels.push(label.clone()),
 
-            // ast::Line::Instruction(_, instruction) => {
-            //     match &mut instruction.operands {
-            //         ast::Operands::None(_) => {}
-            //         ast::Operands::Destination(_, destination) => {
-            //             if let Err(err) = self.evaluate_operand(destination) {
-            //                 eprintln!("{}", err);
-            //                 return false;
-            //             }
-            //         }
-            //         ast::Operands::DestinationAndSource(_, destination, source) => {
-            //             if let Err(err) = self.evaluate_operand(destination) {
-            //                 eprintln!("{}", err);
-            //                 return false;
-            //             }
-            //             if let Err(err) = self.evaluate_operand(source) {
-            //                 eprintln!("{}", err);
-            //                 return false;
-            //             }
-            //         }
-            //     }
-            //
-            //     for label in &self.current_labels {
-            //         self.labels.insert(label.clone(), self.outputs.len());
-            //     }
-            //     self.outputs.push(Output { _line: line });
-            //     self.current_labels.clear();
-            // }
             ast::Line::Instruction(_, _) | ast::Line::Data(_, _) => {
                 for label in &self.current_labels {
                     self.labels.insert(label.clone(), self.outputs.len());
                 }
-                self.outputs.push(Output { _line: line });
+                self.outputs.push(Output {
+                    size_in_bytes: 0,
+                    line,
+                });
                 self.current_labels.clear();
             }
 
@@ -279,6 +371,8 @@ pub fn compile(source: &str) -> Result<(), CompileError> {
     println!("{:?}", compiler.labels);
     println!("{:?}", compiler.constants);
     println!("{:?}", compiler.outputs);
+
+    compiler.compile()?;
 
     Ok(())
 }
