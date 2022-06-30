@@ -1,0 +1,160 @@
+DATA TRANSFER
+MOV = Move:
+Register/Memory to/from Register            | 1 0 0 0 1 0 d w | mod reg r/m
+Immediate to Register/Memory                | 1 1 0 0 0 1 1 w | mod 0 0 0 r/m   | data                  | data if w = 1
+Immediate to Register                       | 1 0 1 1 w reg   | data            | data if w = 1
+Memory to Accumulator                       | 1 0 1 0 0 0 0 w | addr-low        | addr-high
+Accumulator to Memory                       | 1 0 1 0 0 0 1 w | addr-low        | addr-high
+Register/Memory to Segment Register         | 1 0 0 0 1 1 1 0 | mod 0 reg r/m
+Segment Register to Register/Memory         | 1 0 0 0 1 1 0 0 | mod 0 reg r/m
+PUSH = Push:
+Register/Memory                             | 1 1 1 1 1 1 1 1 | mod 1 1 0 r/m
+Register                                    | 0 1 0 1 0 reg
+Segment Register                            | 0 0 0 reg 1 1 0
+POP = Pop:
+Register/Memory                             | 1 0 0 0 1 1 1 1 | mod 0 0 0 r/m
+Register                                    | 0 1 0 1 1 reg
+Segment Register                            | 0 0 0 reg 1 1 1
+XCHG = Exchange:
+Register/Memory with Register               | 1 0 0 0 0 1 1 w | mod reg r/m
+Register with Accumulator                   | 1 0 0 1 0 reg
+IN = Input from:
+Fixed Port                                  | 1 1 1 0 0 1 0 w | port
+Variable Port                               | 1 1 1 0 1 1 0 w
+OUT = Output to:
+Fixed Port                                  | 1 1 1 0 0 1 1 w | port
+Variable Port                               | 1 1 1 0 1 1 1 w
+XLAT = Translate Byte to AL                 | 1 1 0 1 0 1 1 1
+LEA = Load EA to Register                   | 1 0 0 0 1 1 0 1 | mod reg r/m
+LDS = Load Pointer to DS                    | 1 1 0 0 0 1 0 1 | mod reg r/m
+LES = Load Pointer to ES                    | 1 1 0 0 0 1 0 0 | mod reg r/m
+LAHF = Load AH with Flags                   | 1 0 0 1 1 1 1 1
+SAHF = Store AH into Flags                  | 1 0 0 1 1 1 1 0
+PUSHF = Push Flags                          | 1 0 0 1 1 1 0 0
+POPF = Pop Flags                            | 1 0 0 1 1 1 0 1
+ARITHMETIC
+ADD = Add:
+Reg./Memory with Register to Either         | 0 0 0 0 0 0 d w | mod reg r/m
+Immediate to Register/Memory                | 1 0 0 0 0 0 s w | mod 0 0 0 r/m   | data                  | data if s:w = 01
+Immediate to Accumulator                    | 0 0 0 0 0 1 0 w | data            | data if w = 1
+ADC = Add with Carry:
+Reg./Memory with Register to Either         | 0 0 0 1 0 0 d w | mod reg r/m
+Immediate to Register/Memory                | 1 0 0 0 0 0 s w | mod 0 1 0 r/m   | data                  | data if s:w = 01
+Immediate to Accumulator                    | 0 0 0 1 0 1 0 w | data            | data if w = 1
+INC = Increment:
+Register/Memory                             | 1 1 1 1 1 1 1 w | mod 0 0 0 r/m
+Register                                    | 0 1 0 0 0 reg
+AAA = ASCII Adjust for Add                  | 0 0 1 1 0 1 1 1
+BAA = Decimal Adjust for Add                | 0 0 1 0 0 1 1 1
+SUB = Subtract:
+Reg./Memory and Register to Either          | 0 0 1 0 1 0 d w | mod reg r/m
+Immediate from Register/Memory              | 1 0 0 0 0 0 s w | mod 1 0 1 r/m   | data                  | data if s:w = 01
+Immediate from Accumulator                  | 0 0 1 0 1 1 0 w | data            | data if w = 1
+SSB = Subtract with Borrow
+Reg./Memory and Register to Either          | 0 0 0 1 1 0 d w | mod reg r/m
+Immediate from Register/Memory              | 1 0 0 0 0 0 s w | mod 0 1 1 r/m   | data data if s:w = 01
+Immediate from Accumulator                  | 0 0 0 1 1 1 w   | data            | data if w = 1
+DEC = Decrement:
+Register/memory                             | 1 1 1 1 1 1 1 w | mod 0 0 1 r/m
+Register                                    | 0 1 0 0 1 reg
+NEG = Change sign                           | 1 1 1 1 0 1 1 w | mod 0 1 1 r/m
+CMP = Compare:
+Register/Memory and Register                | 0 0 1 1 1 0 d w | mod reg r/m
+Immediate with Register/Memory              | 1 0 0 0 0 0 s w | mod 1 1 1 r/m   | data                  | data if s:w = 01
+Immediate with Accumulator                  | 0 0 1 1 1 1 0 w | data            | data if w = 1
+AAS = ASCII Adjust for Subtract             | 0 0 1 1 1 1 1 1
+DAS = Decimal Adjust for Subtract           | 0 0 1 0 1 1 1 1
+MUL = Multiply (Unsigned)                   | 1 1 1 1 0 1 1 w | mod 1 0 0 r/m
+IMUL = Integer Multiply (Signed)            | 1 1 1 1 0 1 1 w | mod 1 0 1 r/m
+AAM = ASCII Adjust for Multiply             | 1 1 0 1 0 1 0 0 | 0 0 0 0 1 0 1 0
+DIV = Divide (Unsigned)                     | 1 1 1 1 0 1 1 w | mod 1 1 0 r/m
+IDIV = Integer Divide (Signed)              | 1 1 1 1 0 1 1 w | mod 1 1 1 r/m
+AAD = ASCII Adjust for Divide               | 1 1 0 1 0 1 0 1 | 0 0 0 0 1 0 1 0
+CBW = Convert Byte to Word                  | 1 0 0 1 1 0 0 0
+CWD = Convert Word to Double Word           | 1 0 0 1 1 0 0 1
+LOGIC
+NOT = Invert                                | 1 1 1 1 0 1 1 w | mod 0 1 0 r/m
+SHL/SAL = Shift Logical/Arithmetic Left     | 1 1 0 1 0 0 v w | mod 1 0 0 r/m
+SHR = Shift Logical Right                   | 1 1 0 1 0 0 v w | mod 1 0 1 r/m
+SAR = Shift Arithmetic Right                | 1 1 0 1 0 0 v w | mod 1 1 1 r/m
+ROL = Rotate Left                           | 1 1 0 1 0 0 v w | mod 0 0 0 r/m
+ROR = Rotate Right                          | 1 1 0 1 0 0 v w | mod 0 0 1 r/m
+RCL = Rotate Through Carry Flag Left        | 1 1 0 1 0 0 v w | mod 0 1 0 r/m
+RCR = Rotate Through Carry Right            | 1 1 0 1 0 0 v w | mod 0 1 1 r/m
+AND = And:
+Reg./Memory and Register to Either          | 0 0 1 0 0 0 d w | mod reg r/m
+Immediate to Register/Memory                | 1 0 0 0 0 0 0 w | mod 1 0 0 r/m   | data                  | data if w = 1
+Immediate to Accumulator                    | 0 0 1 0 0 1 0 w | data            | data if w = 1
+TEST = And Function to Flags. No Result:
+Register/Memory and Register                | 1 0 0 0 0 1 0 w | mod reg r/m
+Immediate Data and Register/Memory          | 1 1 1 1 0 1 1 w | mod 0 0 0 r/m   | data                  | data if w = 1
+Immediate Data and Accumulator              | 1 0 1 0 1 0 0 w | data            | data if w = 1
+OR = Or:
+Reg./Memory and Register to Either          | 0 0 0 0 1 0 d w | mod reg r/m
+Immediate to Register/Memory                | 1 0 0 0 0 0 0 w | mod 0 0 1 r/m   | data                  | data if w = 1
+Immediate to Accumulator                    | 0 0 0 0 1 1 0 w | data            | data if w = 1
+XOR = Exclusive or:
+Reg./Memory and Register to Either          | 0 0 1 1 0 0 d w | mod reg r/m
+Immediate to Register/Memory                | 1 0 0 0 0 0 0 w | mod 1 1 0 r/m   | data                  | data if w = 1
+Immediate to Accumulator                    | 0 0 1 1 0 1 0 w | data            | data if w = 1
+STRING MANIPULATION
+REP = Repeat                                | 1 1 1 1 0 0 1 z
+MOVS = Move Byte/Word                       | 1 0 1 0 0 1 0 w
+CMPS = Compare Byte/Word                    | 1 0 1 0 0 1 1 w
+SCAS = Scan Byte/Word                       | 1 0 1 0 1 1 1 w
+LODS = Load Byte/Wd to AL/AX                | 1 0 1 0 1 1 0 w
+STOS = Stor Byte/Wd from AL/A               | 1 0 1 0 1 0 1 w
+CONTROL TRANSFER
+CALL = Call:
+Direct Within Segment                       | 1 1 1 0 1 0 0 0 | disp-low        | disp-high
+Indirect Within Segment                     | 1 1 1 1 1 1 1 1 | mod 0 1 0 r/m
+Direct Intersegment                         | 1 0 0 1 1 0 1 0 | offset-low      | offset-high           | seg-low          | seg-high
+Indirect Intersegment                       | 1 1 1 1 1 1 1 1 | mod 0 1 1 r/m
+JMP = Unconditional Jump:
+Direct Within Segment                       | 1 1 1 0 1 0 0 1 | disp-low        | disp-high
+Direct Within Segment-Short                 | 1 1 1 0 1 0 1 1 | disp
+Indirect Within Segment                     | 1 1 1 1 1 1 1 1 | mod 1 0 0 r/m
+Direct Intersegment                         | 1 1 1 0 1 0 1 0 | offset-low      | offset-high           | seg-low          | seg-high
+Indirect Intersegment                       | 1 1 1 1 1 1 1 1 | mod 1 0 1 r/m
+RET = Return from CALL:
+Within Segment                              | 1 1 0 0 0 0 1 1
+Within Seg Adding Immed to SP               | 1 1 0 0 0 0 1 0 | data-low        | data-high
+Intersegment                                | 1 1 0 0 1 0 1 1
+Intersegment Adding Immediate to SP         | 1 1 0 0 1 0 1 0 | data-low        | data-high
+JE/JZ = Jump on Equal/Zero                  | 0 1 1 1 0 1 0 0 | disp
+JL/JNGE = Jump on Less/Not Greater or Equal | 0 1 1 1 1 1 0 0 | disp
+JLE/JNG = Jump on Less or Equal/Not Greater | 0 1 1 1 1 1 1 0 | disp
+JB/JNAE = Jump on Below/Not Above or Equal  | 0 1 1 1 0 0 1 0 | disp
+JBE/JNA = Jump on Below or Equal/Not Above  | 0 1 1 1 0 1 1 0 | disp
+JP/JPE = Jump on Parity/Parity Even         | 0 1 1 1 1 0 1 0 | disp
+JO = Jump on Overflow                       | 0 1 1 1 0 0 0 0 | disp
+JS = Jump on Sign                           | 0 1 1 1 1 0 0 0 | disp
+JNE/JNZ = Jump on Not Equal/Not Zero        | 0 1 1 1 0 1 0 1 | disp
+JNL/JGE = Jump on Not Less/Greater or Equal | 0 1 1 1 1 1 0 1 | disp
+JNLE/JG = Jump on Not Less or Equal/Greater | 0 1 1 1 1 1 1 1 | disp
+JNB/JAE = Jump on Not Below/Above or Equal  | 0 1 1 1 0 0 1 1 | disp
+JNBE/JA = Jump on Not Below or Equal/Above  | 0 1 1 1 0 1 1 1 | disp
+JNP/JPO = Jump on Not Par/Par Odd           | 0 1 1 1 1 0 1 1 | disp
+JNO = Jump on Not Overflow                  | 0 1 1 1 0 0 0 1 | disp
+JNS = Jump on Not Sign                      | 0 1 1 1 1 0 0 1 | disp
+LOOP = Loop CX Times                        | 1 1 1 0 0 0 1 0 | disp
+LOOPZ/LOOPE = Loop While Zero/Equal         | 1 1 1 0 0 0 0 1 | disp
+LOOPNZ/LOOPNE = Loop While Not Zero/Equal   | 1 1 1 0 0 0 0 0 | disp
+JCXZ = Jump on CX Zero                      | 1 1 1 0 0 0 1 1 | disp
+INT = Interrupt
+Type Specified                              | 1 1 0 0 1 1 0 1 | type
+Type 3                                      | 1 1 0 0 1 1 0 0
+INTO = Interrupt on Overflow                | 1 1 0 0 1 1 1 0
+IRET = Interrupt Return                     | 1 1 0 0 1 1 1 1
+PROCESSOR CONTROL
+CLC = Clear Carry                           | 1 1 1 1 1 0 0 0
+CMC = Complement Carry                      | 1 1 1 1 0 1 0 1
+STC = Set Carry                             | 1 1 1 1 1 0 0 1
+CLD = Clear Direction                       | 1 1 1 1 1 1 0 0
+STD = Set Direction                         | 1 1 1 1 1 1 0 1
+CLI = Clear Interrupt                       | 1 1 1 1 1 0 1 0
+STI = Set Interrupt                         | 1 1 1 1 1 0 1 1
+HLT = Halt                                  | 1 1 1 1 0 1 0 0
+WAIT = Wait                                 | 1 0 0 1 1 0 1 1
+ESC = Escape (to External Device)           | 1 1 0 1 1 x x x | mod x x x r/m
+LOCK = Bus Lock Prefix                      | 1 1 1 1 0 0 0 0
