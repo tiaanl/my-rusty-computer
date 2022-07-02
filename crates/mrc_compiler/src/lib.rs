@@ -362,24 +362,24 @@ impl mrc_parser::LineConsumer for Compiler {
     }
 }
 
-pub fn compile(source: &str) -> Result<(), CompileError> {
-    let mut compiler = Compiler::default();
-
-    let _ = mrc_parser::parse(source, &mut compiler)
-        .map_err(|err| CompileError::ParseError(err.span().clone(), Box::new(err)));
-
-    println!("{:?}", compiler.labels);
-    println!("{:?}", compiler.constants);
-    println!("{:?}", compiler.outputs);
-
-    compiler.compile()?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn compile(source: &str) -> Result<(), CompileError> {
+        let mut compiler = Compiler::default();
+
+        let _ = mrc_parser::parse(source, &mut compiler)
+            .map_err(|err| CompileError::ParseError(err.span().clone(), Box::new(err)));
+
+        println!("{:?}", compiler.labels);
+        println!("{:?}", compiler.constants);
+        println!("{:?}", compiler.outputs);
+
+        compiler.compile()?;
+
+        Ok(())
+    }
 
     #[test]
     fn basic() {

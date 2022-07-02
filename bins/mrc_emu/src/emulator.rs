@@ -187,13 +187,13 @@ impl Emulator {
         loop {
             let so = segment_and_offset(self.cpu.state.segment(CS), self.cpu.state.ip);
 
-            if let Some(_) = self.breakpoints.iter().find(|&&a| a == so) {
+            if self.breakpoints.iter().any(|&a| a == so) {
                 self.status = EmulatorStatus::Paused;
             }
 
             const TEST_07: u32 = 0xfe285;
 
-            const CHECKPOINTS: [(u32, &'static str); 15] = [
+            const CHECKPOINTS: [(u32, &str); 15] = [
                 (0xfe05b, "test_01"),
                 (0xfe0b0, "test_02"),
                 (0xfe0da, "test_03"),
@@ -256,11 +256,8 @@ impl Emulator {
     /// Perform a single tick of the CPU.  Typically executes a single instruction.
     fn cycle(&mut self) {
         self.pit.borrow_mut().tick();
-        match self.cpu.tick() {
-            Ok(ExecuteResult::Stop) => {
-                self.status = EmulatorStatus::Paused;
-            }
-            _ => {}
+        if let Ok(ExecuteResult::Stop) = self.cpu.tick() {
+            self.status = EmulatorStatus::Paused;
         }
         self.update_debugger_state();
     }
@@ -293,7 +290,7 @@ impl Emulator {
                 *line = if let Ok(instruction) = decode_instruction(&mut it) {
                     SourceLine::new(address, format!("{}", instruction))
                 } else {
-                    SourceLine::new(address, format!("ERR!"))
+                    SourceLine::new(address, "ERR!".to_owned())
                 }
             }
 

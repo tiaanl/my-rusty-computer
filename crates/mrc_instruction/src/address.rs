@@ -31,7 +31,7 @@ impl Address {
     /// Displace the offset within the same segment.
     pub fn displace(&self, displacement: &Displacement) -> Self {
         match displacement {
-            Displacement::None => self.clone(),
+            Displacement::None => *self,
             Displacement::Byte(d) => Self {
                 segment: self.segment,
                 offset: self.offset.wrapping_add(*d as i16 as u16),
