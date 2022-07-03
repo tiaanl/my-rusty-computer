@@ -9,7 +9,7 @@ use std::fmt::Formatter;
 pub enum CompileError {
     ParseError(ast::Span, Box<ParserError>),
     InvalidOperands(ast::Span, ast::Operands),
-    LabelNotFound(ast::Span, String),
+    LabelNotFound(ast::Label),
     ConstantValueContainsVariables(ast::Span),
     ConstantWithoutLabel(ast::Span),
 }
@@ -19,7 +19,7 @@ impl CompileError {
         match self {
             CompileError::ParseError(span, _) => span,
             CompileError::InvalidOperands(span, _) => span,
-            CompileError::LabelNotFound(span, _) => span,
+            CompileError::LabelNotFound(ast::Label(span, _)) => span,
             CompileError::ConstantValueContainsVariables(span) => span,
             CompileError::ConstantWithoutLabel(span) => span,
         }
@@ -33,7 +33,9 @@ impl std::fmt::Display for CompileError {
             CompileError::InvalidOperands(_, operands) => {
                 write!(f, "Invalid operands: {}", operands)
             }
-            CompileError::LabelNotFound(_, label) => write!(f, "Label \"{}\" not found.", label),
+            CompileError::LabelNotFound(ast::Label(_, label)) => {
+                write!(f, "Label \"{}\" not found.", label)
+            }
             CompileError::ConstantValueContainsVariables(_) => {
                 write!(f, "Constant value contains variables.")
             }
@@ -147,12 +149,12 @@ impl Compiler {
             }
 
             ast::Expression::Term(ast::Value::Label(label)) => {
-                if let Some(value) = self.constants.get(label) {
+                if let Some(value) = self.constants.get(label.1.as_str()) {
                     *expression = ast::Expression::Term(ast::Value::Constant(*value));
-                } else if let Some(output_num) = self.labels.get(label) {
+                } else if let Some(output_num) = self.labels.get(label.1.as_str()) {
                     *expression = ast::Expression::Term(ast::Value::Constant(*output_num as i32));
                 } else {
-                    return Err(CompileError::LabelNotFound(0..0, label.clone()));
+                    return Err(CompileError::LabelNotFound(label.clone()));
                 }
 
                 Ok(())
@@ -160,7 +162,8 @@ impl Compiler {
 
             ast::Expression::Term(ast::Value::Constant(_)) => Ok(()),
 
-            _ => todo!("{:?}", expression),
+            // _ => todo!("{:?}", expression),
+            _ => Ok(()),
         }
     }
 }
@@ -343,59 +346,37 @@ impl crate::LineConsumer for Compiler {
             ast::LineContent::Instruction(_, _)
             | ast::LineContent::Data(_, _)
             | ast::LineContent::Times(_, _, _) => {
+                if let Some(label) = label {
+                    self.current_labels.push(label.1.clone());
+                }
+
                 for label in &self.current_labels {
                     self.labels.insert(label.clone(), self.outputs.len());
                 }
+
                 self.outputs.push(Output {
                     size_in_bytes: 0,
                     line,
                 });
+
                 self.current_labels.clear();
             }
 
             ast::LineContent::Constant(span, expr) => {
-                if label.is_none() {
-                    return Err(CompileError::ConstantWithoutLabel(0..0));
-                }
+                if let Some(label) = label {
+                    self.evaluate_expression(expr)?;
 
-                self.evaluate_expression(expr)?;
-
-                if let ast::Expression::Term(ast::Value::Constant(value)) = expr {
-                    for label in &self.current_labels {
-                        self.constants.insert(label.clone(), *value);
+                    if let ast::Expression::Term(ast::Value::Constant(value)) = expr {
+                        self.constants.insert(label.1.clone(), *value);
+                    } else {
+                        return Err(CompileError::ConstantValueContainsVariables(span.clone()));
                     }
-                    self.current_labels.clear();
                 } else {
-                    return Err(CompileError::ConstantValueContainsVariables(span.clone()));
+                    return Err(CompileError::ConstantWithoutLabel(span.clone()));
                 }
             }
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn compile(source: &str) -> Result<(), CompileError> {
-        let mut compiler = Compiler::default();
-
-        let _ = crate::parse(source, &mut compiler)
-            .map_err(|err| CompileError::ParseError(err.span().clone(), Box::new(err)));
-
-        println!("{:?}", compiler.labels);
-        println!("{:?}", compiler.constants);
-        println!("{:?}", compiler.outputs);
-
-        compiler.compile()?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn basic() {
-        compile("int_num equ 10 + 6\nmain: int int_num\njmp main").unwrap();
     }
 }

@@ -115,9 +115,9 @@ mod tests {
     use crate::diagnostics::Diagnostics;
 
     macro_rules! assert_print_output {
-        ($diags:expr, $source:expr, $expected:literal) => {{
+        ($diags:expr, $expected:literal) => {{
             let mut out = Vec::new();
-            $diags.print($source, &mut out).unwrap();
+            $diags.print(&mut out).unwrap();
             assert_eq!(
                 unsafe { String::from_utf8_unchecked(out).as_str() },
                 $expected,
@@ -128,17 +128,16 @@ mod tests {
     #[test]
     fn basic() {
         const SOURCE: &str = "This is the source";
-        let mut diags = Diagnostics::default();
+        let mut diags = Diagnostics::new(SOURCE, "mem".to_owned());
 
         diags.info("This is an info", 5..7);
         diags.warn("This is a warning", 8..11);
         diags.error("This is an error", 12..18);
 
-        diags.print(SOURCE, &mut std::io::stdout()).unwrap();
+        diags.print(&mut std::io::stdout()).unwrap();
 
         assert_print_output!(
             diags,
-            SOURCE,
             "INFO: This is an info\nThis is the source\n     ^^\nWARNING: This is a warning\nThis is the source\n        ^^^\nERROR: This is an error\nThis is the source\n            ^^^^^^\n"
         );
     }

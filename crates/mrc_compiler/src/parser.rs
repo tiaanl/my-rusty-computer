@@ -618,15 +618,21 @@ impl<'a> Parser<'a> {
                 }
             }
 
-            Token::Identifier(_) => {
+            Token::Identifier(len) => {
                 let identifier = self.token_source();
+
+                let start = self.token_start;
+                let end = self.token_start + len;
 
                 self.next_token();
 
                 if let Ok(register) = ast::Register::from_str(identifier) {
                     Ok(ast::Value::Register(register))
                 } else {
-                    Ok(ast::Value::Label(identifier.to_owned()))
+                    Ok(ast::Value::Label(ast::Label(
+                        start..end,
+                        identifier.to_owned(),
+                    )))
                 }
             }
 

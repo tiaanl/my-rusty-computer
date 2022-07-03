@@ -229,7 +229,7 @@ impl FromStr for DataSize {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Constant(i32),
-    Label(String),
+    Label(Label),
     Register(Register),
 }
 
