@@ -369,7 +369,7 @@ mod tests {
     fn compile(source: &str) -> Result<(), CompileError> {
         let mut compiler = Compiler::default();
 
-        let _ = mrc_parser::parse(source, &mut compiler)
+        let _ = crate::parse(source, &mut compiler)
             .map_err(|err| CompileError::ParseError(err.span().clone(), Box::new(err)));
 
         println!("{:?}", compiler.labels);
