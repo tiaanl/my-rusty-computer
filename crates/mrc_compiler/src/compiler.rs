@@ -62,7 +62,12 @@ impl Compiler {
     pub fn compile(&mut self) -> Result<Vec<mrc_instruction::Instruction>, CompileError> {
         self.resolve_labels()?;
 
-        Ok(vec![])
+        let mut result = vec![];
+        for output in &self.outputs {
+            result.push(self.encode(&output.line)?);
+        }
+
+        Ok(result)
     }
 
     fn resolve_labels(&mut self) -> Result<(), CompileError> {
@@ -96,6 +101,10 @@ impl Compiler {
         }
 
         Ok(())
+    }
+
+    fn encode(&self, line: &ast::Line) -> Result<mrc_instruction::Instruction, CompileError> {
+        todo!()
     }
 }
 
