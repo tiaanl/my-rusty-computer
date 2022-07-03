@@ -1,8 +1,16 @@
 use mrc_instruction::Operation;
-use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 pub type Span = std::ops::Range<usize>;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Label(pub Span, pub String);
+
+impl std::fmt::Display for Label {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.1)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -17,8 +25,8 @@ pub enum ByteRegister {
     Bh = 7,
 }
 
-impl Display for ByteRegister {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for ByteRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ByteRegister::Al => write!(f, "AL"),
             ByteRegister::Ah => write!(f, "AH"),
@@ -71,8 +79,8 @@ pub enum WordRegister {
     Di = 7,
 }
 
-impl Display for WordRegister {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for WordRegister {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             WordRegister::Ax => write!(f, "AX"),
             WordRegister::Cx => write!(f, "CX"),
@@ -118,8 +126,8 @@ pub enum Register {
     Word(WordRegister),
 }
 
-impl Display for Register {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for Register {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Register::Byte(byte) => write!(f, "{}", byte),
             Register::Word(word) => write!(f, "{}", word),
@@ -159,8 +167,8 @@ pub enum Segment {
     DS = 3,
 }
 
-impl Display for Segment {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for Segment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Segment::ES => write!(f, "ES"),
             Segment::CS => write!(f, "CS"),
@@ -197,8 +205,8 @@ pub enum DataSize {
     Word,
 }
 
-impl Display for DataSize {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for DataSize {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DataSize::Byte => write!(f, "BYTE"),
             DataSize::Word => write!(f, "WORD"),
@@ -225,8 +233,8 @@ pub enum Value {
     Register(Register),
 }
 
-impl<'a> Display for Value {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<'a> std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Constant(value) => write!(f, "{}", *value),
             Value::Label(label) => write!(f, "{}", *label),
@@ -243,8 +251,8 @@ pub enum Operator {
     Divide,
 }
 
-impl Display for Operator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operator::Add => write!(f, "+"),
             Operator::Subtract => write!(f, "-"),
@@ -262,8 +270,8 @@ pub enum Expression {
     Term(Value),
 }
 
-impl<'a> Display for Expression {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<'a> std::fmt::Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expression::PrefixOperator(operator, right) => {
                 write!(f, "{}({})", operator, right)
@@ -284,8 +292,8 @@ pub enum Operand {
     Segment(Span, Segment),
 }
 
-impl<'a> Display for Operand {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<'a> std::fmt::Display for Operand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operand::Immediate(_, expr) => expr.fmt(f),
 
@@ -328,8 +336,8 @@ impl<'a> Operands {
     }
 }
 
-impl<'a> Display for Operands {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<'a> std::fmt::Display for Operands {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Operands::None(_) => Ok(()),
             Operands::Destination(_, destination) => write!(f, "{}", destination),
@@ -346,8 +354,8 @@ pub struct Instruction {
     pub operands: Operands,
 }
 
-impl<'a> Display for Instruction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<'a> std::fmt::Display for Instruction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Operands::None(_) = self.operands {
             write!(f, "{:?}", self.operation)
         } else {
@@ -357,22 +365,40 @@ impl<'a> Display for Instruction {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Line {
-    Label(Span, String),
+pub enum LineContent {
+    None,
     Instruction(Span, Instruction),
     Data(Span, Vec<u8>),
     Constant(Span, Expression),
-    Times(Expression),
+    Times(Span, Expression, Box<LineContent>),
 }
 
-impl<'a> Display for Line {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<'a> std::fmt::Display for LineContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Line::Label(_, label) => write!(f, "{}:", label),
-            Line::Instruction(_, instruction) => write!(f, "    {}", instruction),
-            Line::Data(_, data) => write!(f, "    {:?}", data),
-            Line::Constant(_, value) => write!(f, "    equ {}", value),
-            Line::Times(expression) => write!(f, "    times {}", expression),
+            LineContent::None => Ok(()),
+            LineContent::Instruction(_, instruction) => write!(f, "{}", instruction),
+            LineContent::Data(_, data) => write!(f, "db {:?}", data),
+            LineContent::Constant(_, value) => write!(f, "equ {}", value),
+            LineContent::Times(_, expr, content) => write!(f, "times {} {}", expr, content),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Line {
+    pub label: Option<Label>,
+    pub content: LineContent,
+}
+
+impl std::fmt::Display for Line {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Line { label, content } = self;
+
+        if let Some(label) = label {
+            write!(f, "{}: {}", label, content)
+        } else {
+            write!(f, "{}", content)
         }
     }
 }

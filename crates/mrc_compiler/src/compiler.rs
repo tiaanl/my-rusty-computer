@@ -7,11 +7,11 @@ use std::fmt::Formatter;
 
 #[derive(Debug)]
 pub enum CompileError {
-    ParseError(ast::Span, Box<ParserError<CompileError>>),
+    ParseError(ast::Span, Box<ParserError>),
     InvalidOperands(ast::Span, ast::Operands),
-    LabelNotFound(String),
+    LabelNotFound(ast::Span, String),
     ConstantValueContainsVariables(ast::Span),
-    Unknown,
+    ConstantWithoutLabel(ast::Span),
 }
 
 impl CompileError {
@@ -19,9 +19,9 @@ impl CompileError {
         match self {
             CompileError::ParseError(span, _) => span,
             CompileError::InvalidOperands(span, _) => span,
-            CompileError::LabelNotFound(_) => todo!(),
-            CompileError::Unknown => todo!(),
+            CompileError::LabelNotFound(span, _) => span,
             CompileError::ConstantValueContainsVariables(span) => span,
+            CompileError::ConstantWithoutLabel(span) => span,
         }
     }
 }
@@ -33,11 +33,13 @@ impl std::fmt::Display for CompileError {
             CompileError::InvalidOperands(_, operands) => {
                 write!(f, "Invalid operands: {}", operands)
             }
-            CompileError::LabelNotFound(label) => write!(f, "Label \"{}\" not found.", label),
+            CompileError::LabelNotFound(_, label) => write!(f, "Label \"{}\" not found.", label),
             CompileError::ConstantValueContainsVariables(_) => {
                 write!(f, "Constant value contains variables.")
             }
-            CompileError::Unknown => write!(f, "Unknown compile error."),
+            CompileError::ConstantWithoutLabel(_) => {
+                write!(f, "Constant declared without a label.")
+            }
         }
     }
 }
@@ -70,7 +72,7 @@ impl Compiler {
         };
 
         for output in outputs.iter_mut() {
-            if let ast::Line::Instruction(_, instruction) = &mut output.line {
+            if let ast::LineContent::Instruction(_, instruction) = &mut output.line.content {
                 if let Some(size_in_bytes) = self.size_in_bytes(instruction) {
                     output.size_in_bytes = size_in_bytes;
                 }
@@ -78,7 +80,9 @@ impl Compiler {
         }
 
         for output in outputs.iter_mut() {
-            if let ast::Line::Instruction(_, ast::Instruction { operands, .. }) = &mut output.line {
+            if let ast::LineContent::Instruction(_, ast::Instruction { operands, .. }) =
+                &mut output.line.content
+            {
                 match operands {
                     ast::Operands::None(_) => {}
                     ast::Operands::Destination(_, destination) => {
@@ -148,7 +152,7 @@ impl Compiler {
                 } else if let Some(output_num) = self.labels.get(label) {
                     *expression = ast::Expression::Term(ast::Value::Constant(*output_num as i32));
                 } else {
-                    return Err(CompileError::LabelNotFound(label.clone()));
+                    return Err(CompileError::LabelNotFound(0..0, label.clone()));
                 }
 
                 Ok(())
@@ -328,10 +332,17 @@ impl crate::LineConsumer for Compiler {
     type Err = CompileError;
 
     fn consume(&mut self, mut line: ast::Line) -> Result<(), Self::Err> {
-        match &mut line {
-            ast::Line::Label(_, label) => self.current_labels.push(label.clone()),
+        let ast::Line { label, content } = &mut line;
+        match content {
+            ast::LineContent::None => {
+                if let Some(label) = label {
+                    self.current_labels.push(label.1.clone());
+                }
+            }
 
-            ast::Line::Instruction(_, _) | ast::Line::Data(_, _) => {
+            ast::LineContent::Instruction(_, _)
+            | ast::LineContent::Data(_, _)
+            | ast::LineContent::Times(_, _, _) => {
                 for label in &self.current_labels {
                     self.labels.insert(label.clone(), self.outputs.len());
                 }
@@ -342,7 +353,11 @@ impl crate::LineConsumer for Compiler {
                 self.current_labels.clear();
             }
 
-            ast::Line::Constant(span, expr) => {
+            ast::LineContent::Constant(span, expr) => {
+                if label.is_none() {
+                    return Err(CompileError::ConstantWithoutLabel(0..0));
+                }
+
                 self.evaluate_expression(expr)?;
 
                 if let ast::Expression::Term(ast::Value::Constant(value)) = expr {
@@ -354,8 +369,6 @@ impl crate::LineConsumer for Compiler {
                     return Err(CompileError::ConstantValueContainsVariables(span.clone()));
                 }
             }
-
-            ast::Line::Times(_) => todo!(),
         }
 
         Ok(())

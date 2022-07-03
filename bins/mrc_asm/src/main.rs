@@ -1,9 +1,8 @@
-use mrc_compiler::ast::Span;
-use mrc_compiler::compiler::Compiler;
-use mrc_compiler::ParserError;
+use mrc_compiler::diagnostics::Diagnostics;
+use mrc_compiler::{ast::Span, compiler::Compiler, LineConsumer, Parser};
 use structopt::StructOpt;
 
-fn print_source_pos(source: &str, span: &Span, path: Option<&str>) {
+fn _print_source_pos(source: &str, span: &Span, path: Option<&str>) {
     let prev_new_line = if let Some(found) = source[..span.start].rfind('\n') {
         found + 1
     } else {
@@ -59,26 +58,33 @@ fn main() {
 
     let source = data.as_str();
 
+    let mut diags = Diagnostics::new(source, opts.source.clone());
     let mut compiler = Compiler::default();
 
-    if let Err(err) = mrc_compiler::parse(source, &mut compiler) {
-        match err {
-            ParserError::Stopped(span, err) => {
-                eprintln!("PARSER ERROR: {}", err);
-                print_source_pos(source, &span, Some(opts.source.as_str()));
+    let mut parser = Parser::new(source);
+    loop {
+        match parser.parse_line() {
+            Ok(Some(line)) => {
+                if let Err(err) = compiler.consume(line) {
+                    diags.error(format!("{}", err), 0..0);
+                    return;
+                }
             }
-
-            err => {
-                eprintln!("PARSER ERROR: {}", err);
-                print_source_pos(source, err.span(), Some(opts.source.as_str()));
+            Ok(None) => break,
+            Err(err) => {
+                diags.error(format!("{}", err), err.span().clone());
+                break;
             }
         }
-
-        return;
     }
 
     if let Err(err) = compiler.compile() {
-        eprintln!("COMPILE ERROR: {}", err);
-        print_source_pos(source, err.span(), Some(opts.source.as_str()));
+        // eprintln!("COMPILE ERROR: {}", err);
+        // print_source_pos(source, err.span(), Some(opts.source.as_str()));
+        diags.error(format!("{}", err), err.span().clone());
+    }
+
+    if !diags.is_empty() {
+        diags.print(&mut std::io::stderr()).unwrap();
     }
 }

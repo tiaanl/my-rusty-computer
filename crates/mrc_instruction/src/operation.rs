@@ -279,6 +279,7 @@ impl std::str::FromStr for Operation {
             "jnae" => JB,
             "jnb" => JNB,
             "jnbe" => JNBE,
+            "jnc" => JBE, // alias
             "jne" => JNE,
             "jng" => JLE,
             "jnge" => JL,

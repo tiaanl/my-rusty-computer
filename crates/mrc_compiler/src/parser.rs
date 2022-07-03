@@ -5,38 +5,33 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 #[derive(Debug, Eq, PartialEq)]
-pub enum ParserError<E> {
+pub enum ParserError {
     Expected(ast::Span, String),
-    IdentifierOrLabelExpected(ast::Span, String),
+    InstructionExpected(ast::Span, String),
     InvalidPrefixOperator(ast::Span),
     DataDefinitionWithoutData(ast::Span),
-
-    /// The LineConsumer asked that the parsing be stopped.
-    Stopped(ast::Span, E),
 }
 
-impl<E> ParserError<E> {
+impl ParserError {
     pub fn span(&self) -> &ast::Span {
         match self {
             ParserError::Expected(span, _)
-            | ParserError::IdentifierOrLabelExpected(span, _)
+            | ParserError::InstructionExpected(span, _)
             | ParserError::InvalidPrefixOperator(span)
-            | ParserError::DataDefinitionWithoutData(span)
-            | ParserError::Stopped(span, _) => span,
+            | ParserError::DataDefinitionWithoutData(span) => span,
         }
     }
 }
 
-impl<E: Display> Display for ParserError<E> {
+impl Display for ParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ParserError::Expected(_, expected) => write!(f, "expected {}", expected),
-            ParserError::IdentifierOrLabelExpected(_, found) => {
-                write!(f, "Identifier or label expected, found: {}", found)
+            ParserError::InstructionExpected(_, found) => {
+                write!(f, "Instruction expected, found {}", found)
             }
             ParserError::InvalidPrefixOperator(_) => write!(f, "Invalid prefix operator"),
             ParserError::DataDefinitionWithoutData(_) => write!(f, "Data definition without data"),
-            ParserError::Stopped(_, e) => write!(f, "Parsing stopped: {}", e),
         }
     }
 }
@@ -87,14 +82,6 @@ impl<'a, E, T: FnMut(ast::Line) -> Result<(), E>> LineConsumer for T {
     }
 }
 
-#[inline]
-pub fn parse<E>(
-    source: &str,
-    consumer: &mut impl LineConsumer<Err = E>,
-) -> Result<(), ParserError<E>> {
-    Parser::new(source).parse(consumer)
-}
-
 impl ast::Operator {
     pub fn evaluate(&self, left: i32, right: i32) -> i32 {
         match self {
@@ -106,7 +93,7 @@ impl ast::Operator {
     }
 }
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     cursor: Cursor<'a>,
 
     /// The current token we are parsing.
@@ -120,7 +107,7 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str) -> Self {
         let mut parser = Self {
             cursor: Cursor::new(source),
             token: Token::EndOfFile(0),
@@ -138,82 +125,53 @@ impl<'a> Parser<'a> {
         self.cursor.source_at(self.token_start, self.token.len())
     }
 
-    fn parse<E>(
-        &mut self,
-        consumer: &mut impl LineConsumer<Err = E>,
-    ) -> Result<(), ParserError<E>> {
-        macro_rules! push_and_check {
-            ($line:expr) => {{
-                if let Err(err) = consumer.consume($line) {
-                    return Err(ParserError::Stopped(
-                        self.token_start..self.token_start + self.token.len(),
-                        err,
-                    ));
-                }
-            }};
+    pub fn parse_line(&mut self) -> Result<Option<ast::Line>, ParserError> {
+        let mut line = ast::Line {
+            label: None,
+            content: ast::LineContent::None,
+        };
+
+        // Skip al empty lines.
+        while let Token::NewLine(_) = self.token {
+            self.next_token();
+        }
+
+        if let Token::EndOfFile(_) = self.token {
+            return Ok(None);
         }
 
         loop {
             match self.token {
-                Token::NewLine(_) => {
-                    // If the line starts with a new line, we just skip it.
-                    self.next_token();
-                }
-
                 Token::Identifier(_) => {
-                    let identifier = self.token_source();
-                    if let Ok(operation) = Operation::from_str(identifier) {
-                        let line = self.parse_instruction(operation)?;
-                        push_and_check!(line);
+                    if let Some(content) = self.parse_line_content()? {
+                        line.content = content;
+                        break;
                     } else {
-                        match identifier.to_lowercase().as_str() {
-                            "equ" => {
-                                let line = self.parse_equ()?;
-                                push_and_check!(line);
-                            }
-
-                            "db" => {
-                                let line = self.parse_data(1)?;
-                                push_and_check!(line);
-                            }
-
-                            "dw" => {
-                                let line = self.parse_data(2)?;
-                                push_and_check!(line);
-                            }
-
-                            "dd" => {
-                                let line = self.parse_data(4)?;
-                                push_and_check!(line);
-                            }
-
-                            "times" => {
-                                let line = self.parse_times()?;
-                                push_and_check!(line);
-                            }
-
-                            _ => {
-                                // If no known keyword is found, we assume the identifier is a
-                                // label.
-                                let line = self.parse_label(identifier)?;
-                                push_and_check!(line);
-                            }
+                        // Can't have more than one label on a line.
+                        if line.label.is_some() {
+                            return Err(self.instruction_expected());
                         }
+
+                        // If we don't recognize the identifier, we assume it's a label.
+                        line.label = Some(self.parse_label()?);
+
+                        // If the token following the label is a `NewLine`, then it's a
+                        // line with only a label.
+                        if let Token::NewLine(_) = self.token {
+                            break;
+                        }
+
+                        // Otherwise we loop around again to see if there is content of the
+                        // rest of the line.
+                        continue;
                     }
                 }
 
-                Token::EndOfFile(_) => break,
-
-                _ => {
-                    return Err(ParserError::IdentifierOrLabelExpected(
-                        self.token_start..self.token_start + self.token.len(),
-                        format!("{}", FoundToken(self.token.clone(), self.token_source())),
-                    ));
-                }
+                _ => return Err(self.instruction_expected()),
             }
         }
 
-        Ok(())
+        Ok(Some(line))
     }
 
     fn next_token(&mut self) {
@@ -237,7 +195,7 @@ impl<'a> Parser<'a> {
 
     /// The current token is required to be a new line.  If it is, then consume it, otherwise we
     /// report an error.
-    fn require_new_line<E>(&mut self) -> Result<(), ParserError<E>> {
+    fn require_new_line(&mut self) -> Result<(), ParserError> {
         if let Token::NewLine(_) = self.token {
             self.next_token();
             Ok(())
@@ -248,13 +206,31 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_label<E>(&mut self, name: &'a str) -> Result<ast::Line, ParserError<E>> {
+    fn parse_line_content(&mut self) -> Result<Option<ast::LineContent>, ParserError> {
+        let identifier = self.token_source();
+
+        if let Ok(operation) = Operation::from_str(identifier) {
+            Ok(Some(self.parse_instruction(operation)?))
+        } else {
+            match identifier.to_lowercase().as_str() {
+                "equ" => Ok(Some(self.parse_equ()?)),
+                "db" => Ok(Some(self.parse_data(1)?)),
+                "dw" => Ok(Some(self.parse_data(2)?)),
+                "dd" => Ok(Some(self.parse_data(4)?)),
+                "times" => Ok(Some(self.parse_times()?)),
+                _ => Ok(None),
+            }
+        }
+    }
+
+    fn parse_label(&mut self) -> Result<ast::Label, ParserError> {
         let start = self.token_start;
 
         // We only capture the label part.
         let end = self.token_start + self.token.len();
 
         // Consume the token that holds the label.
+        let identifier = self.token_source();
         self.next_token();
 
         // Skip the optional colon after a label.
@@ -262,15 +238,10 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
 
-        // We can have a label on a single line, so consume any new lines as well.
-        if matches!(self.token, Token::NewLine(_)) {
-            self.next_token();
-        }
-
-        Ok(ast::Line::Label(start..end, name.to_owned()))
+        Ok(ast::Label(start..end, identifier.to_owned()))
     }
 
-    fn parse_instruction<E>(&mut self, operation: Operation) -> Result<ast::Line, ParserError<E>> {
+    fn parse_instruction(&mut self, operation: Operation) -> Result<ast::LineContent, ParserError> {
         let start = self.token_start;
 
         // Consume the operation.
@@ -282,7 +253,7 @@ impl<'a> Parser<'a> {
 
         self.require_new_line()?;
 
-        Ok(ast::Line::Instruction(
+        Ok(ast::LineContent::Instruction(
             start..end,
             ast::Instruction {
                 operation,
@@ -291,7 +262,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_operands<E>(&mut self) -> Result<ast::Operands, ParserError<E>> {
+    fn parse_operands(&mut self) -> Result<ast::Operands, ParserError> {
         if matches!(self.token, Token::NewLine(_) | Token::EndOfFile(_)) {
             Ok(ast::Operands::None(
                 self.last_token_end..self.last_token_end,
@@ -322,10 +293,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_operand<E>(
+    fn parse_operand(
         &mut self,
         data_size: Option<ast::DataSize>,
-    ) -> Result<ast::Operand, ParserError<E>> {
+    ) -> Result<ast::Operand, ParserError> {
         let start = self.token_start;
         match self.token {
             Token::Punctuation(_, PunctuationKind::OpenBracket) => {
@@ -363,14 +334,14 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression<E>(&mut self) -> Result<ast::Expression, ParserError<E>> {
+    fn parse_expression(&mut self) -> Result<ast::Expression, ParserError> {
         self.parse_expression_with_precedence(0)
     }
 
-    fn parse_memory_operand<E>(
+    fn parse_memory_operand(
         &mut self,
         data_size: Option<ast::DataSize>,
-    ) -> Result<ast::Operand, ParserError<E>> {
+    ) -> Result<ast::Operand, ParserError> {
         assert!(matches!(
             self.token,
             Token::Punctuation(_, PunctuationKind::OpenBracket)
@@ -422,7 +393,7 @@ impl<'a> Parser<'a> {
         ))
     }
 
-    fn parse_equ<E>(&mut self) -> Result<ast::Line, ParserError<E>> {
+    fn parse_equ(&mut self) -> Result<ast::LineContent, ParserError> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
 
         let start = self.token_start;
@@ -436,10 +407,10 @@ impl<'a> Parser<'a> {
 
         self.require_new_line()?;
 
-        Ok(ast::Line::Constant(start..end, expression))
+        Ok(ast::LineContent::Constant(start..end, expression))
     }
 
-    fn parse_data<E>(&mut self, bytes_per_value: usize) -> Result<ast::Line, ParserError<E>> {
+    fn parse_data(&mut self, bytes_per_value: usize) -> Result<ast::LineContent, ParserError> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
 
         let data_definition_token_span = self.token_start..self.token_start + self.token.len();
@@ -497,19 +468,39 @@ impl<'a> Parser<'a> {
 
         self.require_new_line()?;
 
-        Ok(ast::Line::Data(start..end, data))
+        Ok(ast::LineContent::Data(start..end, data))
     }
 
-    fn parse_times<E>(&mut self) -> Result<ast::Line, ParserError<E>> {
+    fn parse_times(&mut self) -> Result<ast::LineContent, ParserError> {
+        debug_assert!(matches!(self.token, Token::Identifier(_)));
+        debug_assert!(self.token_source().to_lowercase().as_str() == "times");
+
+        // Consume the "times" keyword.
         self.next_token();
 
+        // Should be followed by the number of times to repeat the content.
         let expression = self.parse_expression()?;
 
-        Ok(ast::Line::Times(expression))
+        if let Some(line_content) = self.parse_line_content()? {
+            Ok(ast::LineContent::Times(
+                0..0,
+                expression,
+                Box::new(line_content),
+            ))
+        } else {
+            todo!()
+        }
     }
 
-    fn expected<E>(&self, message: String) -> ParserError<E> {
+    fn expected(&self, message: String) -> ParserError {
         ParserError::Expected(0..0, message)
+    }
+
+    fn instruction_expected(&self) -> ParserError {
+        ParserError::InstructionExpected(
+            self.token_start..self.token_start + self.token.len(),
+            format!("{}", FoundToken(self.token.clone(), self.token_source())),
+        )
     }
 }
 
@@ -530,7 +521,7 @@ impl Token {
 }
 
 impl<'a> Parser<'a> {
-    fn prefix_precedence<E>(operator: ast::Operator) -> Result<((), u8), ParserError<E>> {
+    fn prefix_precedence(operator: ast::Operator) -> Result<((), u8), ParserError> {
         Ok(match operator {
             ast::Operator::Add | ast::Operator::Subtract => ((), 5),
             _ => return Err(ParserError::InvalidPrefixOperator(0..0)),
@@ -544,10 +535,10 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression_with_precedence<E>(
+    fn parse_expression_with_precedence(
         &mut self,
         precedence: u8,
-    ) -> Result<ast::Expression, ParserError<E>> {
+    ) -> Result<ast::Expression, ParserError> {
         let mut left = match &self.token {
             Token::Punctuation(_, PunctuationKind::OpenParenthesis) => {
                 self.next_token();
@@ -604,7 +595,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn parse_atom<E>(&mut self) -> Result<ast::Value, ParserError<E>> {
+    fn parse_atom(&mut self) -> Result<ast::Value, ParserError> {
         match self.token {
             Token::Literal(_, LiteralKind::Number(value)) => {
                 self.next_token();

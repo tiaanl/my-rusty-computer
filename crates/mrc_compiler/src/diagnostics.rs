@@ -14,11 +14,22 @@ struct Diagnostic {
 }
 
 #[derive(Default)]
-pub struct Diagnostics {
+pub struct Diagnostics<'a> {
+    source: &'a str,
+    path: String,
+
     diags: Vec<Diagnostic>,
 }
 
-impl Diagnostics {
+impl<'a> Diagnostics<'a> {
+    pub fn new(source: &'a str, path: String) -> Self {
+        Self {
+            source,
+            path,
+            diags: vec![],
+        }
+    }
+
     pub fn diag(&mut self, kind: DiagnosticKind, message: impl ToString, span: Span) {
         self.diags.push(Diagnostic {
             kind,
@@ -39,65 +50,64 @@ impl Diagnostics {
         self.diag(DiagnosticKind::Error, message, span);
     }
 
-    pub fn print<W: std::io::Write>(
-        &self,
-        source: &str,
-        output: &mut W,
-    ) -> Result<(), std::io::Error> {
-        for diag in &self.diags {
-            match diag.kind {
-                DiagnosticKind::Info => writeln!(output, "INFO: {}", &diag.message)?,
-                DiagnosticKind::Warning => writeln!(output, "WARNING: {}", &diag.message)?,
-                DiagnosticKind::Error => writeln!(output, "ERROR: {}", &diag.message)?,
-            }
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.diags.is_empty()
+    }
 
-            print_source_line(output, source, &diag.span, None)?;
+    pub fn print<W: std::io::Write>(&self, output: &mut W) -> Result<(), std::io::Error> {
+        for diag in &self.diags {
+            let message = match diag.kind {
+                DiagnosticKind::Info => format!("INFO: {}", &diag.message),
+                DiagnosticKind::Warning => format!("WARNING: {}", &diag.message),
+                DiagnosticKind::Error => format!("ERROR: {}", &diag.message),
+            };
+
+            self.print_source_line(output, &diag.span, message.as_str())?;
         }
 
         Ok(())
     }
-}
 
-fn print_source_line<W: std::io::Write>(
-    output: &mut W,
-    source: &str,
-    span: &Span,
-    path: Option<&str>,
-) -> Result<(), std::io::Error> {
-    let prev_new_line = if let Some(found) = source[..span.start].rfind('\n') {
-        found + 1
-    } else {
-        0
-    };
+    fn print_source_line<W: std::io::Write>(
+        &self,
+        output: &mut W,
+        span: &Span,
+        message: &str,
+    ) -> Result<(), std::io::Error> {
+        let prev_new_line = if let Some(found) = self.source[..span.start].rfind('\n') {
+            found + 1
+        } else {
+            0
+        };
 
-    let next_new_line = if let Some(found) = source[span.start..].find('\n') {
-        span.start + found
-    } else {
-        source.len()
-    };
+        let next_new_line = if let Some(found) = self.source[span.start..].find('\n') {
+            span.start + found
+        } else {
+            self.source.len()
+        };
 
-    let fragment = &source[prev_new_line..next_new_line];
+        let fragment = &self.source[prev_new_line..next_new_line];
 
-    let line = source[0..span.start].matches('\n').count() + 1;
-    let column = span.start - prev_new_line;
+        let line = self.source[0..span.start].matches('\n').count() + 1;
+        let column = span.start - prev_new_line;
 
-    if let Some(path) = path {
-        writeln!(output, "{}:{}:{}", path, line, column + 1)?;
+        writeln!(output, "{}:{}:{}: {}", self.path, line, column + 1, message)?;
+
+        writeln!(output, "{}", fragment)?;
+        for _ in 0..column {
+            write!(output, " ")?;
+        }
+        let end = if span.start == span.end {
+            span.end + 1
+        } else {
+            span.end
+        };
+        for _ in span.start..end {
+            write!(output, "^")?;
+        }
+        writeln!(output)
     }
-
-    writeln!(output, "{}", fragment)?;
-    for _ in 0..column {
-        write!(output, " ")?;
-    }
-    let end = if span.start == span.end {
-        span.end + 1
-    } else {
-        span.end
-    };
-    for _ in span.start..end {
-        write!(output, "^")?;
-    }
-    writeln!(output)
 }
 
 #[cfg(test)]
