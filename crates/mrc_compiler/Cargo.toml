@@ -4,6 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-mrc_decoder = { path = "../mrc_decoder" }
 mrc_instruction = { path = "../mrc_instruction" }
-mrc_parser = { path = "../mrc_parser" }
+mrc_decoder = { path = "../mrc_decoder" }

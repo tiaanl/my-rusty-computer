@@ -1032,7 +1032,6 @@ name = "mrc-asm"
 version = "0.0.1"
 dependencies = [
  "mrc_compiler",
- "mrc_parser",
  "structopt",
 ]
 
@@ -1071,7 +1070,6 @@ version = "0.1.0"
 dependencies = [
  "mrc_decoder",
  "mrc_instruction",
- "mrc_parser",
 ]
 
 [[package]]
@@ -1112,13 +1110,6 @@ dependencies = [
 [[package]]
 name = "mrc_instruction"
 version = "0.0.1"
-
-[[package]]
-name = "mrc_parser"
-version = "0.1.0"
-dependencies = [
- "mrc_instruction",
-]
 
 [[package]]
 name = "mrc_screen"

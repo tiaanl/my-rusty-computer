@@ -16,6 +16,5 @@ members = [
     "crates/mrc_emulator",
     "crates/mrc_encoder",
     "crates/mrc_instruction",
-    "crates/mrc_parser",
     "crates/mrc_screen",
 ]

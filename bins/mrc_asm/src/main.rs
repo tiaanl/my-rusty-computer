@@ -1,6 +1,6 @@
-use mrc_compiler::Compiler;
-use mrc_parser::ast::Span;
-use mrc_parser::ParserError;
+use mrc_compiler::ast::Span;
+use mrc_compiler::compiler::Compiler;
+use mrc_compiler::ParserError;
 use structopt::StructOpt;
 
 fn print_source_pos(source: &str, span: &Span, path: Option<&str>) {
@@ -61,7 +61,7 @@ fn main() {
 
     let mut compiler = Compiler::default();
 
-    if let Err(err) = mrc_parser::parse(source, &mut compiler) {
+    if let Err(err) = mrc_compiler::parse(source, &mut compiler) {
         match err {
             ParserError::Stopped(span, err) => {
                 eprintln!("PARSER ERROR: {}", err);
