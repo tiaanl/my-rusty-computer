@@ -387,8 +387,8 @@ impl<'a> Parser<'a> {
 
         Ok(ast::Operand::Address(
             start..self.last_token_end,
-            data_size,
             expression,
+            data_size,
             segment_override,
         ))
     }

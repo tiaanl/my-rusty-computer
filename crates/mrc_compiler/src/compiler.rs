@@ -1,4 +1,4 @@
-use crate::{ast, ParserError};
+use crate::ast;
 use mrc_decoder::TryFromEncoding;
 use mrc_instruction as out;
 use mrc_instruction::db::{Code, OperandEncoding};
@@ -7,7 +7,6 @@ use std::fmt::Formatter;
 
 #[derive(Debug)]
 pub enum CompileError {
-    ParseError(ast::Span, Box<ParserError>),
     InvalidOperands(ast::Span, ast::Operands),
     LabelNotFound(ast::Label),
     ConstantValueContainsVariables(ast::Span),
@@ -17,7 +16,6 @@ pub enum CompileError {
 impl CompileError {
     pub fn span(&self) -> &ast::Span {
         match self {
-            CompileError::ParseError(span, _) => span,
             CompileError::InvalidOperands(span, _) => span,
             CompileError::LabelNotFound(ast::Label(span, _)) => span,
             CompileError::ConstantValueContainsVariables(span) => span,
@@ -29,7 +27,6 @@ impl CompileError {
 impl std::fmt::Display for CompileError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CompileError::ParseError(_, err) => err.fmt(f),
             CompileError::InvalidOperands(_, operands) => {
                 write!(f, "Invalid operands: {}", operands)
             }
@@ -122,7 +119,7 @@ impl Compiler {
     fn evaluate_operand(&self, operand: &mut ast::Operand) -> Result<(), CompileError> {
         match operand {
             ast::Operand::Immediate(_, expr) => self.evaluate_expression(expr)?,
-            ast::Operand::Address(_, _, expr, _) => self.evaluate_expression(expr)?,
+            ast::Operand::Address(_, expr, _, _) => self.evaluate_expression(expr)?,
             ast::Operand::Register(_, _) => {}
             ast::Operand::Segment(_, _) => {}
         }

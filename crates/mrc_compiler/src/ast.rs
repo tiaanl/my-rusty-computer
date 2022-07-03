@@ -287,7 +287,7 @@ impl<'a> std::fmt::Display for Expression {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operand {
     Immediate(Span, Expression),
-    Address(Span, Option<DataSize>, Expression, Option<Segment>),
+    Address(Span, Expression, Option<DataSize>, Option<Segment>),
     Register(Span, Register),
     Segment(Span, Segment),
 }
@@ -297,7 +297,7 @@ impl<'a> std::fmt::Display for Operand {
         match self {
             Operand::Immediate(_, expr) => expr.fmt(f),
 
-            Operand::Address(_, data_size, expr, segment) => {
+            Operand::Address(_, expr, data_size, segment) => {
                 if let Some(data_size) = data_size {
                     write!(f, "{} ", data_size)?;
                 }
