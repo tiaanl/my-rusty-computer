@@ -1,7 +1,7 @@
 use crate::ast;
 use mrc_decoder::TryFromEncoding;
 use mrc_instruction as out;
-use mrc_instruction::db::{Code, OperandEncoding};
+use out::db::Code;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 
@@ -46,7 +46,7 @@ impl std::fmt::Display for CompileError {
 #[derive(Debug)]
 struct Output {
     line: ast::Line,
-    _compiled: mrc_instruction::Instruction,
+    _compiled: out::Instruction,
     size_in_bytes: u8,
 }
 
@@ -60,7 +60,7 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile(&mut self) -> Result<Vec<mrc_instruction::Instruction>, CompileError> {
+    pub fn compile(&mut self) -> Result<Vec<out::Instruction>, CompileError> {
         self.resolve_labels()?;
 
         Ok(vec![])
@@ -70,6 +70,13 @@ impl Compiler {
         let outputs = unsafe {
             &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
         };
+
+        for output in outputs.iter_mut() {
+            let span = output.line.content.span().clone();
+            if let ast::LineContent::Instruction(_, instruction) = &mut output.line.content {
+                output._compiled = self.compile_instruction(&span, instruction)?;
+            }
+        }
 
         for output in outputs.iter_mut() {
             if let ast::LineContent::Instruction(_, instruction) = &mut output.line.content {
@@ -112,6 +119,10 @@ impl Compiler {
                 Code::Byte(_) => total += 1,
                 Code::ImmediateByte => total += 1,
                 Code::ImmediateWord => total += 2,
+                Code::ImmediateByteSigned => total += 1,
+                Code::DisplacementByte => total += 1,
+                Code::DisplacementWord => total += 2,
+                Code::PlusReg(_) => total += 1,
                 Code::ModRegRM => match &instruction.operands {
                     ast::Operands::None(_) => unreachable!(),
                     ast::Operands::Destination(_, destination) => match destination {
@@ -126,6 +137,7 @@ impl Compiler {
                         }
                     }
                 },
+                Code::ModRM(_) => total += 1,
             }
         }
 
@@ -185,56 +197,128 @@ impl Compiler {
 
 fn operand_matches_operand_encoding(
     operand: &ast::Operand,
-    operand_encoding: &OperandEncoding,
+    operand_encoding: &out::db::OperandEncoding,
+    size_hint: &Option<ast::DataSize>,
 ) -> bool {
     match operand_encoding {
-        OperandEncoding::Imm8 => matches!(operand, ast::Operand::Immediate(_, _)),
-        OperandEncoding::Reg8 => {
+        out::db::OperandEncoding::Imm => {
+            if let Some(size_hint) = size_hint {
+                match size_hint {
+                    ast::DataSize::Byte => matches!(operand, ast::Operand::Immediate(_, _)),
+                    ast::DataSize::Word => matches!(operand, ast::Operand::Immediate(_, _)),
+                }
+            } else {
+                todo!("Size could not be determinex")
+            }
+        }
+
+        out::db::OperandEncoding::Imm8 => matches!(operand, ast::Operand::Immediate(_, _)),
+
+        out::db::OperandEncoding::RegAl => matches!(
+            operand,
+            ast::Operand::Register(_, ast::Register::Byte(ast::ByteRegister::Al)),
+        ),
+
+        out::db::OperandEncoding::RegAx => matches!(
+            operand,
+            ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Ax)),
+        ),
+
+        out::db::OperandEncoding::Reg8 => {
             matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
         }
-        OperandEncoding::Reg16 => {
+
+        out::db::OperandEncoding::Reg16 => {
             matches!(operand, ast::Operand::Register(_, ast::Register::Word(_)))
         }
-        OperandEncoding::Seg => {
+
+        out::db::OperandEncoding::Seg => {
             matches!(operand, ast::Operand::Segment(_, _))
         }
-        OperandEncoding::Disp8 => matches!(operand, ast::Operand::Immediate(_, _)),
-        OperandEncoding::Disp16 => matches!(operand, ast::Operand::Immediate(_, _)),
 
-        _ => false,
+        out::db::OperandEncoding::Disp8 => matches!(operand, ast::Operand::Immediate(_, _)),
+
+        out::db::OperandEncoding::Disp16 => matches!(operand, ast::Operand::Immediate(_, _)),
+
+        out::db::OperandEncoding::Mem => {
+            if let Some(size_hint) = size_hint {
+                match size_hint {
+                    ast::DataSize::Byte => matches!(operand, ast::Operand::Address(_, _, _, _)),
+                    ast::DataSize::Word => matches!(operand, ast::Operand::Address(_, _, _, _)),
+                }
+            } else {
+                todo!("no size hint specified")
+            }
+        }
+
+        out::db::OperandEncoding::Mem8 => {
+            matches!(
+                operand,
+                ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
+            )
+        }
+
+        out::db::OperandEncoding::Mem16 => {
+            matches!(
+                operand,
+                ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
+            )
+        }
+
+        out::db::OperandEncoding::RegMem8 => {
+            matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
+                || matches!(
+                    operand,
+                    ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
+                )
+        }
+
+        out::db::OperandEncoding::RegMem16 => {
+            matches!(operand, ast::Operand::Register(_, ast::Register::Word(_)))
+                || matches!(
+                    operand,
+                    ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
+                )
+        }
+
+        _ => todo!("operand encoding: {:?}", operand_encoding),
     }
 }
 
 fn operand_set_matches_operand_encodings(
     operand_set: &ast::Operands,
-    destination: &OperandEncoding,
-    source: &OperandEncoding,
+    destination: &out::db::OperandEncoding,
+    source: &out::db::OperandEncoding,
+    size_hint: &Option<ast::DataSize>,
 ) -> bool {
     match operand_set {
         ast::Operands::None(_) => {
-            *destination == OperandEncoding::None && *source == OperandEncoding::None
+            *destination == out::db::OperandEncoding::None
+                && *source == out::db::OperandEncoding::None
         }
 
         ast::Operands::Destination(_, d) => {
-            *source == OperandEncoding::None && operand_matches_operand_encoding(d, destination)
+            *source == out::db::OperandEncoding::None
+                && operand_matches_operand_encoding(d, destination, size_hint)
         }
 
         ast::Operands::DestinationAndSource(_, d, s) => {
-            operand_matches_operand_encoding(d, destination)
-                && operand_matches_operand_encoding(s, source)
+            operand_matches_operand_encoding(d, destination, size_hint)
+                && operand_matches_operand_encoding(s, source, size_hint)
         }
     }
 }
 
 impl Compiler {
-    fn _compile_instruction(
+    fn compile_instruction(
         &self,
         _span: &ast::Span,
         instruction: &ast::Instruction,
     ) -> Result<out::Instruction, CompileError> {
-        let instruction_data = match self.find_instruction_data(instruction) {
+        let id = match self.find_instruction_data(instruction) {
             Some(instruction_data) => instruction_data,
             None => {
+                dbg!(instruction);
                 return Err(CompileError::InvalidOperands(
                     instruction.operands.span().clone(),
                     instruction.operands.clone(),
@@ -242,93 +326,72 @@ impl Compiler {
             }
         };
 
-        match (&instruction_data.destination, &instruction_data.source) {
-            (OperandEncoding::Imm8, OperandEncoding::None) => match &instruction.operands {
-                ast::Operands::Destination(_, ast::Operand::Immediate(_, _)) => {
-                    todo!()
-                    // Ok(out::Instruction::new(
-                    //     instruction.operation,
-                    //     out::OperandSet::Destination(out::Operand::Immediate(
-                    //         out::Immediate::Byte(0),
-                    //     )),
-                    // ))
+        Ok(match &instruction.operands {
+            ast::Operands::None(_) => {
+                out::Instruction::new(instruction.operation, out::OperandSet::None)
+            }
+            ast::Operands::Destination(_, destination) => out::Instruction::new(
+                instruction.operation,
+                out::OperandSet::Destination(self.compile_operand(&id.destination, destination)?),
+            ),
+            ast::Operands::DestinationAndSource(_, destination, source) => out::Instruction::new(
+                instruction.operation,
+                out::OperandSet::DestinationAndSource(
+                    self.compile_operand(&id.destination, destination)?,
+                    self.compile_operand(&id.source, source)?,
+                ),
+            ),
+        })
+    }
+
+    fn compile_operand(
+        &self,
+        _hint: &out::db::OperandEncoding,
+        input: &ast::Operand,
+    ) -> Result<out::Operand, CompileError> {
+        Ok(match input {
+            ast::Operand::Immediate(span, expr) => {
+                let value = match expr {
+                    ast::Expression::Term(ast::Value::Constant(value)) => *value,
+                    ast::Expression::Term(ast::Value::Label(_)) => 0,
+                    _ => return Err(CompileError::ConstantValueContainsVariables(span.clone())),
+                };
+                if value <= u8::MAX as i32 {
+                    out::Operand::Immediate(out::Immediate::Byte(value as u8))
+                } else if value <= u16::MAX as i32 {
+                    out::Operand::Immediate(out::Immediate::Word(value as u16))
+                } else {
+                    todo!("create error for out of range values")
                 }
-                _ => unreachable!(),
+            }
+
+            ast::Operand::Address(_, _expr, _data_size, segment) => {
+                let segment = segment.clone().unwrap_or(ast::Segment::DS);
+                let segment = out::Segment::try_from_encoding(segment.encoding()).unwrap();
+                out::Operand::Direct(segment, 0, out::OperandSize::Byte)
+            }
+
+            ast::Operand::Register(_, register) => match register {
+                ast::Register::Byte(r) => out::Operand::Register(out::SizedRegisterEncoding(
+                    out::RegisterEncoding::try_from_encoding(r.encoding())
+                        .map_err(|_| todo!("Error for invalid encoding"))?,
+                    out::OperandSize::Byte,
+                )),
+                ast::Register::Word(r) => out::Operand::Register(out::SizedRegisterEncoding(
+                    out::RegisterEncoding::try_from_encoding(r.encoding())
+                        .map_err(|_| todo!("Error for invalid encoding"))?,
+                    out::OperandSize::Word,
+                )),
             },
-
-            (OperandEncoding::Reg16, OperandEncoding::Seg) => match &instruction.operands {
-                ast::Operands::DestinationAndSource(
-                    _,
-                    ast::Operand::Register(_, register),
-                    ast::Operand::Segment(_, segment),
-                ) => {
-                    let reg =
-                        out::RegisterEncoding::try_from_encoding(register.encoding()).unwrap();
-                    let seg = out::Segment::try_from_encoding(segment.encoding()).unwrap();
-
-                    Ok(out::Instruction::new(
-                        instruction.operation,
-                        out::OperandSet::DestinationAndSource(
-                            out::Operand::Register(out::SizedRegisterEncoding(
-                                reg,
-                                out::OperandSize::Word,
-                            )),
-                            out::Operand::Segment(seg),
-                        ),
-                    ))
-                }
-                _ => unreachable!(),
-            },
-
-            (OperandEncoding::Seg, OperandEncoding::Reg16) => match &instruction.operands {
-                ast::Operands::DestinationAndSource(
-                    _,
-                    ast::Operand::Segment(_, segment),
-                    ast::Operand::Register(_, register),
-                ) => {
-                    let seg = out::Segment::try_from_encoding(segment.encoding()).unwrap();
-                    let reg =
-                        out::RegisterEncoding::try_from_encoding(register.encoding()).unwrap();
-
-                    Ok(out::Instruction::new(
-                        instruction.operation,
-                        out::OperandSet::DestinationAndSource(
-                            out::Operand::Segment(seg),
-                            out::Operand::Register(out::SizedRegisterEncoding(
-                                reg,
-                                out::OperandSize::Word,
-                            )),
-                        ),
-                    ))
-                }
-                _ => unreachable!(),
-            },
-
-            // (OperandEncoding::Disp8, OperandEncoding::None) => match &instruction.operands {
-            //     ast::Operands::Destination(
-            //         _,
-            //         ast::Operand::Immediate(
-            //             _,
-            //             ast::Expression::Term(ast::Value::Constant(output_num)),
-            //         ),
-            //     ) => {
-            //         dbg!(output_num);
-            //         todo!()
-            //     }
-            //     _ => unreachable!(),
-            // },
-            _ => Err(CompileError::InvalidOperands(
-                instruction.operands.span().clone(),
-                instruction.operands.clone(),
-            )),
-        }
+            ast::Operand::Segment(_, _) => todo!(),
+        })
     }
 
     fn find_instruction_data(
         &self,
         instruction: &ast::Instruction,
-    ) -> Option<&mrc_instruction::db::InstructionData> {
-        for instruction_data in mrc_instruction::db::INSTRUCTIONS {
+    ) -> Option<&out::db::InstructionData> {
+        for instruction_data in out::db::INSTRUCTIONS {
             if instruction.operation != instruction_data.operation {
                 continue;
             }
@@ -337,6 +400,7 @@ impl Compiler {
                 &instruction.operands,
                 &instruction_data.destination,
                 &instruction_data.source,
+                &instruction_data_size_hint(instruction_data),
             ) {
                 return Some(instruction_data);
             }
@@ -371,10 +435,7 @@ impl crate::LineConsumer for Compiler {
 
                 self.outputs.push(Output {
                     line,
-                    _compiled: mrc_instruction::Instruction::new(
-                        mrc_instruction::Operation::NOP,
-                        mrc_instruction::OperandSet::None,
-                    ),
+                    _compiled: out::Instruction::new(out::Operation::NOP, out::OperandSet::None),
                     size_in_bytes: 0,
                 });
 
@@ -400,6 +461,43 @@ impl crate::LineConsumer for Compiler {
     }
 }
 
+fn instruction_data_size_hint(id: &out::db::InstructionData) -> Option<ast::DataSize> {
+    match (
+        operand_encoding_size_hint(&id.destination),
+        operand_encoding_size_hint(&id.source),
+    ) {
+        (Some(d), Some(s)) if d == s => Some(d),
+        (Some(size), None) => Some(size),
+        (None, Some(size)) => Some(size),
+        (Some(_), Some(_)) => None,
+        (None, None) => None,
+    }
+}
+
+fn operand_encoding_size_hint(oe: &out::db::OperandEncoding) -> Option<ast::DataSize> {
+    use out::db::OperandEncoding;
+    match oe {
+        OperandEncoding::None => None,
+        OperandEncoding::Imm => None,
+        OperandEncoding::Imm8 => Some(ast::DataSize::Byte),
+        OperandEncoding::Imm16 => Some(ast::DataSize::Word),
+        OperandEncoding::SignedByteWord8 => Some(ast::DataSize::Byte),
+        OperandEncoding::SignedByteWord16 => Some(ast::DataSize::Word),
+        OperandEncoding::RegAl => Some(ast::DataSize::Byte),
+        OperandEncoding::RegAx => Some(ast::DataSize::Word),
+        OperandEncoding::Reg8 => Some(ast::DataSize::Byte),
+        OperandEncoding::Reg16 => Some(ast::DataSize::Word),
+        OperandEncoding::Seg => Some(ast::DataSize::Word),
+        OperandEncoding::Mem => None,
+        OperandEncoding::Mem8 => Some(ast::DataSize::Byte),
+        OperandEncoding::Mem16 => Some(ast::DataSize::Word),
+        OperandEncoding::RegMem8 => Some(ast::DataSize::Byte),
+        OperandEncoding::RegMem16 => Some(ast::DataSize::Word),
+        OperandEncoding::Disp8 => Some(ast::DataSize::Byte),
+        OperandEncoding::Disp16 => Some(ast::DataSize::Word),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -412,6 +510,36 @@ mod tests {
             .consume(ast::Line {
                 label: None,
                 content: ast::LineContent::None,
+            })
+            .unwrap();
+        println!("{:?}", compiler.compile().unwrap());
+    }
+
+    #[test]
+    fn basic_2() {
+        let mut compiler = Compiler::default();
+        compiler
+            .consume(ast::Line {
+                label: None,
+                content: ast::LineContent::Instruction(
+                    0..0,
+                    ast::Instruction {
+                        operation: out::Operation::MOV,
+                        operands: ast::Operands::DestinationAndSource(
+                            0..0,
+                            ast::Operand::Address(
+                                0..0,
+                                ast::Expression::Term(ast::Value::Constant(0)),
+                                None,
+                                None,
+                            ),
+                            ast::Operand::Register(
+                                0..0,
+                                ast::Register::Byte(ast::ByteRegister::Al),
+                            ),
+                        ),
+                    },
+                ),
             })
             .unwrap();
         println!("{:?}", compiler.compile().unwrap());

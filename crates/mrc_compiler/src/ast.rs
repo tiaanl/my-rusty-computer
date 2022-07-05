@@ -373,6 +373,18 @@ pub enum LineContent {
     Times(Span, Expression, Box<LineContent>),
 }
 
+impl LineContent {
+    pub fn span(&self) -> &Span {
+        match self {
+            LineContent::None => unreachable!(),
+            LineContent::Instruction(span, _)
+            | LineContent::Data(span, _)
+            | LineContent::Constant(span, _)
+            | LineContent::Times(span, _, _) => span,
+        }
+    }
+}
+
 impl<'a> std::fmt::Display for LineContent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
