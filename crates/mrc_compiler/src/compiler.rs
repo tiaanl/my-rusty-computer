@@ -45,8 +45,9 @@ impl std::fmt::Display for CompileError {
 
 #[derive(Debug)]
 struct Output {
-    size_in_bytes: u8,
     line: ast::Line,
+    _compiled: mrc_instruction::Instruction,
+    size_in_bytes: u8,
 }
 
 #[derive(Default)]
@@ -62,12 +63,7 @@ impl Compiler {
     pub fn compile(&mut self) -> Result<Vec<mrc_instruction::Instruction>, CompileError> {
         self.resolve_labels()?;
 
-        let mut result = vec![];
-        for output in &self.outputs {
-            result.push(self.encode(&output.line)?);
-        }
-
-        Ok(result)
+        Ok(vec![])
     }
 
     fn resolve_labels(&mut self) -> Result<(), CompileError> {
@@ -102,21 +98,34 @@ impl Compiler {
 
         Ok(())
     }
-
-    fn encode(&self, line: &ast::Line) -> Result<mrc_instruction::Instruction, CompileError> {
-        todo!()
-    }
 }
 
 impl Compiler {
     pub fn size_in_bytes(&self, instruction: &ast::Instruction) -> Option<u8> {
         let id = self.find_instruction_data(instruction)?;
 
+        println!("id: {:?}", id);
+
         let mut total = 0;
         for code in id.codes {
             match code {
                 Code::Byte(_) => total += 1,
                 Code::ImmediateByte => total += 1,
+                Code::ImmediateWord => total += 2,
+                Code::ModRegRM => match &instruction.operands {
+                    ast::Operands::None(_) => unreachable!(),
+                    ast::Operands::Destination(_, destination) => match destination {
+                        ast::Operand::Immediate(_, _) => unreachable!(),
+                        ast::Operand::Address(_, _, _, _) => todo!(),
+                        ast::Operand::Register(_, _) => todo!(),
+                        ast::Operand::Segment(_, _) => todo!(),
+                    },
+                    ast::Operands::DestinationAndSource(_, destination, source) => {
+                        match (destination, source) {
+                            (_, _) => todo!("{:?}, {:?}", destination, source),
+                        }
+                    }
+                },
             }
         }
 
@@ -361,8 +370,12 @@ impl crate::LineConsumer for Compiler {
                 }
 
                 self.outputs.push(Output {
-                    size_in_bytes: 0,
                     line,
+                    _compiled: mrc_instruction::Instruction::new(
+                        mrc_instruction::Operation::NOP,
+                        mrc_instruction::OperandSet::None,
+                    ),
+                    size_in_bytes: 0,
                 });
 
                 self.current_labels.clear();
@@ -384,5 +397,23 @@ impl crate::LineConsumer for Compiler {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::LineConsumer;
+
+    #[test]
+    fn basic() {
+        let mut compiler = Compiler::default();
+        compiler
+            .consume(ast::Line {
+                label: None,
+                content: ast::LineContent::None,
+            })
+            .unwrap();
+        println!("{:?}", compiler.compile().unwrap());
     }
 }

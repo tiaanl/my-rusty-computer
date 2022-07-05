@@ -28,6 +28,8 @@ pub enum OperandEncoding {
 pub enum Code {
     Byte(u8),
     ImmediateByte,
+    ImmediateWord,
+    ModRegRM,
 }
 
 #[derive(Debug)]
@@ -55,15 +57,15 @@ mod private {
 
     #[rustfmt::skip]
     pub const INSTRUCTIONS: &[InstructionData] = &[
-        id!(NOP, None,None, &[]),
+        id!(NOP, None,None, &[Code::Byte(0x90)]),
 
-        id!(MOV, Mem16, Seg,   &[]), // [mr: 8c   /r   ]
-        id!(MOV, Reg16, Seg,   &[]), // [mr: o16  8c   /r ]
-        id!(MOV, Seg,   Mem16, &[]), // [rm: 8e   /r   ]
-        id!(MOV, Seg,   Reg16, &[]), // [rm: 8e   /r   ]
-        id!(MOV, RegAl, Mem8,  &[]), // [-i: a0   iw   ]
-        id!(MOV, RegAx, Mem16, &[]), // [-i: o16  a1   iw ]
-        id!(MOV, Mem8,  RegAl, &[]), // [i-: a2   iw   ]
+        id!(MOV, Mem16, Seg,   &[Code::Byte(0x8C), Code::ModRegRM]), // [mr: 8c   /r   ]
+        id!(MOV, Reg16, Seg,   &[Code::Byte(0x8C), Code::ModRegRM]), // [mr: o16  8c   /r ]
+        id!(MOV, Seg,   Mem16, &[Code::Byte(0x8E), Code::ModRegRM]), // [rm: 8e   /r   ]
+        id!(MOV, Seg,   Reg16, &[Code::Byte(0x8E), Code::ModRegRM]), // [rm: 8e   /r   ]
+        id!(MOV, RegAl, Mem8,  &[Code::Byte(0xA0), Code::ImmediateWord]), // [-i: a0   iw   ]
+        id!(MOV, RegAx, Mem16, &[Code::Byte(0xA1), Code::ImmediateByte]), // [-i: o16  a1   iw ]
+        id!(MOV, Mem8,  RegAl, &[Code::Byte(0xA2), Code::ImmediateWord]), // [i-: a2   iw   ]
         id!(MOV, Mem16, RegAx, &[]), // [i-: o16  a3   iw ]
         id!(MOV, Mem8,  Reg8,  &[]), // [mr: 88   /r   ]
         id!(MOV, Reg8,  Reg8,  &[]), // [mr: 88   /r   ]
