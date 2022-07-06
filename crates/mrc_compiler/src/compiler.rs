@@ -67,9 +67,8 @@ impl Compiler {
     }
 
     fn resolve_labels(&mut self) -> Result<(), CompileError> {
-        let outputs = unsafe {
-            &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
-        };
+        let outputs =
+            unsafe { &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len()) };
 
         for output in outputs.iter_mut() {
             let span = output.line.content.span().clone();
@@ -87,9 +86,7 @@ impl Compiler {
         }
 
         for output in outputs.iter_mut() {
-            if let ast::LineContent::Instruction(_, ast::Instruction { operands, .. }) =
-                &mut output.line.content
-            {
+            if let ast::LineContent::Instruction(_, ast::Instruction { operands, .. }) = &mut output.line.content {
                 match operands {
                     ast::Operands::None(_) => {}
                     ast::Operands::Destination(_, destination) => {
@@ -109,7 +106,12 @@ impl Compiler {
 
 impl Compiler {
     pub fn size_in_bytes(&self, instruction: &ast::Instruction) -> Option<u8> {
-        let id = self.find_instruction_data(instruction)?;
+        return Some(1);
+        let id = if let Some(id) = self.find_instruction_data(instruction) {
+            id
+        } else {
+            return Some(0);
+        };
 
         println!("id: {:?}", id);
 
@@ -117,11 +119,13 @@ impl Compiler {
         for code in id.codes {
             match code {
                 Code::Byte(_) => total += 1,
-                Code::ImmediateByte => total += 1,
-                Code::ImmediateWord => total += 2,
-                Code::ImmediateByteSigned => total += 1,
-                Code::DisplacementByte => total += 1,
-                Code::DisplacementWord => total += 2,
+                Code::ImmByte => total += 1,
+                Code::ImmWord => total += 2,
+                Code::ImmByteSign => total += 1,
+                Code::Disp => todo!(),
+                Code::DispByte => total += 1,
+                Code::DispWord => total += 2,
+                Code::SegOff => total += 4,
                 Code::PlusReg(_) => total += 1,
                 Code::ModRegRM => match &instruction.operands {
                     ast::Operands::None(_) => unreachable!(),
@@ -131,11 +135,9 @@ impl Compiler {
                         ast::Operand::Register(_, _) => todo!(),
                         ast::Operand::Segment(_, _) => todo!(),
                     },
-                    ast::Operands::DestinationAndSource(_, destination, source) => {
-                        match (destination, source) {
-                            (_, _) => todo!("{:?}, {:?}", destination, source),
-                        }
-                    }
+                    ast::Operands::DestinationAndSource(_, destination, source) => match (destination, source) {
+                        (_, _) => todo!("{:?}, {:?}", destination, source),
+                    },
                 },
                 Code::ModRM(_) => total += 1,
             }
@@ -167,9 +169,8 @@ impl Compiler {
                     ast::Expression::Term(ast::Value::Constant(right_value)),
                 ) = (left.as_ref(), right.as_ref())
                 {
-                    *expression = ast::Expression::Term(ast::Value::Constant(
-                        operator.evaluate(*left_value, *right_value),
-                    ));
+                    *expression =
+                        ast::Expression::Term(ast::Value::Constant(operator.evaluate(*left_value, *right_value)));
                 }
 
                 Ok(())
@@ -199,8 +200,10 @@ fn operand_matches_operand_encoding(
     operand: &ast::Operand,
     operand_encoding: &out::db::OperandEncoding,
     size_hint: &Option<ast::DataSize>,
-) -> bool {
-    match operand_encoding {
+) -> Option<bool> {
+    Some(match operand_encoding {
+        out::db::OperandEncoding::None => false,
+
         out::db::OperandEncoding::Imm => {
             if let Some(size_hint) = size_hint {
                 match size_hint {
@@ -208,7 +211,11 @@ fn operand_matches_operand_encoding(
                     ast::DataSize::Word => matches!(operand, ast::Operand::Immediate(_, _)),
                 }
             } else {
-                todo!("Size could not be determinex")
+                println!(
+                    "Size could not be determined {:?} {:?} {:?}",
+                    operand, operand_encoding, size_hint
+                );
+                return None;
             }
         }
 
@@ -222,6 +229,21 @@ fn operand_matches_operand_encoding(
         out::db::OperandEncoding::RegAx => matches!(
             operand,
             ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Ax)),
+        ),
+
+        out::db::OperandEncoding::RegCl => matches!(
+            operand,
+            ast::Operand::Register(_, ast::Register::Byte(ast::ByteRegister::Cl)),
+        ),
+
+        out::db::OperandEncoding::RegCx => matches!(
+            operand,
+            ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Cx)),
+        ),
+
+        out::db::OperandEncoding::RegDx => matches!(
+            operand,
+            ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Dx)),
         ),
 
         out::db::OperandEncoding::Reg8 => {
@@ -247,42 +269,40 @@ fn operand_matches_operand_encoding(
                     ast::DataSize::Word => matches!(operand, ast::Operand::Address(_, _, _, _)),
                 }
             } else {
-                todo!("no size hint specified")
+                println!("no size hint specified");
+                return None;
             }
         }
 
         out::db::OperandEncoding::Mem8 => {
-            matches!(
-                operand,
-                ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
-            )
+            matches!(operand, ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _))
         }
 
         out::db::OperandEncoding::Mem16 => {
-            matches!(
-                operand,
-                ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
-            )
+            matches!(operand, ast::Operand::Address(_, _, Some(ast::DataSize::Word), _))
         }
 
         out::db::OperandEncoding::RegMem8 => {
             matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
-                || matches!(
-                    operand,
-                    ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
-                )
+                || matches!(operand, ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _))
         }
 
         out::db::OperandEncoding::RegMem16 => {
             matches!(operand, ast::Operand::Register(_, ast::Register::Word(_)))
-                || matches!(
-                    operand,
-                    ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
-                )
+                || matches!(operand, ast::Operand::Address(_, _, Some(ast::DataSize::Word), _))
         }
 
-        _ => todo!("operand encoding: {:?}", operand_encoding),
-    }
+        out::db::OperandEncoding::SegEs => matches!(operand, ast::Operand::Segment(_, ast::Segment::ES)),
+        out::db::OperandEncoding::SegCs => matches!(operand, ast::Operand::Segment(_, ast::Segment::CS)),
+        out::db::OperandEncoding::SegSs => matches!(operand, ast::Operand::Segment(_, ast::Segment::SS)),
+        out::db::OperandEncoding::SegDs => matches!(operand, ast::Operand::Segment(_, ast::Segment::DS)),
+
+        out::db::OperandEncoding::SegOff => false, // TODO
+
+        _ => {
+            todo!("operand encoding: {:?}", operand_encoding);
+        }
+    })
 }
 
 fn operand_set_matches_operand_encodings(
@@ -290,35 +310,32 @@ fn operand_set_matches_operand_encodings(
     destination: &out::db::OperandEncoding,
     source: &out::db::OperandEncoding,
     size_hint: &Option<ast::DataSize>,
-) -> bool {
-    match operand_set {
+) -> Option<bool> {
+    Some(match operand_set {
         ast::Operands::None(_) => {
-            *destination == out::db::OperandEncoding::None
-                && *source == out::db::OperandEncoding::None
+            *destination == out::db::OperandEncoding::None && *source == out::db::OperandEncoding::None
         }
 
         ast::Operands::Destination(_, d) => {
-            *source == out::db::OperandEncoding::None
-                && operand_matches_operand_encoding(d, destination, size_hint)
+            *source == out::db::OperandEncoding::None && operand_matches_operand_encoding(d, destination, size_hint)?
         }
 
         ast::Operands::DestinationAndSource(_, d, s) => {
-            operand_matches_operand_encoding(d, destination, size_hint)
-                && operand_matches_operand_encoding(s, source, size_hint)
+            operand_matches_operand_encoding(d, destination, size_hint)?
+                && operand_matches_operand_encoding(s, source, size_hint)?
         }
-    }
+    })
 }
 
 impl Compiler {
     fn compile_instruction(
         &self,
         _span: &ast::Span,
-        instruction: &ast::Instruction,
+        instruction: &mut ast::Instruction,
     ) -> Result<out::Instruction, CompileError> {
         let id = match self.find_instruction_data(instruction) {
             Some(instruction_data) => instruction_data,
             None => {
-                dbg!(instruction);
                 return Err(CompileError::InvalidOperands(
                     instruction.operands.span().clone(),
                     instruction.operands.clone(),
@@ -326,10 +343,8 @@ impl Compiler {
             }
         };
 
-        Ok(match &instruction.operands {
-            ast::Operands::None(_) => {
-                out::Instruction::new(instruction.operation, out::OperandSet::None)
-            }
+        Ok(match &mut instruction.operands {
+            ast::Operands::None(_) => out::Instruction::new(instruction.operation, out::OperandSet::None),
             ast::Operands::Destination(_, destination) => out::Instruction::new(
                 instruction.operation,
                 out::OperandSet::Destination(self.compile_operand(&id.destination, destination)?),
@@ -347,10 +362,11 @@ impl Compiler {
     fn compile_operand(
         &self,
         _hint: &out::db::OperandEncoding,
-        input: &ast::Operand,
+        input: &mut ast::Operand,
     ) -> Result<out::Operand, CompileError> {
         Ok(match input {
             ast::Operand::Immediate(span, expr) => {
+                self.evaluate_expression(expr)?;
                 let value = match expr {
                     ast::Expression::Term(ast::Value::Constant(value)) => *value,
                     ast::Expression::Term(ast::Value::Label(_)) => 0,
@@ -383,14 +399,13 @@ impl Compiler {
                     out::OperandSize::Word,
                 )),
             },
-            ast::Operand::Segment(_, _) => todo!(),
+            ast::Operand::Segment(_, seg) => {
+                out::Operand::Segment(out::Segment::try_from_encoding(seg.encoding()).unwrap())
+            }
         })
     }
 
-    fn find_instruction_data(
-        &self,
-        instruction: &ast::Instruction,
-    ) -> Option<&out::db::InstructionData> {
+    fn find_instruction_data(&self, instruction: &ast::Instruction) -> Option<&out::db::InstructionData> {
         for instruction_data in out::db::INSTRUCTIONS {
             if instruction.operation != instruction_data.operation {
                 continue;
@@ -401,7 +416,7 @@ impl Compiler {
                 &instruction_data.destination,
                 &instruction_data.source,
                 &instruction_data_size_hint(instruction_data),
-            ) {
+            )? {
                 return Some(instruction_data);
             }
         }
@@ -422,9 +437,7 @@ impl crate::LineConsumer for Compiler {
                 }
             }
 
-            ast::LineContent::Instruction(_, _)
-            | ast::LineContent::Data(_, _)
-            | ast::LineContent::Times(_, _, _) => {
+            ast::LineContent::Instruction(_, _) | ast::LineContent::Data(_, _) | ast::LineContent::Times(_, _, _) => {
                 if let Some(label) = label {
                     self.current_labels.push(label.1.clone());
                 }
@@ -481,13 +494,22 @@ fn operand_encoding_size_hint(oe: &out::db::OperandEncoding) -> Option<ast::Data
         OperandEncoding::Imm => None,
         OperandEncoding::Imm8 => Some(ast::DataSize::Byte),
         OperandEncoding::Imm16 => Some(ast::DataSize::Word),
-        OperandEncoding::SignedByteWord8 => Some(ast::DataSize::Byte),
-        OperandEncoding::SignedByteWord16 => Some(ast::DataSize::Word),
+        OperandEncoding::Sbw => None,
+        OperandEncoding::Sbw8 => Some(ast::DataSize::Byte),
+        OperandEncoding::Sbw16 => Some(ast::DataSize::Word),
         OperandEncoding::RegAl => Some(ast::DataSize::Byte),
         OperandEncoding::RegAx => Some(ast::DataSize::Word),
+        OperandEncoding::RegCl => Some(ast::DataSize::Byte),
+        OperandEncoding::RegCx => Some(ast::DataSize::Word),
+        OperandEncoding::RegDx => Some(ast::DataSize::Word),
         OperandEncoding::Reg8 => Some(ast::DataSize::Byte),
         OperandEncoding::Reg16 => Some(ast::DataSize::Word),
+        OperandEncoding::SegEs => Some(ast::DataSize::Word),
+        OperandEncoding::SegCs => Some(ast::DataSize::Word),
+        OperandEncoding::SegSs => Some(ast::DataSize::Word),
+        OperandEncoding::SegDs => Some(ast::DataSize::Word),
         OperandEncoding::Seg => Some(ast::DataSize::Word),
+        OperandEncoding::SegOff => None,
         OperandEncoding::Mem => None,
         OperandEncoding::Mem8 => Some(ast::DataSize::Byte),
         OperandEncoding::Mem16 => Some(ast::DataSize::Word),
@@ -527,16 +549,8 @@ mod tests {
                         operation: out::Operation::MOV,
                         operands: ast::Operands::DestinationAndSource(
                             0..0,
-                            ast::Operand::Address(
-                                0..0,
-                                ast::Expression::Term(ast::Value::Constant(0)),
-                                None,
-                                None,
-                            ),
-                            ast::Operand::Register(
-                                0..0,
-                                ast::Register::Byte(ast::ByteRegister::Al),
-                            ),
+                            ast::Operand::Address(0..0, ast::Expression::Term(ast::Value::Constant(0)), None, None),
+                            ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
                         ),
                     },
                 ),
