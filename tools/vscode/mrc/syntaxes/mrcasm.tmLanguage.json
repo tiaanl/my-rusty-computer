@@ -1,32 +1,95 @@
 {
-	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-	"name": "My Rusty Computer Assembly",
-	"patterns": [
-		{
-			"include": "#keywords"
-		},
-		{
-			"include": "#strings"
-		}
-	],
-	"repository": {
-		"keywords": {
-			"patterns": [{
-				"name": "keyword.control.mrcasm",
-				"match": "\\b(if|while|for|return)\\b"
-			}]
-		},
-		"strings": {
-			"name": "string.quoted.double.mrcasm",
-			"begin": "\"",
-			"end": "\"",
-			"patterns": [
-				{
-					"name": "constant.character.escape.mrcasm",
-					"match": "\\\\."
-				}
-			]
-		}
-	},
-	"scopeName": "source.mrcasm"
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "fileTypes": ["asm"],
+  "name": "My Rusty Computer Assembly",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#registers"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#mnemonics"
+    },
+    {
+      "include": "#strings"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.mrcasm",
+          "match": "(;|(^|\\s)#\\s).*$"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.mrcasm",
+          "match": "(?i)\\b(equ|times|db|dw)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.numeric.binary.mrcasm",
+          "match": "(?i)\\b(?:(?:0[by](?:[01][01_]*))|(?:(?:[01][01_]*)[by]))\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.mrcasm",
+          "match": "(?i)\\b(?:(?:0[dt](?:[0-9][0-9_]*))|(?:(?:[0-9][0-9_]*)[dt]?))\\b"
+        },
+        {
+          "name": "constant.numeric.hex.mrcasm",
+          "match": "(?i)(?:\\$[0-9]\\_?(?:[[:xdigit:]][[:xdigit:]_]*)?)\\b"
+        },
+        {
+          "name": "constant.numeric.hex.mrcasm",
+          "match": "(?i)\\b(?:(?:0[xh](?:[[:xdigit:]][[:xdigit:]_]*))|(?:(?:[[:xdigit:]][[:xdigit:]_]*)[hxHX]))\\b"
+        }
+      ]
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.register.mrcasm",
+          "match": "(?i)\\b(?:[abcd][hl]|[abcd]x|(?:di|si|bp|sp))\\b"
+        },
+        {
+          "name": "variable.segment.mrcasm",
+          "match": "(?i)\\b(?:[cdes]s)\\b"
+        }
+      ]
+    },
+    "mnemonics": {
+      "patterns": [
+        {
+          "name": "keyword",
+          "match": "(?i)\\b(aa[adms]|ad[cd]|and|call|cbw|cl[cdi]|cmc|cmp[bw]?|cwd|da[as]|dec|div|esc|hlt|idiv|imul|in|in[ct]|int1|int3|into|iret|jb|jbe|jcxz|je|jl|jle|jmp|jnb|jnbe|jne|jnl|jnle|jno|jnp|jns|jo|jp|js|lahf|lds|lea|les|lock|lods[bw]|loop|loope|loopne|mov|movs[bw]|mul|neg|no[pt]|or|out|pop|popf|push|pushf|rc[lr]|re[pt]|ro[lr]|sahf|salc|sar|sbb|scas[bw]|sh[lr]|st[cdi]|stos[bw]|sub|test|wait|xchg|xlat|xor)\\b"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.mrcasm",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.mrcasm",
+          "match": "\\\\."
+        }
+      ]
+    }
+  },
+  "scopeName": "source.mrcasm"
 }
