@@ -1,0 +1,25 @@
+{
+    "name": "mrc",
+    "displayName": "mrc",
+    "description": "My Rusty Computer Assembly Language Support",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.69.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "mrcasm",
+            "aliases": ["My Rusty Computer Assembly", "mrcasm"],
+            "extensions": [".asm"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "mrcasm",
+            "scopeName": "source.mrcasm",
+            "path": "./syntaxes/mrcasm.tmLanguage.json"
+        }]
+    }
+}
