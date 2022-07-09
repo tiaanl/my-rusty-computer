@@ -30,33 +30,6 @@ impl Encoding {
             bytes: parts[1..].to_owned(),
         }
     }
-
-    // fn operands(parts: Vec<String>) -> (String, String) {
-    //     match parts.len() {
-    //         2 => (
-    //             Self::parse_operand(parts[1].clone()),
-    //             Self::parse_operand(parts[0].clone()),
-    //         ),
-    //         1 => (Self::parse_operand(parts[0].clone()), "none".to_owned()),
-    //         0 => ("none".to_owned(), "none".to_owned()),
-    //         _ => panic!(),
-    //     }
-    // }
-    //
-    // fn parse_operand(operand: String) -> String {
-    //     match operand.to_lowercase().as_str() {
-    //         "memory" => "mem",
-    //         "register" => "reg",
-    //         "register/memory" | "reg./memory" => "reg_mem",
-    //         "immediate" | "fixed port" | "immediate data" => "imm",
-    //         "accumulator" => "acc",
-    //         "segment register" => "seg",
-    //         "variable port" => "none",
-    //         "" => "none",
-    //         _ => "TODO",
-    //     }
-    //     .to_owned()
-    // }
 }
 
 #[derive(Debug, Default)]

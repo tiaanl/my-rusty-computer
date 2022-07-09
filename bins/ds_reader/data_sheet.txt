@@ -52,7 +52,7 @@ Immediate from Register/Memory              | 1 0 0 0 0 0 s w | mod 1 0 1 r/m   
 Immediate from Accumulator                  | 0 0 1 0 1 1 0 w | data            | data if w = 1
 SSB = Subtract with Borrow
 Reg./Memory and Register to Either          | 0 0 0 1 1 0 d w | mod reg r/m
-Immediate from Register/Memory              | 1 0 0 0 0 0 s w | mod 0 1 1 r/m   | data data if s:w = 01
+Immediate from Register/Memory              | 1 0 0 0 0 0 s w | mod 0 1 1 r/m   | data | data if s:w = 01
 Immediate from Accumulator                  | 0 0 0 1 1 1 w   | data            | data if w = 1
 DEC = Decrement:
 Register/memory                             | 1 1 1 1 1 1 1 w | mod 0 0 1 r/m
