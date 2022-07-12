@@ -66,8 +66,8 @@ fn main() {
         match parser.parse_line() {
             Ok(Some(line)) => {
                 if let Err(err) = compiler.consume(line) {
-                    diags.error(format!("{}", err), 0..0);
-                    return;
+                    diags.error(format!("{}", err), err.span().clone());
+                    break;
                 }
             }
             Ok(None) => break,

@@ -154,20 +154,22 @@ impl std::fmt::Display for Operand {
         match self {
             Operand::Direct(segment, displacement, operand_size) => {
                 match operand_size {
-                    OperandSize::Byte => write!(f, "byte ")?,
-                    OperandSize::Word => write!(f, "word ")?,
+                    OperandSize::Byte => "byte ".fmt(f)?,
+                    OperandSize::Word => "word ".fmt(f)?,
                 }
+                "[".fmt(f)?;
                 write_segment_prefix(f, *segment)?;
-                write!(f, "[{:#06x}]", displacement)
+                write!(f, "{:#06x}]", displacement)
             }
 
             Operand::Indirect(segment, encoding, displacement, operand_size) => {
                 match operand_size {
-                    OperandSize::Byte => write!(f, "byte ")?,
-                    OperandSize::Word => write!(f, "word ")?,
+                    OperandSize::Byte => "byte ".fmt(f)?,
+                    OperandSize::Word => "word ".fmt(f)?,
                 }
+                "[".fmt(f)?;
                 write_segment_prefix(f, *segment)?;
-                write!(f, "[{}{}]", encoding, displacement)
+                write!(f, "{}{}]", encoding, displacement)
             }
 
             Operand::Register(SizedRegisterEncoding(register, operand_size)) => {

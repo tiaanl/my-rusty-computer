@@ -8,6 +8,7 @@ use std::str::FromStr;
 pub enum ParserError {
     Expected(ast::Span, String),
     InstructionExpected(ast::Span, String),
+    OperandExpected(ast::Span, String),
     InvalidPrefixOperator(ast::Span),
     DataDefinitionWithoutData(ast::Span),
 }
@@ -17,6 +18,7 @@ impl ParserError {
         match self {
             ParserError::Expected(span, _)
             | ParserError::InstructionExpected(span, _)
+            | ParserError::OperandExpected(span, _)
             | ParserError::InvalidPrefixOperator(span)
             | ParserError::DataDefinitionWithoutData(span) => span,
         }
@@ -29,6 +31,9 @@ impl Display for ParserError {
             ParserError::Expected(_, expected) => write!(f, "expected {}", expected),
             ParserError::InstructionExpected(_, found) => {
                 write!(f, "Instruction expected, found {}", found)
+            }
+            ParserError::OperandExpected(_, found) => {
+                write!(f, "Operand expected, found {}", found)
             }
             ParserError::InvalidPrefixOperator(_) => write!(f, "Invalid prefix operator"),
             ParserError::DataDefinitionWithoutData(_) => write!(f, "Data definition without data"),
@@ -253,13 +258,11 @@ impl<'a> Parser<'a> {
 
         self.require_new_line()?;
 
-        Ok(ast::LineContent::Instruction(
-            start..end,
-            ast::Instruction {
-                operation,
-                operands,
-            },
-        ))
+        Ok(ast::LineContent::Instruction(ast::Instruction {
+            span: start..end,
+            operation,
+            operands,
+        }))
     }
 
     fn parse_operands(&mut self) -> Result<ast::Operands, ParserError> {
@@ -539,6 +542,7 @@ impl<'a> Parser<'a> {
         &mut self,
         precedence: u8,
     ) -> Result<ast::Expression, ParserError> {
+        let start = self.token_start;
         let mut left = match &self.token {
             Token::Punctuation(_, PunctuationKind::OpenParenthesis) => {
                 self.next_token();
@@ -558,11 +562,13 @@ impl<'a> Parser<'a> {
 
             _ => {
                 if let Some(operator) = self.token.operator() {
+                    let end = self.last_token_end;
                     let ((), right_precedence) = Self::prefix_precedence(operator)?;
                     let right = self.parse_expression_with_precedence(right_precedence)?;
-                    ast::Expression::PrefixOperator(operator, Box::new(right))
+                    ast::Expression::PrefixOperator(start..end, operator, Box::new(right))
                 } else {
-                    ast::Expression::Term(self.parse_atom()?)
+                    let end = self.last_token_end;
+                    ast::Expression::Term(start..end, self.parse_atom()?)
                 }
             }
         };
@@ -589,7 +595,13 @@ impl<'a> Parser<'a> {
 
             let right = self.parse_expression_with_precedence(right_precedence)?;
 
-            left = ast::Expression::InfixOperator(operator, Box::new(left), Box::new(right));
+            let end = self.last_token_end;
+            left = ast::Expression::InfixOperator(
+                start..end,
+                operator,
+                Box::new(left),
+                Box::new(right),
+            );
         }
 
         Ok(left)
@@ -636,7 +648,10 @@ impl<'a> Parser<'a> {
                 }
             }
 
-            _ => Err(self.expected("Constant, label or register expected.".to_owned())),
+            _ => Err(ParserError::OperandExpected(
+                self.token_start..self.token_start + self.token.len(),
+                format!("{}", FoundToken(self.token.clone(), self.token_source())),
+            )),
         }
     }
 }

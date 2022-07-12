@@ -626,7 +626,7 @@ random_init:
 
 random_gen:                                          ; return: CL - random byte
         MOV CX,[random_seed]
-        IMUL CX,13A7H
+        ; IMUL CX,13A7H ; this instruction is not available on 8086
         INC CX
         MOV [random_seed],CX
         MOV CL,CH

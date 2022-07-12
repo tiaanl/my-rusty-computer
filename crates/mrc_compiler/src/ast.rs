@@ -264,22 +264,32 @@ impl std::fmt::Display for Operator {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expression {
-    PrefixOperator(Operator, Box<Expression>),
-    InfixOperator(Operator, Box<Expression>, Box<Expression>),
+    PrefixOperator(Span, Operator, Box<Expression>),
+    InfixOperator(Span, Operator, Box<Expression>, Box<Expression>),
 
-    Term(Value),
+    Term(Span, Value),
+}
+
+impl Expression {
+    pub fn span(&self) -> &Span {
+        match self {
+            Expression::PrefixOperator(span, _, _)
+            | Expression::InfixOperator(span, _, _, _)
+            | Expression::Term(span, _) => span,
+        }
+    }
 }
 
 impl<'a> std::fmt::Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expression::PrefixOperator(operator, right) => {
+            Expression::PrefixOperator(_, operator, right) => {
                 write!(f, "{}({})", operator, right)
             }
-            Expression::InfixOperator(operator, left, right) => {
+            Expression::InfixOperator(_, operator, left, right) => {
                 write!(f, "({} {} {})", left, operator, right)
             }
-            Expression::Term(value) => write!(f, "{}", value),
+            Expression::Term(_, value) => write!(f, "{}", value),
         }
     }
 }
@@ -290,6 +300,17 @@ pub enum Operand {
     Address(Span, Expression, Option<DataSize>, Option<Segment>),
     Register(Span, Register),
     Segment(Span, Segment),
+}
+
+impl Operand {
+    pub fn span(&self) -> &Span {
+        match self {
+            Self::Immediate(span, _)
+            | Self::Address(span, _, _, _)
+            | Self::Register(span, _)
+            | Self::Segment(span, _) => span,
+        }
+    }
 }
 
 impl<'a> std::fmt::Display for Operand {
@@ -350,6 +371,7 @@ impl<'a> std::fmt::Display for Operands {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Instruction {
+    pub span: Span,
     pub operation: Operation,
     pub operands: Operands,
 }
@@ -367,7 +389,7 @@ impl<'a> std::fmt::Display for Instruction {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LineContent {
     None,
-    Instruction(Span, Instruction),
+    Instruction(Instruction),
     Data(Span, Vec<u8>),
     Constant(Span, Expression),
     Times(Span, Expression, Box<LineContent>),
@@ -377,7 +399,7 @@ impl LineContent {
     pub fn span(&self) -> &Span {
         match self {
             LineContent::None => unreachable!(),
-            LineContent::Instruction(span, _)
+            LineContent::Instruction(Instruction { span, .. })
             | LineContent::Data(span, _)
             | LineContent::Constant(span, _)
             | LineContent::Times(span, _, _) => span,
@@ -389,7 +411,7 @@ impl<'a> std::fmt::Display for LineContent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LineContent::None => Ok(()),
-            LineContent::Instruction(_, instruction) => write!(f, "{}", instruction),
+            LineContent::Instruction(instruction) => write!(f, "{}", instruction),
             LineContent::Data(_, data) => write!(f, "db {:?}", data),
             LineContent::Constant(_, value) => write!(f, "equ {}", value),
             LineContent::Times(_, expr, content) => write!(f, "times {} {}", expr, content),
