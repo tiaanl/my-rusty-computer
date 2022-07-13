@@ -2,7 +2,8 @@
 
 use crate::Operation;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub enum OperandEncoding {
     None,
 
@@ -228,7 +229,6 @@ mod private {
         id!(MOV, Mem, Seg, &[Byte(0x8c), ModRegRM]),   // 8086, SW
         id!(MOV, Reg16, Seg, &[Byte(0x8c), ModRegRM]), // 8086
         id!(MOV, Seg, Mem, &[Byte(0x8e), ModRegRM]),   // 8086, SW
-        id!(MOV, Seg, Reg16, &[Byte(0x8e), ModRegRM]), // 8086, OPT, ND
         id!(MOV, Seg, Reg16, &[Byte(0x8e), ModRegRM]), // 8086
         id!(MOV, RegAl, SegOff, &[Byte(0xa0), SegOff]), // 8086, SM
         id!(MOV, RegAx, SegOff, &[Byte(0xa1), SegOff]), // 8086, SM

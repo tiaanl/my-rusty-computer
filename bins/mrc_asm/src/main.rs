@@ -43,6 +43,10 @@ fn _print_source_pos(source: &str, span: &Span, path: Option<&str>) {
 struct Opt {
     /// Source file to compile.
     source: String,
+
+    /// Only parse the source file and print the syntax tree.
+    #[structopt(short)]
+    parse_only: bool,
 }
 
 fn main() {
@@ -62,26 +66,46 @@ fn main() {
     let mut compiler = Compiler::default();
 
     let mut parser = Parser::new(source);
-    loop {
-        match parser.parse_line() {
-            Ok(Some(line)) => {
-                if let Err(err) = compiler.consume(line) {
+
+    if opts.parse_only {
+        let mut lines = vec![];
+
+        loop {
+            match parser.parse_line() {
+                Ok(Some(line)) => {
+                    lines.push(line);
+                }
+                Ok(None) => break,
+                Err(err) => {
                     diags.error(format!("{}", err), err.span().clone());
                     break;
                 }
             }
-            Ok(None) => break,
-            Err(err) => {
-                diags.error(format!("{}", err), err.span().clone());
-                break;
+        }
+
+        lines.iter().for_each(|l| println!("{}", l));
+    } else {
+        loop {
+            match parser.parse_line() {
+                Ok(Some(line)) => {
+                    if let Err(err) = compiler.consume(line) {
+                        diags.error(format!("{}", err), err.span().clone());
+                        break;
+                    }
+                }
+                Ok(None) => break,
+                Err(err) => {
+                    diags.error(format!("{}", err), err.span().clone());
+                    break;
+                }
             }
         }
-    }
 
-    if let Err(err) = compiler.compile() {
-        // eprintln!("COMPILE ERROR: {}", err);
-        // print_source_pos(source, err.span(), Some(opts.source.as_str()));
-        diags.error(format!("{}", err), err.span().clone());
+        if let Err(err) = compiler.compile() {
+            // eprintln!("COMPILE ERROR: {}", err);
+            // print_source_pos(source, err.span(), Some(opts.source.as_str()));
+            diags.error(format!("{}", err), err.span().clone());
+        }
     }
 
     if !diags.is_empty() {
