@@ -12,6 +12,7 @@ pub enum ParserError {
     InvalidPrefixOperator(ast::Span),
     DataDefinitionWithoutData(ast::Span),
     SegmentOrAddressExpected(ast::Span),
+    InvalidIndirectEncoding(ast::Span, ast::Register, Option<ast::Register>),
 }
 
 impl ParserError {
@@ -22,7 +23,8 @@ impl ParserError {
             | ParserError::OperandExpected(span, _)
             | ParserError::InvalidPrefixOperator(span)
             | ParserError::DataDefinitionWithoutData(span)
-            | ParserError::SegmentOrAddressExpected(span) => span,
+            | ParserError::SegmentOrAddressExpected(span)
+            | ParserError::InvalidIndirectEncoding(span, ..) => span,
         }
     }
 }
@@ -41,6 +43,26 @@ impl Display for ParserError {
             ParserError::DataDefinitionWithoutData(_) => write!(f, "Data definition without data."),
             ParserError::SegmentOrAddressExpected(_) => {
                 write!(f, "Address or segment override (e.g. [CS:...]) expected.")
+            }
+            ParserError::InvalidIndirectEncoding(_, first, second) => {
+                if let Some(second) = second {
+                    write!(
+                        f,
+                        "The registers {} + {} is not a valid indirect encoding.",
+                        first, second
+                    )?;
+                } else {
+                    write!(
+                        f,
+                        "The register {} is not a valid indirect encoding.",
+                        first
+                    )?;
+                }
+
+                write!(
+                    f,
+                    " Valid combinations are: BX+SI, BX+DI, BP+SI, BP+DI, SI, DI, BX, BP."
+                )
             }
         }
     }
@@ -227,10 +249,9 @@ impl<'a> Parser<'a> {
             Ok(Some(self.parse_instruction(operation)?))
         } else {
             match identifier.to_lowercase().as_str() {
-                "equ" => Ok(Some(self.parse_equ()?)),
+                "equ" => Ok(Some(self.parse_constant()?)),
                 "db" => Ok(Some(self.parse_data(1)?)),
                 "dw" => Ok(Some(self.parse_data(2)?)),
-                "dd" => Ok(Some(self.parse_data(4)?)),
                 "times" => Ok(Some(self.parse_times()?)),
                 _ => Ok(None),
             }
@@ -365,6 +386,7 @@ impl<'a> Parser<'a> {
         self.next_token();
 
         let mut segment_override = None;
+        let mut indirect_encoding = None;
 
         let expression = match self.token {
             Token::Identifier(_) => {
@@ -383,10 +405,21 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                self.parse_expression()?
+                indirect_encoding = self.parse_indirect_encoding()?;
+
+                if matches!(
+                    self.token,
+                    Token::Punctuation(_, PunctuationKind::CloseBracket)
+                ) {
+                    // Don't consume the closing bracket here, just state that there is no
+                    // expression here.
+                    None
+                } else {
+                    Some(self.parse_expression()?)
+                }
             }
 
-            Token::Literal(_, LiteralKind::Number(_)) => self.parse_expression()?,
+            Token::Literal(_, LiteralKind::Number(_)) => Some(self.parse_expression()?),
 
             _ => return Err(ParserError::SegmentOrAddressExpected(self.token_range())),
         };
@@ -400,15 +433,120 @@ impl<'a> Parser<'a> {
             return Err(self.expected("closing bracket for memory address".to_owned()));
         }
 
-        Ok(ast::Operand::Address(
-            start..self.last_token_end,
-            expression,
-            data_size,
-            segment_override,
-        ))
+        Ok(if let Some(indirect_encoding) = indirect_encoding {
+            ast::Operand::Indirect(
+                start..self.last_token_end,
+                indirect_encoding,
+                expression,
+                data_size,
+                segment_override,
+            )
+        } else {
+            ast::Operand::Address(
+                start..self.last_token_end,
+                expression.unwrap(),
+                data_size,
+                segment_override,
+            )
+        })
     }
 
-    fn parse_equ(&mut self) -> Result<ast::LineContent, ParserError> {
+    fn parse_indirect_encoding(&mut self) -> Result<Option<ast::IndirectEncoding>, ParserError> {
+        let start = self.token_start;
+
+        let first = if let Some(register) = self.parse_register()? {
+            match register {
+                ast::Register::Word(reg @ ast::WordRegister::Bx)
+                | ast::Register::Word(reg @ ast::WordRegister::Bp)
+                | ast::Register::Word(reg @ ast::WordRegister::Si)
+                | ast::Register::Word(reg @ ast::WordRegister::Di) => {
+                    // Consume the first register.
+                    self.next_token();
+
+                    Some(reg)
+                }
+                reg => {
+                    // We found a register, but it is not a valid first register, so this is an
+                    // error.
+                    return Err(ParserError::InvalidIndirectEncoding(
+                        start..self.last_token_end,
+                        reg,
+                        None,
+                    ));
+                }
+            }
+        } else {
+            None
+        };
+
+        if first.is_none() {
+            return Ok(None);
+        }
+
+        let second = if let Token::Punctuation(_, PunctuationKind::Plus) = self.token {
+            // Consume the +.
+            self.next_token();
+
+            if let Some(register) = self.parse_register()? {
+                match register {
+                    ast::Register::Word(reg @ ast::WordRegister::Si)
+                    | ast::Register::Word(reg @ ast::WordRegister::Di) => {
+                        // Consume the second register.
+                        self.next_token();
+
+                        Some(reg)
+                    }
+                    reg => {
+                        return Err(ParserError::InvalidIndirectEncoding(
+                            start..self.token_range().end,
+                            ast::Register::Word(first.unwrap()),
+                            Some(reg),
+                        ));
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // We can unwrap here, because we already checked if first is None.
+        match (first.unwrap(), second) {
+            (ast::WordRegister::Bx, Some(ast::WordRegister::Si)) => {
+                Ok(Some(ast::IndirectEncoding::BxSi))
+            }
+            (ast::WordRegister::Bx, Some(ast::WordRegister::Di)) => {
+                Ok(Some(ast::IndirectEncoding::BxDi))
+            }
+            (ast::WordRegister::Bp, Some(ast::WordRegister::Si)) => {
+                Ok(Some(ast::IndirectEncoding::BpSi))
+            }
+            (ast::WordRegister::Bp, Some(ast::WordRegister::Di)) => {
+                Ok(Some(ast::IndirectEncoding::BpDi))
+            }
+            (ast::WordRegister::Bx, None) => Ok(Some(ast::IndirectEncoding::Bx)),
+            (ast::WordRegister::Bp, None) => Ok(Some(ast::IndirectEncoding::Bp)),
+            (ast::WordRegister::Si, None) => Ok(Some(ast::IndirectEncoding::Si)),
+            (ast::WordRegister::Di, None) => Ok(Some(ast::IndirectEncoding::Di)),
+            _ => unreachable!(),
+        }
+    }
+
+    fn parse_register(&mut self) -> Result<Option<ast::Register>, ParserError> {
+        if let Token::Identifier(_) = self.token {
+            let source = self.token_source();
+            if let Ok(register) = ast::Register::from_str(source) {
+                Ok(Some(register))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn parse_constant(&mut self) -> Result<ast::LineContent, ParserError> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
 
         let start = self.token_start;
@@ -555,6 +693,7 @@ impl<'a> Parser<'a> {
         precedence: u8,
     ) -> Result<ast::Expression, ParserError> {
         let start = self.token_start;
+
         let mut left = match &self.token {
             Token::Punctuation(_, PunctuationKind::OpenParenthesis) => {
                 self.next_token();
@@ -579,8 +718,7 @@ impl<'a> Parser<'a> {
                     let right = self.parse_expression_with_precedence(right_precedence)?;
                     ast::Expression::PrefixOperator(start..end, operator, Box::new(right))
                 } else {
-                    let end = self.last_token_end;
-                    ast::Expression::Term(start..end, self.parse_atom()?)
+                    ast::Expression::Value(start..self.token_range().end, self.parse_atom()?)
                 }
             }
         };
@@ -668,248 +806,240 @@ impl<'a> Parser<'a> {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     macro_rules! expr_const {
-//         ($value:literal) => {{
-//             ast::Expression::Term(ast::Value::Constant($value))
-//         }};
-//     }
-//
-//     macro_rules! expr_label {
-//         ($value:literal) => {{
-//             ast::Expression::Term(ast::Value::Label($value.to_owned()))
-//         }};
-//     }
-//
-//     macro_rules! expr_infix {
-//         ($operator:ident, $left:expr, $right:expr) => {{
-//             ast::Expression::InfixOperator(
-//                 ast::Operator::$operator,
-//                 Box::new($left),
-//                 Box::new($right),
-//             )
-//         }};
-//     }
-//
-//     macro_rules! parse_expression {
-//         ($source:literal) => {{
-//             Parser::new($source).parse_expression().unwrap()
-//         }};
-//     }
-//
-//     #[test]
-//     fn spans() {
-//         let mut parser = Parser::new("one two three   four");
-//         assert_eq!(parser.token_start, 0);
-//         assert_eq!(parser.last_token_end, 0);
-//
-//         parser.next_token();
-//         assert_eq!(parser.token_start, 4);
-//         assert_eq!(parser.last_token_end, 3);
-//
-//         parser.next_token();
-//         assert_eq!(parser.token_start, 8);
-//         assert_eq!(parser.last_token_end, 7);
-//
-//         parser.next_token();
-//         assert_eq!(parser.token_start, 16);
-//         assert_eq!(parser.last_token_end, 13);
-//     }
-//
-//     fn collect_lines(source: &str) -> Vec<ast::Line> {
-//         let mut parser = Parser::new(source);
-//         let mut lines = vec![];
-//         parser
-//             .parse(&mut |line| {
-//                 lines.push(line);
-//             })
-//             .unwrap();
-//         lines
-//     }
-//
-//     macro_rules! assert_parse {
-//         ($source:literal, $lines:expr) => {{
-//             assert_eq!(collect_lines($source), $lines);
-//         }};
-//     }
-//
-//     macro_rules! assert_parse_err {
-//         ($source:literal, $err:expr) => {{
-//             let mut parser = Parser::new($source);
-//             assert_eq!(parser.parse(&mut |_| {}), Err($err));
-//         }};
-//     }
-//
-//     #[test]
-//     fn blank_lines() {
-//         assert_parse!("", vec![]);
-//         assert_parse!("\n\n", vec![]);
-//     }
-//
-//     #[test]
-//     fn tokens() {
-//         let mut parser = Parser::new("test label");
-//         assert_eq!(parser.token, Token::Identifier(4));
-//         parser.next_token();
-//         assert_eq!(parser.token, Token::Identifier(5));
-//         parser.next_token();
-//         assert_eq!(parser.token, Token::EndOfFile(0));
-//     }
-//
-//     #[test]
-//     fn label_and_instruction() {
-//         assert_parse!(
-//             "start hlt",
-//             vec![
-//                 ast::Line::Label(0..5, "start".to_owned()),
-//                 ast::Line::Instruction(
-//                     6..9,
-//                     ast::Instruction {
-//                         operation: Operation::HLT,
-//                         operands: ast::Operands::None(9..9),
-//                     }
-//                 )
-//             ]
-//         );
-//     }
-//
-//     #[test]
-//     fn multiple_labels() {
-//         assert_parse!(
-//             "start begin: begin2:hlt",
-//             vec![
-//                 ast::Line::Label(0..5, "start".to_owned()),
-//                 ast::Line::Label(6..11, "begin".to_owned()),
-//                 ast::Line::Label(13..19, "begin2".to_owned()),
-//                 ast::Line::Instruction(
-//                     20..23,
-//                     ast::Instruction {
-//                         operation: Operation::HLT,
-//                         operands: ast::Operands::None(23..23),
-//                     },
-//                 ),
-//             ]
-//         );
-//     }
-//
-//     #[test]
-//     fn constants() {
-//         assert_parse!(
-//             "label equ 42",
-//             vec![
-//                 ast::Line::Label(0..5, "label".to_owned()),
-//                 ast::Line::Constant(6..12, expr_const!(42)),
-//             ]
-//         );
-//
-//         assert_parse!(
-//             "first equ 10 ; first value\n\nsecond equ 20 ; second value\n\n",
-//             vec![
-//                 ast::Line::Label(0..5, "first".to_owned()),
-//                 ast::Line::Constant(6..12, expr_const!(10)),
-//                 ast::Line::Label(28..34, "second".to_owned()),
-//                 ast::Line::Constant(35..41, expr_const!(20)),
-//             ]
-//         );
-//     }
-//
-//     #[test]
-//     fn data() {
-//         assert_parse!(
-//             "db 10, 20, 30",
-//             vec![ast::Line::Data(0..13, vec![10, 20, 30])]
-//         );
-//         assert_parse!(
-//             "dw 10, 20, 30",
-//             vec![ast::Line::Data(0..13, vec![10, 0, 20, 0, 30, 0])]
-//         );
-//         assert_parse!(
-//             "dd 10, 20, 30",
-//             vec![ast::Line::Data(
-//                 0..13,
-//                 vec![10, 0, 0, 0, 20, 0, 0, 0, 30, 0, 0, 0]
-//             ),]
-//         );
-//
-//         assert_parse_err!("db ", ParserError::DataDefinitionWithoutData(0..2));
-//         assert_parse_err!(
-//             "db test",
-//             ParserError::Expected(3..7, "literal expected for data definition".to_owned())
-//         );
-//         assert_parse_err!(
-//             "db 10, test",
-//             ParserError::Expected(7..11, "literal expected for data definition".to_owned())
-//         );
-//     }
-//
-//     #[test]
-//     fn expression_errors() {
-//         let expr = parse_expression!("2 + 3 * 4 + 5");
-//         assert_eq!(
-//             expr,
-//             ast::Expression::InfixOperator(
-//                 ast::Operator::Add,
-//                 Box::new(ast::Expression::InfixOperator(
-//                     ast::Operator::Add,
-//                     Box::new(ast::Expression::Term(ast::Value::Constant(2))),
-//                     Box::new(ast::Expression::InfixOperator(
-//                         ast::Operator::Multiply,
-//                         Box::new(ast::Expression::Term(ast::Value::Constant(3))),
-//                         Box::new(ast::Expression::Term(ast::Value::Constant(4))),
-//                     )),
-//                 )),
-//                 Box::new(ast::Expression::Term(ast::Value::Constant(5))),
-//             )
-//         );
-//     }
-//
-//     #[test]
-//     fn expression_with_precedence() {
-//         let expr = parse_expression!("2 + 3 * 4 + 5");
-//         assert_eq!(
-//             expr,
-//             expr_infix!(
-//                 Add,
-//                 expr_infix!(
-//                     Add,
-//                     expr_const!(2),
-//                     expr_infix!(Multiply, expr_const!(3), expr_const!(4))
-//                 ),
-//                 expr_const!(5)
-//             )
-//         );
-//     }
-//
-//     #[test]
-//     fn expression_with_non_constants() {
-//         let expr = parse_expression!("2 + label * 4 + 5");
-//         assert_eq!(
-//             expr,
-//             expr_infix!(
-//                 Add,
-//                 expr_infix!(
-//                     Add,
-//                     expr_const!(2),
-//                     expr_infix!(Multiply, expr_label!("label"), expr_const!(4))
-//                 ),
-//                 expr_const!(5)
-//             )
-//         );
-//     }
-//
-//     #[test]
-//     fn expression_with_non_constants_and_constants() {
-//         let expr = parse_expression!("label + 2 * 3");
-//         assert_eq!(
-//             expr,
-//             expr_infix!(
-//                 Add,
-//                 expr_label!("label"),
-//                 expr_infix!(Multiply, expr_const!(2), expr_const!(3))
-//             )
-//         );
-//     }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! expr_const {
+        ($span:expr, $value:literal) => {{
+            ast::Expression::Value($span, ast::Value::Constant($value))
+        }};
+    }
+
+    macro_rules! expr_label {
+        ($span:expr, $value:literal) => {{
+            ast::Expression::Value(
+                $span,
+                ast::Value::Label(ast::Label($span, $value.to_owned())),
+            )
+        }};
+    }
+
+    macro_rules! expr_infix {
+        ($span:expr, $operator:ident, $left:expr, $right:expr) => {{
+            ast::Expression::InfixOperator(
+                $span,
+                ast::Operator::$operator,
+                Box::new($left),
+                Box::new($right),
+            )
+        }};
+    }
+
+    macro_rules! parse_expression {
+        ($source:literal) => {{
+            Parser::new($source).parse_expression().unwrap()
+        }};
+    }
+
+    #[test]
+    fn spans() {
+        let mut parser = Parser::new("one two three   four");
+        assert_eq!(parser.token_start, 0);
+        assert_eq!(parser.last_token_end, 0);
+
+        parser.next_token();
+        assert_eq!(parser.token_start, 4);
+        assert_eq!(parser.last_token_end, 3);
+
+        parser.next_token();
+        assert_eq!(parser.token_start, 8);
+        assert_eq!(parser.last_token_end, 7);
+
+        parser.next_token();
+        assert_eq!(parser.token_start, 16);
+        assert_eq!(parser.last_token_end, 13);
+    }
+
+    fn collect_lines(source: &str) -> Vec<ast::Line> {
+        let mut parser = Parser::new(source);
+        let mut lines = vec![];
+        while let Some(line) = parser.parse_line().unwrap() {
+            lines.push(line)
+        }
+        lines
+    }
+
+    macro_rules! assert_parse {
+        ($source:literal, $lines:expr) => {{
+            assert_eq!(collect_lines($source), $lines);
+        }};
+    }
+
+    macro_rules! assert_parse_err {
+        ($source:literal, $err:expr) => {{
+            let mut parser = Parser::new($source);
+            assert_eq!(parser.parse_line(), Err($err));
+        }};
+    }
+
+    #[test]
+    fn blank_lines() {
+        assert_parse!("", vec![]);
+        assert_parse!("\n\n", vec![]);
+    }
+
+    #[test]
+    fn tokens() {
+        let mut parser = Parser::new("test label");
+        assert_eq!(parser.token, Token::Identifier(4));
+        parser.next_token();
+        assert_eq!(parser.token, Token::Identifier(5));
+        parser.next_token();
+        assert_eq!(parser.token, Token::EndOfFile(0));
+    }
+
+    #[test]
+    fn label_and_instruction() {
+        assert_parse!(
+            "start hlt",
+            vec![ast::Line {
+                label: Some(ast::Label(0..5, "start".to_owned())),
+                content: ast::LineContent::Instruction(ast::Instruction {
+                    span: 6..9,
+                    operation: Operation::HLT,
+                    operands: ast::Operands::None(9..9),
+                })
+            }]
+        );
+    }
+
+    #[test]
+    fn with_labels() {
+        assert_parse!(
+            "begin: hlt\nend: hlt\nhlt",
+            vec![
+                ast::Line {
+                    label: Some(ast::Label(0..5, "begin".to_owned())),
+                    content: ast::LineContent::Instruction(ast::Instruction {
+                        span: 7..10,
+                        operation: Operation::HLT,
+                        operands: ast::Operands::None(10..10),
+                    })
+                },
+                ast::Line {
+                    label: Some(ast::Label(11..14, "end".to_owned())),
+                    content: ast::LineContent::Instruction(ast::Instruction {
+                        span: 16..19,
+                        operation: Operation::HLT,
+                        operands: ast::Operands::None(19..19),
+                    })
+                },
+                ast::Line {
+                    label: None,
+                    content: ast::LineContent::Instruction(ast::Instruction {
+                        span: 20..23,
+                        operation: Operation::HLT,
+                        operands: ast::Operands::None(23..23),
+                    })
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn constants() {
+        assert_parse!(
+            "label equ 42",
+            vec![ast::Line {
+                label: Some(ast::Label(0..5, "label".to_owned())),
+                content: ast::LineContent::Constant(6..12, expr_const!(10..12, 42))
+            }]
+        );
+
+        assert_parse!(
+            "first equ 10 ; first value\n\nsecond equ 20 ; second value\n\n",
+            vec![
+                ast::Line {
+                    label: Some(ast::Label(0..5, "first".to_owned())),
+                    content: ast::LineContent::Constant(6..12, expr_const!(10..12, 10))
+                },
+                ast::Line {
+                    label: Some(ast::Label(28..34, "second".to_owned())),
+                    content: ast::LineContent::Constant(35..41, expr_const!(39..41, 20))
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn data() {
+        assert_parse!(
+            "db 10, 20, 30",
+            vec![ast::Line {
+                label: None,
+                content: ast::LineContent::Data(0..13, vec![10, 20, 30])
+            }]
+        );
+        assert_parse!(
+            "dw 10, 20, 30",
+            vec![ast::Line {
+                label: None,
+                content: ast::LineContent::Data(0..13, vec![10, 0, 20, 0, 30, 0]),
+            }]
+        );
+
+        assert_parse_err!("db ", ParserError::DataDefinitionWithoutData(0..2));
+        assert_parse_err!(
+            "db test",
+            ParserError::Expected(3..7, "literal expected for data definition".to_owned())
+        );
+        assert_parse_err!(
+            "db 10, test",
+            ParserError::Expected(7..11, "literal expected for data definition".to_owned())
+        );
+    }
+
+    #[test]
+    fn expression_with_precedence() {
+        let expr = parse_expression!("2 + 3 * 4 + 5");
+        assert_eq!(
+            expr,
+            expr_infix!(
+                0..13,
+                Add,
+                expr_infix!(
+                    0..9,
+                    Add,
+                    expr_const!(0..1, 2),
+                    expr_infix!(4..9, Multiply, expr_const!(4..5, 3), expr_const!(8..9, 4))
+                ),
+                expr_const!(12..13, 5)
+            )
+        );
+    }
+
+    #[test]
+    fn expression_with_non_constants() {
+        let expr = parse_expression!("2 + label * 4 + 5");
+        assert_eq!(
+            expr,
+            expr_infix!(
+                0..17,
+                Add,
+                expr_infix!(
+                    0..13,
+                    Add,
+                    expr_const!(0..1, 2),
+                    expr_infix!(
+                        4..13,
+                        Multiply,
+                        expr_label!(4..9, "label"),
+                        expr_const!(12..13, 4)
+                    )
+                ),
+                expr_const!(16..17, 5)
+            )
+        );
+    }
+}

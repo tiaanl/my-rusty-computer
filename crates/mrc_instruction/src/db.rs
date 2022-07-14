@@ -144,7 +144,7 @@ mod private {
         id!(AND, Mem, Sbw16, &[Byte(0x83), ModRM(4), ImmByteSign]), // 8086, SM, LOCK, ND
         id!(AND, Mem, Imm16, &[Byte(0x81), ModRM(4), ImmWord]), // 8086, SM, LOCK
         id!(AND, RegMem8, Imm, &[Byte(0x82), ModRM(4), ImmByte]), // 8086, SM, LOCK, ND, NOLONG
-        id!(CALL, Disp16, None, &[Byte(0xe8), DispWord]), // 8086, BND
+        id!(CALL, Imm16, None, &[Byte(0xe8), DispWord]), // 8086, BND
         id!(CALL, SegOff, None, &[Byte(0x9a), SegOff]),  // 8086, ND, NOLONG  |far
         id!(CALL, Mem, None, &[Byte(0xff), ModRM(3)]),   // 8086, NOLONG |far
         id!(CALL, Mem16, None, &[Byte(0xff), ModRM(3)]), // 8086  |far
@@ -204,8 +204,8 @@ mod private {
         id!(IRET, None, None, &[Byte(0xcf)]),            // 8086
         // id!(IRETW, None, None, &[Byte(0xcf), ]), // 8086
         id!(JCXZ, Imm, None, &[Byte(0xe3), DispByte]), // 8086, NOLONG
-        id!(JMP, Disp8, None, &[Byte(0xeb), DispByte]), // 8086  |short
-        id!(JMP, Disp16, None, &[Byte(0xe9), Disp]),   // 8086, BND
+        id!(JMP, Imm8, None, &[Byte(0xeb), DispByte]), // 8086  |short
+        id!(JMP, Imm16, None, &[Byte(0xe9), Disp]),    // 8086, BND
         id!(JMP, SegOff, None, &[Byte(0xea), SegOff]), // 8086, ND, NOLONG |far
         id!(JMP, Mem, None, &[Byte(0xff), ModRM(5)]),  // 8086, NOLONG |far
         id!(JMP, Mem16, None, &[Byte(0xff), ModRM(5)]), // 8086  |far

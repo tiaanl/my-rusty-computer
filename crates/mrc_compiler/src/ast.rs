@@ -1,4 +1,5 @@
 use mrc_instruction::Operation;
+use std::collections::LinkedList;
 use std::str::FromStr;
 
 pub type Span = std::ops::Range<usize>;
@@ -227,6 +228,41 @@ impl FromStr for DataSize {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum IndirectEncoding {
+    BxSi = 0,
+    BxDi = 1,
+    BpSi = 2,
+    BpDi = 3,
+    Si = 4,
+    Di = 5,
+    Bp = 6,
+    Bx = 7,
+}
+
+impl IndirectEncoding {
+    #[inline]
+    pub fn encoding(&self) -> u8 {
+        self.clone() as u8
+    }
+}
+
+impl std::fmt::Display for IndirectEncoding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IndirectEncoding::BxSi => write!(f, "bx + si"),
+            IndirectEncoding::BxDi => write!(f, "bx + di"),
+            IndirectEncoding::BpSi => write!(f, "bp + si"),
+            IndirectEncoding::BpDi => write!(f, "bp + di"),
+            IndirectEncoding::Si => write!(f, "si"),
+            IndirectEncoding::Di => write!(f, "di"),
+            IndirectEncoding::Bp => write!(f, "bx"),
+            IndirectEncoding::Bx => write!(f, "bp"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Constant(i32),
     Label(Label),
@@ -267,7 +303,7 @@ pub enum Expression {
     PrefixOperator(Span, Operator, Box<Expression>),
     InfixOperator(Span, Operator, Box<Expression>, Box<Expression>),
 
-    Term(Span, Value),
+    Value(Span, Value),
 }
 
 impl Expression {
@@ -275,7 +311,60 @@ impl Expression {
         match self {
             Expression::PrefixOperator(span, _, _)
             | Expression::InfixOperator(span, _, _, _)
-            | Expression::Term(span, _) => span,
+            | Expression::Value(span, _) => span,
+        }
+    }
+
+    pub fn iter_values(&self) -> IterValues<'_> {
+        let mut iter = IterValues {
+            stack: LinkedList::new(),
+        };
+
+        iter.push_all_left(self);
+
+        iter
+    }
+}
+
+pub struct IterValues<'a> {
+    stack: LinkedList<&'a Expression>,
+}
+
+impl<'a> IterValues<'a> {
+    fn push_all_left(&mut self, start: &'a Expression) {
+        let mut current = start;
+
+        loop {
+            match current {
+                Expression::PrefixOperator(..) => todo!(),
+                Expression::InfixOperator(_, _, left, _) => {
+                    self.stack.push_back(current);
+                    current = left;
+                }
+                Expression::Value(..) => {
+                    self.stack.push_back(current);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for IterValues<'a> {
+    type Item = &'a Value;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(current) = self.stack.pop_back() {
+            match current {
+                Expression::PrefixOperator(_, _, _) => todo!(),
+                Expression::InfixOperator(_, _, _, right) => {
+                    self.push_all_left(right);
+                    self.next()
+                }
+                Expression::Value(_, value) => Some(value),
+            }
+        } else {
+            None
         }
     }
 }
@@ -289,7 +378,7 @@ impl<'a> std::fmt::Display for Expression {
             Expression::InfixOperator(_, operator, left, right) => {
                 write!(f, "({} {} {})", left, operator, right)
             }
-            Expression::Term(_, value) => write!(f, "{}", value),
+            Expression::Value(_, value) => write!(f, "{}", value),
         }
     }
 }
@@ -298,15 +387,31 @@ impl<'a> std::fmt::Display for Expression {
 pub enum Operand {
     Immediate(Span, Expression),
     Address(Span, Expression, Option<DataSize>, Option<Segment>),
+    Indirect(
+        Span,
+        IndirectEncoding,
+        Option<Expression>,
+        Option<DataSize>,
+        Option<Segment>,
+    ),
     Register(Span, Register),
     Segment(Span, Segment),
 }
 
 impl Operand {
+    pub fn is_memory(&self) -> bool {
+        matches!(self, Operand::Address(..) | Operand::Indirect(..))
+    }
+
+    pub fn is_register(&self) -> bool {
+        matches!(self, Operand::Register(..))
+    }
+
     pub fn span(&self) -> &Span {
         match self {
             Self::Immediate(span, _)
             | Self::Address(span, _, _, _)
+            | Self::Indirect(span, _, _, _, _)
             | Self::Register(span, _)
             | Self::Segment(span, _) => span,
         }
@@ -328,7 +433,27 @@ impl<'a> std::fmt::Display for Operand {
                     write!(f, "{}:", segment)?;
                 }
 
-                expr.fmt(f)?;
+                // expr.fmt(f)?;
+                write!(f, "{:?}", expr)?;
+
+                write!(f, "]")
+            }
+
+            Operand::Indirect(_, indirect_encoding, expr, data_size, segment) => {
+                if let Some(data_size) = data_size {
+                    write!(f, "{} ", data_size)?;
+                }
+                write!(f, "[")?;
+
+                if let Some(segment) = segment {
+                    write!(f, "{}:", segment)?;
+                }
+
+                indirect_encoding.fmt(f)?;
+
+                if let Some(expr) = expr {
+                    expr.fmt(f)?;
+                }
 
                 write!(f, "]")
             }
@@ -434,5 +559,53 @@ impl std::fmt::Display for Line {
         } else {
             write!(f, "{}", content)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expression_iter_values() {
+        let expr = Expression::Value(0..0, Value::Constant(10));
+
+        assert_eq!(
+            vec![&Value::Constant(10)],
+            expr.iter_values().collect::<Vec<&Value>>()
+        );
+
+        let expr = Expression::InfixOperator(
+            0..0,
+            Operator::Add,
+            Box::new(Expression::Value(0..0, Value::Constant(10))),
+            Box::new(Expression::Value(0..0, Value::Constant(20))),
+        );
+
+        assert_eq!(
+            vec![&Value::Constant(10), &Value::Constant(20)],
+            expr.iter_values().collect::<Vec<&Value>>()
+        );
+
+        let expr = Expression::InfixOperator(
+            0..0,
+            Operator::Add,
+            Box::new(Expression::Value(0..0, Value::Constant(10))),
+            Box::new(Expression::InfixOperator(
+                0..0,
+                Operator::Subtract,
+                Box::new(Expression::Value(0..0, Value::Constant(20))),
+                Box::new(Expression::Value(0..0, Value::Constant(30))),
+            )),
+        );
+
+        assert_eq!(
+            vec![
+                &Value::Constant(10),
+                &Value::Constant(20),
+                &Value::Constant(30)
+            ],
+            expr.iter_values().collect::<Vec<&Value>>()
+        );
     }
 }

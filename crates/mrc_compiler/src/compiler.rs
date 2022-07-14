@@ -1,7 +1,4 @@
-#![allow(dead_code)]
-
 use crate::ast;
-use mrc_decoder::TryFromEncoding;
 use mrc_instruction as out;
 use std::collections::{HashMap, LinkedList};
 use std::fmt::Formatter;
@@ -9,7 +6,7 @@ use std::fmt::Formatter;
 impl ast::Expression {
     fn get_constant_value(&self) -> Result<i32, CompileError> {
         match self {
-            ast::Expression::Term(_, ast::Value::Constant(value)) => Ok(*value),
+            ast::Expression::Value(_, ast::Value::Constant(value)) => Ok(*value),
             _ => Err(CompileError::ConstantValueContainsVariables(
                 self.span().clone(),
             )),
@@ -18,8 +15,8 @@ impl ast::Expression {
 
     fn replace_label(&mut self, label: &ast::Label, value: i32) {
         match self {
-            ast::Expression::Term(span, ast::Value::Label(l)) if l.1 == label.1 => {
-                *self = ast::Expression::Term(span.clone(), ast::Value::Constant(value as i32));
+            ast::Expression::Value(span, ast::Value::Label(l)) if l.1 == label.1 => {
+                *self = ast::Expression::Value(span.clone(), ast::Value::Constant(value as i32));
             }
             ast::Expression::PrefixOperator(_, _, expr) => {
                 expr.replace_label(label, value);
@@ -343,11 +340,11 @@ impl Compiler {
                 self.evaluate_expression(right)?;
 
                 if let (
-                    ast::Expression::Term(_, ast::Value::Constant(left_value)),
-                    ast::Expression::Term(_, ast::Value::Constant(right_value)),
+                    ast::Expression::Value(_, ast::Value::Constant(left_value)),
+                    ast::Expression::Value(_, ast::Value::Constant(right_value)),
                 ) = (left.as_ref(), right.as_ref())
                 {
-                    *expression = ast::Expression::Term(
+                    *expression = ast::Expression::Value(
                         span.clone(),
                         ast::Value::Constant(operator.evaluate(*left_value, *right_value)),
                     );
@@ -356,9 +353,9 @@ impl Compiler {
                 Ok(())
             }
 
-            ast::Expression::Term(_, ast::Value::Label(label)) => {
+            ast::Expression::Value(_, ast::Value::Label(label)) => {
                 if let Some(value) = self.constants.get(label.1.as_str()) {
-                    *expression = ast::Expression::Term(0..0, ast::Value::Constant(*value));
+                    *expression = ast::Expression::Value(0..0, ast::Value::Constant(*value));
                 } else if self.labels.get(label.1.as_str()).is_some() {
                     let address = self.get_address_for_label(label)?;
                     println!("address: {}", address);
@@ -370,7 +367,7 @@ impl Compiler {
                 Ok(())
             }
 
-            ast::Expression::Term(_, ast::Value::Constant(_)) => Ok(()),
+            ast::Expression::Value(_, ast::Value::Constant(_)) => Ok(()),
 
             _ => Ok(()),
         }
@@ -394,23 +391,23 @@ impl Compiler {
 
                     ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Address(_, expr, _, seg),
+                        ast::Operand::Address(_, _, _, seg),
                         ast::Operand::Segment(_, _),
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Segment(_, _),
-                        ast::Operand::Address(_, expr, _, seg),
+                        ast::Operand::Address(_, _, _, seg),
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Address(_, expr, _, seg),
+                        ast::Operand::Address(_, _, _, seg),
                         ast::Operand::Register(_, _),
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Register(_, _),
-                        ast::Operand::Address(_, expr, _, seg),
+                        ast::Operand::Address(_, _, _, seg),
                     ) => {
                         // [address], seg
                         if let Some(seg) = seg {
@@ -418,9 +415,45 @@ impl Compiler {
                                 total_size += 1;
                             }
                         }
-                        // if let Some(size) = self.address_size_in_bytes(expr)? {
-                        //     total_size += size;
-                        // }
+
+                        total_size += 1; // The ModRegRM byte.
+                        total_size += 2; // The 16-bit address bytes.
+                    }
+
+                    ast::Operands::DestinationAndSource(
+                        _,
+                        ast::Operand::Indirect(_, _, expr, _, seg),
+                        ast::Operand::Segment(_, _),
+                    )
+                    | ast::Operands::DestinationAndSource(
+                        _,
+                        ast::Operand::Segment(_, _),
+                        ast::Operand::Indirect(_, _, expr, _, seg),
+                    )
+                    | ast::Operands::DestinationAndSource(
+                        _,
+                        ast::Operand::Indirect(_, _, expr, _, seg),
+                        ast::Operand::Register(_, _),
+                    )
+                    | ast::Operands::DestinationAndSource(
+                        _,
+                        ast::Operand::Register(_, _),
+                        ast::Operand::Indirect(_, _, expr, _, seg),
+                    ) => {
+                        // [address], seg
+                        if let Some(seg) = seg {
+                            if !matches!(seg, ast::Segment::DS) {
+                                total_size += 1;
+                            }
+                        }
+
+                        total_size += 1; // The ModRegRM byte.
+
+                        if let Some(_expr) = expr {
+                            // FIXME: We need to calculate if this is a 8-bit or 16-bit
+                            //        displacement.
+                            total_size += 2;
+                        }
                     }
 
                     ast::Operands::DestinationAndSource(
@@ -442,15 +475,15 @@ impl Compiler {
                 out::db::Code::ModRM(_) => match &mut instruction.operands {
                     ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Address(_, expr, _, seg),
+                        ast::Operand::Address(_, _expr, _, seg),
                         _,
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
                         _,
-                        ast::Operand::Address(_, expr, _, seg),
+                        ast::Operand::Address(_, _expr, _, seg),
                     )
-                    | ast::Operands::Destination(_, ast::Operand::Address(_, expr, _, seg)) => {
+                    | ast::Operands::Destination(_, ast::Operand::Address(_, _expr, _, seg)) => {
                         if let Some(seg) = seg {
                             if !matches!(seg, ast::Segment::DS) {
                                 total_size += 1;
@@ -486,20 +519,18 @@ impl Compiler {
                     total_size += 2;
                 }
 
-                out::db::Code::DispByte => match (id.destination, id.source) {
-                    (out::db::OperandEncoding::Disp8, out::db::OperandEncoding::None) => {
-                        if let ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) =
-                            &mut instruction.operands
-                        {
-                            match self.evaluate_expression(expr) {
-                                s => todo!("{:?}", s),
-                            }
-                            todo!("{:?}", expr);
-                        }
-                    }
-                    _ => todo!(),
-                },
-
+                // out::db::Code::DispByte => match (id.destination.clone(), id.source.clone()) {
+                //     (out::db::OperandEncoding::Disp8, out::db::OperandEncoding::None) => {
+                //         if let ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) =
+                //             &mut instruction.operands
+                //         {
+                //             match self.evaluate_expression(expr) {
+                //                 s => todo!("{:?}", s),
+                //             }
+                //         }
+                //     }
+                //     _ => todo!(),
+                // },
                 out::db::Code::DispWord => {
                     todo!("Calculate the value of the operand and see if it is near/short/far.")
                 }
@@ -514,22 +545,6 @@ impl Compiler {
         }
 
         Ok(total_size)
-    }
-
-    fn address_size_in_bytes(
-        &mut self,
-        expr: &mut ast::Expression,
-    ) -> Result<Option<u16>, CompileError> {
-        if let Err(err) = self.evaluate_expression(expr) {
-            return match err {
-                CompileError::ConstantValueContainsLabel(_) => Ok(None),
-                _ => Err(err),
-            };
-        }
-
-        println!("expression: {}", expr);
-
-        todo!()
     }
 }
 
@@ -631,8 +646,12 @@ impl ast::Operand {
             out::db::OperandEncoding::Mem => {
                 if let Some(size_hint) = size_hint {
                     match size_hint {
-                        ast::DataSize::Byte => matches!(self, ast::Operand::Address(_, _, _, _)),
-                        ast::DataSize::Word => matches!(self, ast::Operand::Address(_, _, _, _)),
+                        ast::DataSize::Byte => {
+                            matches!(self, ast::Operand::Address(..) | ast::Operand::Indirect(..))
+                        }
+                        ast::DataSize::Word => {
+                            matches!(self, ast::Operand::Address(..) | ast::Operand::Indirect(..))
+                        }
                     }
                 } else {
                     println!("no size hint specified");
@@ -644,6 +663,7 @@ impl ast::Operand {
                 matches!(
                     self,
                     ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
+                        | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Byte), _)
                 )
             }
 
@@ -651,6 +671,7 @@ impl ast::Operand {
                 matches!(
                     self,
                     ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
+                        | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Word), _)
                 )
             }
 
@@ -659,6 +680,7 @@ impl ast::Operand {
                     || matches!(
                         self,
                         ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
+                            | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Byte), _)
                     )
             }
 
@@ -667,6 +689,7 @@ impl ast::Operand {
                     || matches!(
                         self,
                         ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
+                            | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Word), _)
                     )
             }
 
@@ -739,128 +762,153 @@ fn operand_set_matches_operand_encodings(
 }
 
 impl Compiler {
-    fn compile_instruction(
-        &self,
-        instruction: &mut ast::Instruction,
-    ) -> Result<out::Instruction, CompileError> {
-        let id = self.find_instruction_data(instruction)?;
-
-        Ok(match &mut instruction.operands {
-            ast::Operands::None(_) => {
-                out::Instruction::new(instruction.operation, out::OperandSet::None)
-            }
-            ast::Operands::Destination(_, destination) => out::Instruction::new(
-                instruction.operation,
-                out::OperandSet::Destination(self.compile_operand(destination, &id.destination)?),
-            ),
-            ast::Operands::DestinationAndSource(_, destination, source) => out::Instruction::new(
-                instruction.operation,
-                out::OperandSet::DestinationAndSource(
-                    self.compile_operand(destination, &id.destination)?,
-                    self.compile_operand(source, &id.source)?,
-                ),
-            ),
-        })
-    }
-
-    fn compile_operand(
-        &self,
-        input: &mut ast::Operand,
-        hint: &out::db::OperandEncoding,
-    ) -> Result<out::Operand, CompileError> {
-        Ok(match input {
-            ast::Operand::Immediate(_, expr) => {
-                self.evaluate_expression(expr)?;
-
-                let value = expr.get_constant_value()?;
-
-                match hint {
-                    out::db::OperandEncoding::Imm => {
-                        if value <= u8::MAX as i32 {
-                            out::Operand::Immediate(out::Immediate::Byte(value as u8))
-                        } else if value <= u16::MAX as i32 {
-                            out::Operand::Immediate(out::Immediate::Word(value as u16))
-                        } else {
-                            return Err(CompileError::ImmediateValueOutOfRange(
-                                input.span().clone(),
-                                value,
-                            ));
-                        }
-                    }
-
-                    out::db::OperandEncoding::Imm8 => {
-                        if value <= u8::MAX as i32 {
-                            out::Operand::Immediate(out::Immediate::Byte(value as u8))
-                        } else {
-                            return Err(CompileError::ImmediateValueOutOfRange(
-                                input.span().clone(),
-                                value,
-                            ));
-                        }
-                    }
-
-                    out::db::OperandEncoding::Imm16 => {
-                        if value <= u16::MAX as i32 {
-                            out::Operand::Immediate(out::Immediate::Word(value as u16))
-                        } else {
-                            return Err(CompileError::ImmediateValueOutOfRange(
-                                input.span().clone(),
-                                value,
-                            ));
-                        }
-                    }
-
-                    out::db::OperandEncoding::Disp8 => {
-                        if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-                            out::Operand::Displacement(out::Displacement::Byte(value as i8))
-                        } else {
-                            return Err(CompileError::ImmediateValueOutOfRange(
-                                input.span().clone(),
-                                value,
-                            ));
-                        }
-                    }
-
-                    out::db::OperandEncoding::Disp16 => {
-                        if value >= i16::MIN as i32 && value <= i16::MAX as i32 {
-                            out::Operand::Displacement(out::Displacement::Word(value as i16))
-                        } else {
-                            return Err(CompileError::ImmediateValueOutOfRange(
-                                input.span().clone(),
-                                value,
-                            ));
-                        }
-                    }
-
-                    _ => todo!("encode immediate to operand with hint: {:?}", hint),
-                }
-            }
-
-            ast::Operand::Address(_, expr, _data_size, segment) => {
-                self.evaluate_expression(expr)?;
-                let value = expr.get_constant_value()?;
-                let segment = segment.clone().unwrap_or(ast::Segment::DS);
-                let segment = out::Segment::try_from_encoding(segment.encoding()).unwrap();
-                out::Operand::Direct(segment, value as u16, out::OperandSize::Byte)
-            }
-
-            ast::Operand::Register(_, register) => match register {
-                ast::Register::Byte(r) => out::Operand::Register(out::SizedRegisterEncoding(
-                    out::RegisterEncoding::try_from_encoding(r.encoding())
-                        .map_err(|_| todo!("Error for invalid encoding"))?,
-                    out::OperandSize::Byte,
-                )),
-                ast::Register::Word(r) => out::Operand::Register(out::SizedRegisterEncoding(
-                    out::RegisterEncoding::try_from_encoding(r.encoding())
-                        .map_err(|_| todo!("Error for invalid encoding"))?,
-                    out::OperandSize::Word,
-                )),
-            },
-            ast::Operand::Segment(_, seg) => {
-                out::Operand::Segment(out::Segment::try_from_encoding(seg.encoding()).unwrap())
-            }
-        })
-    }
+    // fn compile_instruction(
+    //     &self,
+    //     instruction: &mut ast::Instruction,
+    // ) -> Result<out::Instruction, CompileError> {
+    //     let id = self.find_instruction_data(instruction)?;
+    //
+    //     Ok(match &mut instruction.operands {
+    //         ast::Operands::None(_) => {
+    //             out::Instruction::new(instruction.operation, out::OperandSet::None)
+    //         }
+    //         ast::Operands::Destination(_, destination) => out::Instruction::new(
+    //             instruction.operation,
+    //             out::OperandSet::Destination(self.compile_operand(destination, &id.destination)?),
+    //         ),
+    //         ast::Operands::DestinationAndSource(_, destination, source) => out::Instruction::new(
+    //             instruction.operation,
+    //             out::OperandSet::DestinationAndSource(
+    //                 self.compile_operand(destination, &id.destination)?,
+    //                 self.compile_operand(source, &id.source)?,
+    //             ),
+    //         ),
+    //     })
+    // }
+    //
+    // fn compile_operand(
+    //     &self,
+    //     input: &mut ast::Operand,
+    //     hint: &out::db::OperandEncoding,
+    // ) -> Result<out::Operand, CompileError> {
+    //     Ok(match input {
+    //         ast::Operand::Immediate(_, expr) => {
+    //             self.evaluate_expression(expr)?;
+    //
+    //             let value = expr.get_constant_value()?;
+    //
+    //             match hint {
+    //                 out::db::OperandEncoding::Imm => {
+    //                     if value <= u8::MAX as i32 {
+    //                         out::Operand::Immediate(out::Immediate::Byte(value as u8))
+    //                     } else if value <= u16::MAX as i32 {
+    //                         out::Operand::Immediate(out::Immediate::Word(value as u16))
+    //                     } else {
+    //                         return Err(CompileError::ImmediateValueOutOfRange(
+    //                             input.span().clone(),
+    //                             value,
+    //                         ));
+    //                     }
+    //                 }
+    //
+    //                 out::db::OperandEncoding::Imm8 => {
+    //                     if value <= u8::MAX as i32 {
+    //                         out::Operand::Immediate(out::Immediate::Byte(value as u8))
+    //                     } else {
+    //                         return Err(CompileError::ImmediateValueOutOfRange(
+    //                             input.span().clone(),
+    //                             value,
+    //                         ));
+    //                     }
+    //                 }
+    //
+    //                 out::db::OperandEncoding::Imm16 => {
+    //                     if value <= u16::MAX as i32 {
+    //                         out::Operand::Immediate(out::Immediate::Word(value as u16))
+    //                     } else {
+    //                         return Err(CompileError::ImmediateValueOutOfRange(
+    //                             input.span().clone(),
+    //                             value,
+    //                         ));
+    //                     }
+    //                 }
+    //
+    //                 out::db::OperandEncoding::Disp8 => {
+    //                     if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
+    //                         out::Operand::Displacement(out::Displacement::Byte(value as i8))
+    //                     } else {
+    //                         return Err(CompileError::ImmediateValueOutOfRange(
+    //                             input.span().clone(),
+    //                             value,
+    //                         ));
+    //                     }
+    //                 }
+    //
+    //                 out::db::OperandEncoding::Disp16 => {
+    //                     if value >= i16::MIN as i32 && value <= i16::MAX as i32 {
+    //                         out::Operand::Displacement(out::Displacement::Word(value as i16))
+    //                     } else {
+    //                         return Err(CompileError::ImmediateValueOutOfRange(
+    //                             input.span().clone(),
+    //                             value,
+    //                         ));
+    //                     }
+    //                 }
+    //
+    //                 _ => todo!("encode immediate to operand with hint: {:?}", hint),
+    //             }
+    //         }
+    //
+    //         ast::Operand::Address(_, expr, _data_size, segment) => {
+    //             self.evaluate_expression(expr)?;
+    //             let value = expr.get_constant_value()?;
+    //             let segment = segment.clone().unwrap_or(ast::Segment::DS);
+    //             let segment = out::Segment::try_from_encoding(segment.encoding()).unwrap();
+    //             out::Operand::Direct(segment, value as u16, out::OperandSize::Byte)
+    //         }
+    //
+    //         ast::Operand::Indirect(_, indirect_encoding, expr, _data_size, segment) => {
+    //             let value = if let Some(expr) = expr {
+    //                 self.evaluate_expression(expr)?;
+    //                 Some(expr.get_constant_value()?)
+    //             } else {
+    //                 None
+    //             };
+    //             let segment = segment.clone().unwrap_or(ast::Segment::DS);
+    //             let segment = out::Segment::try_from_encoding(segment.encoding()).unwrap();
+    //             out::Operand::Indirect(
+    //                 segment,
+    //                 AddressingMode::try_from_encoding(indirect_encoding.encoding()).unwrap(),
+    //                 if let Some(value) = value {
+    //                     if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
+    //                         out::Displacement::Byte(value as i8)
+    //                     } else {
+    //                         out::Displacement::Word(value as i16)
+    //                     }
+    //                 } else {
+    //                     out::Displacement::None
+    //                 },
+    //                 out::OperandSize::Byte,
+    //             )
+    //         }
+    //
+    //         ast::Operand::Register(_, register) => match register {
+    //             ast::Register::Byte(r) => out::Operand::Register(out::SizedRegisterEncoding(
+    //                 out::RegisterEncoding::try_from_encoding(r.encoding())
+    //                     .map_err(|_| todo!("Error for invalid encoding"))?,
+    //                 out::OperandSize::Byte,
+    //             )),
+    //             ast::Register::Word(r) => out::Operand::Register(out::SizedRegisterEncoding(
+    //                 out::RegisterEncoding::try_from_encoding(r.encoding())
+    //                     .map_err(|_| todo!("Error for invalid encoding"))?,
+    //                 out::OperandSize::Word,
+    //             )),
+    //         },
+    //         ast::Operand::Segment(_, seg) => {
+    //             out::Operand::Segment(out::Segment::try_from_encoding(seg.encoding()).unwrap())
+    //         }
+    //     })
+    // }
 
     fn find_instruction_data(
         &self,
@@ -1023,7 +1071,7 @@ mod tests {
                         0..0,
                         ast::Operand::Address(
                             0..0,
-                            ast::Expression::Term(0..0, ast::Value::Constant(0)),
+                            ast::Expression::Value(0..0, ast::Value::Constant(0)),
                             None,
                             None,
                         ),

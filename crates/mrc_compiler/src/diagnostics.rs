@@ -160,7 +160,7 @@ mod tests {
 
         assert_print_output!(
             diags,
-            "INFO: This is an info\nThis is the source\n     ^^\nWARNING: This is a warning\nThis is the source\n        ^^^\nERROR: This is an error\nThis is the source\n            ^^^^^^\n"
+            "mem:1:6: INFO: This is an info\nThis is the source\n     ^^\nmem:1:9: WARNING: This is a warning\nThis is the source\n        ^^^\nmem:1:13: ERROR: This is an error\nThis is the source\n            ^^^^^^\n"
         );
     }
 }
