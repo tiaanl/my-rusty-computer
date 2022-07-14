@@ -1,5 +1,7 @@
 use crate::ast::Span;
 
+const TAB_SIZE: usize = 4;
+
 #[repr(u8)]
 pub enum DiagnosticKind {
     Info,
@@ -92,10 +94,19 @@ impl<'a> Diagnostics<'a> {
         let line = self.source[0..span.start].matches('\n').count() + 1;
         let column = span.start - prev_new_line;
 
+        // Adjust for tabs in the current line.
+        let highlight_start = fragment[..column].chars().fold(0, |pos, c| {
+            if c == '\t' {
+                pos + TAB_SIZE - pos % TAB_SIZE
+            } else {
+                pos + 1
+            }
+        });
+
         writeln!(output, "{}:{}:{}: {}", self.path, line, column + 1, message)?;
 
-        writeln!(output, "{}", fragment)?;
-        for _ in 0..column {
+        writeln!(output, "{}", expand_tabs(fragment, TAB_SIZE))?;
+        for _ in 0..highlight_start {
             write!(output, " ")?;
         }
         let end = if span.start == span.end {
@@ -108,6 +119,17 @@ impl<'a> Diagnostics<'a> {
         }
         writeln!(output)
     }
+}
+
+fn expand_tabs(s: &str, tab_size: usize) -> String {
+    let mut out = s.to_owned();
+
+    while let Some(pos) = out.find('\t') {
+        let count = tab_size - (pos % tab_size);
+        out.replace_range(pos..=pos, " ".repeat(count).as_str());
+    }
+
+    out
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@ pub enum ParserError {
     OperandExpected(ast::Span, String),
     InvalidPrefixOperator(ast::Span),
     DataDefinitionWithoutData(ast::Span),
+    SegmentOrAddressExpected(ast::Span),
 }
 
 impl ParserError {
@@ -20,7 +21,8 @@ impl ParserError {
             | ParserError::InstructionExpected(span, _)
             | ParserError::OperandExpected(span, _)
             | ParserError::InvalidPrefixOperator(span)
-            | ParserError::DataDefinitionWithoutData(span) => span,
+            | ParserError::DataDefinitionWithoutData(span)
+            | ParserError::SegmentOrAddressExpected(span) => span,
         }
     }
 }
@@ -28,15 +30,18 @@ impl ParserError {
 impl Display for ParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParserError::Expected(_, expected) => write!(f, "expected {}", expected),
+            ParserError::Expected(_, expected) => write!(f, "expected {}.", expected),
             ParserError::InstructionExpected(_, found) => {
-                write!(f, "Instruction expected, found {}", found)
+                write!(f, "Instruction expected, found {}.", found)
             }
             ParserError::OperandExpected(_, found) => {
-                write!(f, "Operand expected, found {}", found)
+                write!(f, "Operand expected, found {}.", found)
             }
-            ParserError::InvalidPrefixOperator(_) => write!(f, "Invalid prefix operator"),
-            ParserError::DataDefinitionWithoutData(_) => write!(f, "Data definition without data"),
+            ParserError::InvalidPrefixOperator(_) => write!(f, "Invalid prefix operator."),
+            ParserError::DataDefinitionWithoutData(_) => write!(f, "Data definition without data."),
+            ParserError::SegmentOrAddressExpected(_) => {
+                write!(f, "Address or segment override (e.g. [CS:...]) expected.")
+            }
         }
     }
 }
@@ -124,6 +129,10 @@ impl<'a> Parser<'a> {
         parser.next_token();
 
         parser
+    }
+
+    fn token_range(&self) -> std::ops::Range<usize> {
+        self.token_start..self.token_start + self.token.len()
     }
 
     fn token_source(&self) -> &'a str {
@@ -376,7 +385,10 @@ impl<'a> Parser<'a> {
 
                 self.parse_expression()?
             }
-            _ => todo!(),
+
+            Token::Literal(_, LiteralKind::Number(_)) => self.parse_expression()?,
+
+            _ => return Err(ParserError::SegmentOrAddressExpected(self.token_range())),
         };
 
         if matches!(
@@ -416,7 +428,7 @@ impl<'a> Parser<'a> {
     fn parse_data(&mut self, bytes_per_value: usize) -> Result<ast::LineContent, ParserError> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
 
-        let data_definition_token_span = self.token_start..self.token_start + self.token.len();
+        let data_definition_token_span = self.token_range();
 
         let start = self.token_start;
 
@@ -454,7 +466,7 @@ impl<'a> Parser<'a> {
 
                 _ => {
                     return Err(ParserError::Expected(
-                        self.token_start..self.token_start + self.token.len(),
+                        self.token_range(),
                         "literal expected for data definition".to_owned(),
                     ))
                 }
@@ -501,7 +513,7 @@ impl<'a> Parser<'a> {
 
     fn instruction_expected(&self) -> ParserError {
         ParserError::InstructionExpected(
-            self.token_start..self.token_start + self.token.len(),
+            self.token_range(),
             format!("{}", FoundToken(self.token.clone(), self.token_source())),
         )
     }
@@ -649,7 +661,7 @@ impl<'a> Parser<'a> {
             }
 
             _ => Err(ParserError::OperandExpected(
-                self.token_start..self.token_start + self.token.len(),
+                self.token_range(),
                 format!("{}", FoundToken(self.token.clone(), self.token_source())),
             )),
         }

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::ast;
 use mrc_decoder::TryFromEncoding;
 use mrc_instruction as out;
@@ -101,7 +103,6 @@ impl std::fmt::Display for CompileError {
 #[derive(Debug)]
 struct Output {
     line: ast::Line,
-    compiled: Option<out::Instruction>,
     size_in_bytes: u16,
 }
 
@@ -115,14 +116,14 @@ pub struct Compiler {
 }
 
 struct ForwardReference {
-    output: usize,
-    ref_output: usize,
+    line_num: usize,
+    target_line_num: usize,
     label: ast::Label,
 }
 
 impl Compiler {
     pub fn compile(&mut self) -> Result<Vec<out::Instruction>, CompileError> {
-        // let forward_references = self.calculate_size_of_each_instruction()?;
+        let forward_references = self.calculate_size_of_each_instruction()?;
 
         {
             let outputs = unsafe {
@@ -136,9 +137,9 @@ impl Compiler {
             }
         }
 
-        // if !forward_references.is_empty() {
-        //     self.resolve_forward_references(forward_references)?;
-        // }
+        if !forward_references.is_empty() {
+            self.resolve_forward_references(forward_references)?;
+        }
 
         Ok(vec![])
     }
@@ -161,17 +162,17 @@ impl Compiler {
         for (num, output) in outputs.iter_mut().enumerate() {
             match &mut output.line.content {
                 ast::LineContent::Instruction(instruction) => {
-                    match self.compile_instruction(instruction) {
-                        Ok(instruction) => {
-                            output.compiled = Some(instruction);
-                            // output.size_in_bytes = 2; // TODO: This is just a dummy value
+                    match self.size_in_bytes(instruction) {
+                        Ok(size_in_bytes) => {
+                            output.size_in_bytes = size_in_bytes;
                         }
+
                         Err(err) => match err {
                             CompileError::ConstantValueContainsLabel(label) => {
                                 // forward_references.push_back((num, label.clone()));
                                 forward_references.push_back(ForwardReference {
-                                    output: num,
-                                    ref_output: *self.labels.get(&label.1).unwrap(),
+                                    line_num: num,
+                                    target_line_num: *self.labels.get(&label.1).unwrap(),
                                     label: label.clone(),
                                 })
                             }
@@ -179,9 +180,11 @@ impl Compiler {
                         },
                     };
                 }
+
                 ast::LineContent::Data(_, data) => {
                     output.size_in_bytes = data.len() as u16;
                 }
+
                 _ => {}
             }
         }
@@ -219,17 +222,17 @@ impl Compiler {
                 // println!("resolving label: {}", &reference.label);
                 // println!("num: {num}, label_num: {label_num}");
 
-                let num = reference.output;
-                let label_num = reference.ref_output;
+                let line_num = reference.line_num;
+                let target_line_num = reference.target_line_num;
 
-                let diff = if num + 1 == label_num {
+                let diff = if line_num + 1 == target_line_num {
                     Some(0)
                 } else {
                     let mut inner_diff = 0_i32;
 
-                    if num < label_num {
+                    if line_num < target_line_num {
                         // Going forward we start from the next output.
-                        for output in &mut outputs[num + 1..label_num] {
+                        for output in &mut outputs[line_num + 1..target_line_num] {
                             // println!("size: {i}: {}", &outputs[i].size_in_bytes);
                             if output.size_in_bytes != 0 {
                                 inner_diff += output.size_in_bytes as i32;
@@ -240,7 +243,7 @@ impl Compiler {
                             }
                         }
                     } else {
-                        for output in &mut outputs[label_num..num] {
+                        for output in &mut outputs[target_line_num..line_num] {
                             // println!("size: {i}: {}", &outputs[i].size_in_bytes);
                             if output.size_in_bytes != 0 {
                                 inner_diff -= output.size_in_bytes as i32;
@@ -263,25 +266,25 @@ impl Compiler {
 
                 if let Some(diff) = diff {
                     // println!("diff: {diff}");
-                    let output = &mut outputs[num];
+                    let output = &mut outputs[line_num];
 
-                    match &mut output.line.content {
-                        ast::LineContent::Instruction(instruction) => {
-                            instruction.operands.replace_label(&reference.label, diff);
+                    if let ast::LineContent::Instruction(instruction) = &mut output.line.content {
+                        instruction.operands.replace_label(&reference.label, diff);
 
-                            match self.compile_instruction(instruction) {
-                                Ok(instruction) => output.compiled = Some(instruction),
-                                Err(_) => todo!(
-                                    "handle the error where we still can't compile the instruction"
-                                ),
+                        match self.size_in_bytes(instruction) {
+                            Ok(size_in_bytes) => {
+                                output.size_in_bytes = size_in_bytes;
+                                removed += 1;
+                            }
+
+                            Err(_) => {
+                                // If we still can't figure out the size of the instruction
+                                // after replacing a label, then just add it to the list of
+                                // references again so we can try another time.
+                                new_forward_references.push_back(reference);
                             }
                         }
-                        _ => todo!("{:?}", &output.line.content),
                     }
-
-                    // TODO: Calculate the real size.
-                    output.size_in_bytes = 2;
-                    removed += 1;
                 } else {
                     // println!("not found");
                     new_forward_references.push_back(reference);
@@ -310,6 +313,26 @@ impl Compiler {
 
         Ok(())
     }
+
+    fn get_address_for_label(&self, label: &ast::Label) -> Result<u16, CompileError> {
+        let target_line_num = match self.labels.get(label.1.as_str()) {
+            Some(num) => *num,
+            None => return Err(CompileError::LabelNotFound(label.clone())),
+        };
+
+        let mut address = 0;
+        for num in 0..target_line_num {
+            let size_in_bytes = self.outputs[num].size_in_bytes;
+            if size_in_bytes == 0 {
+                todo!("size_in_bytes == 0");
+            }
+            address += size_in_bytes;
+        }
+
+        println!("address: {}", address);
+
+        todo!()
+    }
 }
 
 impl Compiler {
@@ -337,6 +360,8 @@ impl Compiler {
                 if let Some(value) = self.constants.get(label.1.as_str()) {
                     *expression = ast::Expression::Term(0..0, ast::Value::Constant(*value));
                 } else if self.labels.get(label.1.as_str()).is_some() {
+                    let address = self.get_address_for_label(label)?;
+                    println!("address: {}", address);
                     return Err(CompileError::ConstantValueContainsLabel(label.clone()));
                 } else {
                     return Err(CompileError::LabelNotFound(label.clone()));
@@ -393,9 +418,9 @@ impl Compiler {
                                 total_size += 1;
                             }
                         }
-                        if let Some(size) = self.address_size_in_bytes(expr)? {
-                            total_size += size;
-                        }
+                        // if let Some(size) = self.address_size_in_bytes(expr)? {
+                        //     total_size += size;
+                        // }
                     }
 
                     ast::Operands::DestinationAndSource(
@@ -431,14 +456,13 @@ impl Compiler {
                                 total_size += 1;
                             }
                         }
-                        if let Some(size) = self.address_size_in_bytes(expr)? {
-                            total_size += size;
-                        }
+                        // if let Some(size) = self.address_size_in_bytes(expr)? {
+                        //     total_size += size;
+                        // }
                     }
 
                     ast::Operands::DestinationAndSource(_, ast::Operand::Register(_, _), _)
-                    | ast::Operands::DestinationAndSource(_, _, ast::Operand::Register(_, _))
-                    | ast::Operands::Destination(_, ast::Operand::Segment(_, _)) => {
+                    | ast::Operands::DestinationAndSource(_, _, ast::Operand::Register(_, _)) => {
                         total_size += 1;
                     }
 
@@ -454,12 +478,30 @@ impl Compiler {
                     total_size += 1;
                 }
 
-                out::db::Code::Byte(_) | out::db::Code::ImmByte | out::db::Code::DispByte => {
+                out::db::Code::Byte(_) | out::db::Code::ImmByte => {
                     total_size += 1;
                 }
 
-                out::db::Code::ImmWord | out::db::Code::DispWord => {
+                out::db::Code::ImmWord => {
                     total_size += 2;
+                }
+
+                out::db::Code::DispByte => match (id.destination, id.source) {
+                    (out::db::OperandEncoding::Disp8, out::db::OperandEncoding::None) => {
+                        if let ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) =
+                            &mut instruction.operands
+                        {
+                            match self.evaluate_expression(expr) {
+                                s => todo!("{:?}", s),
+                            }
+                            todo!("{:?}", expr);
+                        }
+                    }
+                    _ => todo!(),
+                },
+
+                out::db::Code::DispWord => {
+                    todo!("Calculate the value of the operand and see if it is near/short/far.")
                 }
 
                 out::db::Code::ImmByteSign => {
@@ -921,18 +963,9 @@ impl crate::LineConsumer for Compiler {
                     self.labels.insert(label.clone(), self.outputs.len());
                 }
 
-                let size_in_bytes = if let ast::LineContent::Instruction(instruction) = content {
-                    self.size_in_bytes(instruction)?
-                } else if let ast::LineContent::Data(_, data) = content {
-                    data.len() as u16
-                } else {
-                    0
-                };
-
                 self.outputs.push(Output {
                     line,
-                    compiled: None,
-                    size_in_bytes,
+                    size_in_bytes: 0,
                 });
 
                 self.current_labels.clear();
