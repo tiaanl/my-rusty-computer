@@ -512,52 +512,34 @@ impl<'a> std::fmt::Display for Instruction {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum LineContent {
-    None,
+pub enum Line {
+    Label(Label),
     Instruction(Instruction),
     Data(Span, Vec<u8>),
     Constant(Span, Expression),
-    Times(Span, Expression, Box<LineContent>),
+    Times(Span, Expression, Box<Line>),
 }
 
-impl LineContent {
+impl Line {
     pub fn span(&self) -> &Span {
         match self {
-            LineContent::None => unreachable!(),
-            LineContent::Instruction(Instruction { span, .. })
-            | LineContent::Data(span, _)
-            | LineContent::Constant(span, _)
-            | LineContent::Times(span, _, _) => span,
+            Line::Label(Label(span, _))
+            | Line::Instruction(Instruction { span, .. })
+            | Line::Data(span, _)
+            | Line::Times(span, _, _)
+            | Line::Constant(span, _) => span,
         }
     }
 }
 
-impl<'a> std::fmt::Display for LineContent {
+impl<'a> std::fmt::Display for Line {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LineContent::None => Ok(()),
-            LineContent::Instruction(instruction) => write!(f, "{}", instruction),
-            LineContent::Data(_, data) => write!(f, "db {:?}", data),
-            LineContent::Constant(_, value) => write!(f, "equ {}", value),
-            LineContent::Times(_, expr, content) => write!(f, "times {} {}", expr, content),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Line {
-    pub label: Option<Label>,
-    pub content: LineContent,
-}
-
-impl std::fmt::Display for Line {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Line { label, content } = self;
-
-        if let Some(label) = label {
-            write!(f, "{}: {}", label, content)
-        } else {
-            write!(f, "{}", content)
+            Line::Label(label) => write!(f, "{}:", label),
+            Line::Instruction(instruction) => write!(f, "{}", instruction),
+            Line::Data(_, data) => write!(f, "db {:?}", data),
+            Line::Constant(_, expr) => write!(f, "equ {}", expr),
+            Line::Times(_, expr, content) => write!(f, "times {} {}", expr, content),
         }
     }
 }

@@ -174,12 +174,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse_line(&mut self) -> Result<Option<ast::Line>, ParserError> {
-        let mut line = ast::Line {
-            label: None,
-            content: ast::LineContent::None,
-        };
-
-        // Skip al empty lines.
+        // Skip empty lines.
         while let Token::NewLine(_) = self.token {
             self.next_token();
         }
@@ -188,38 +183,23 @@ impl<'a> Parser<'a> {
             return Ok(None);
         }
 
-        loop {
-            match self.token {
-                Token::Identifier(_) => {
-                    if let Some(content) = self.parse_line_content()? {
-                        line.content = content;
-                        break;
-                    } else {
-                        // Can't have more than one label on a line.
-                        if line.label.is_some() {
-                            return Err(self.instruction_expected());
-                        }
+        Ok(Some(match self.token {
+            Token::Identifier(_) => {
+                if let Some(line) = self.parse_instruction_or_meta()? {
+                    line
+                } else {
+                    // Can't have more than one label on a line.
+                    // if line.label.is_some() {
+                    //     return Err(self.instruction_expected());
+                    // }
 
-                        // If we don't recognize the identifier, we assume it's a label.
-                        line.label = Some(self.parse_label()?);
-
-                        // If the token following the label is a `NewLine`, then it's a
-                        // line with only a label.
-                        if let Token::NewLine(_) = self.token {
-                            break;
-                        }
-
-                        // Otherwise we loop around again to see if there is content of the
-                        // rest of the line.
-                        continue;
-                    }
+                    // If we don't recognize the identifier, we assume it's a label.
+                    ast::Line::Label(self.parse_label()?)
                 }
-
-                _ => return Err(self.instruction_expected()),
             }
-        }
 
-        Ok(Some(line))
+            _ => return Err(self.instruction_expected()),
+        }))
     }
 
     fn next_token(&mut self) {
@@ -254,7 +234,9 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_line_content(&mut self) -> Result<Option<ast::LineContent>, ParserError> {
+    fn parse_instruction_or_meta(&mut self) -> Result<Option<ast::Line>, ParserError> {
+        debug_assert!(matches!(self.token, Token::Identifier(..)));
+
         let identifier = self.token_source();
 
         if let Ok(operation) = Operation::from_str(identifier) {
@@ -288,7 +270,7 @@ impl<'a> Parser<'a> {
         Ok(ast::Label(start..end, identifier.to_owned()))
     }
 
-    fn parse_instruction(&mut self, operation: Operation) -> Result<ast::LineContent, ParserError> {
+    fn parse_instruction(&mut self, operation: Operation) -> Result<ast::Line, ParserError> {
         let start = self.token_start;
 
         // Consume the operation.
@@ -300,7 +282,7 @@ impl<'a> Parser<'a> {
 
         self.require_new_line()?;
 
-        Ok(ast::LineContent::Instruction(ast::Instruction {
+        Ok(ast::Line::Instruction(ast::Instruction {
             span: start..end,
             operation,
             operands,
@@ -565,7 +547,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_constant(&mut self) -> Result<ast::LineContent, ParserError> {
+    fn parse_constant(&mut self) -> Result<ast::Line, ParserError> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
 
         let start = self.token_start;
@@ -579,10 +561,10 @@ impl<'a> Parser<'a> {
 
         self.require_new_line()?;
 
-        Ok(ast::LineContent::Constant(start..end, expression))
+        Ok(ast::Line::Constant(start..end, expression))
     }
 
-    fn parse_data(&mut self, bytes_per_value: usize) -> Result<ast::LineContent, ParserError> {
+    fn parse_data(&mut self, bytes_per_value: usize) -> Result<ast::Line, ParserError> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
 
         let data_definition_token_span = self.token_range();
@@ -640,10 +622,10 @@ impl<'a> Parser<'a> {
 
         self.require_new_line()?;
 
-        Ok(ast::LineContent::Data(start..end, data))
+        Ok(ast::Line::Data(start..end, data))
     }
 
-    fn parse_times(&mut self) -> Result<ast::LineContent, ParserError> {
+    fn parse_times(&mut self) -> Result<ast::Line, ParserError> {
         debug_assert!(matches!(self.token, Token::Identifier(_)));
         debug_assert!(self.token_source().to_lowercase().as_str() == "times");
 
@@ -653,12 +635,8 @@ impl<'a> Parser<'a> {
         // Should be followed by the number of times to repeat the content.
         let expression = self.parse_expression()?;
 
-        if let Some(line_content) = self.parse_line_content()? {
-            Ok(ast::LineContent::Times(
-                0..0,
-                expression,
-                Box::new(line_content),
-            ))
+        if let Some(line_content) = self.parse_line()? {
+            Ok(ast::Line::Times(0..0, expression, Box::new(line_content)))
         } else {
             todo!()
         }
@@ -933,14 +911,14 @@ mod tests {
     fn label_and_instruction() {
         assert_parse!(
             "start hlt",
-            vec![ast::Line {
-                label: Some(ast::Label(0..5, "start".to_owned())),
-                content: ast::LineContent::Instruction(ast::Instruction {
+            vec![
+                ast::Line::Label(ast::Label(0..5, "start".to_owned())),
+                ast::Line::Instruction(ast::Instruction {
                     span: 6..9,
                     operation: Operation::HLT,
                     operands: ast::Operands::None(9..9),
                 })
-            }]
+            ]
         );
     }
 
@@ -949,30 +927,23 @@ mod tests {
         assert_parse!(
             "begin: hlt\nend: hlt\nhlt",
             vec![
-                ast::Line {
-                    label: Some(ast::Label(0..5, "begin".to_owned())),
-                    content: ast::LineContent::Instruction(ast::Instruction {
-                        span: 7..10,
-                        operation: Operation::HLT,
-                        operands: ast::Operands::None(10..10),
-                    })
-                },
-                ast::Line {
-                    label: Some(ast::Label(11..14, "end".to_owned())),
-                    content: ast::LineContent::Instruction(ast::Instruction {
-                        span: 16..19,
-                        operation: Operation::HLT,
-                        operands: ast::Operands::None(19..19),
-                    })
-                },
-                ast::Line {
-                    label: None,
-                    content: ast::LineContent::Instruction(ast::Instruction {
-                        span: 20..23,
-                        operation: Operation::HLT,
-                        operands: ast::Operands::None(23..23),
-                    })
-                }
+                ast::Line::Label(ast::Label(0..5, "begin".to_owned())),
+                ast::Line::Instruction(ast::Instruction {
+                    span: 7..10,
+                    operation: Operation::HLT,
+                    operands: ast::Operands::None(10..10),
+                }),
+                ast::Line::Label(ast::Label(11..14, "end".to_owned())),
+                ast::Line::Instruction(ast::Instruction {
+                    span: 16..19,
+                    operation: Operation::HLT,
+                    operands: ast::Operands::None(19..19),
+                }),
+                ast::Line::Instruction(ast::Instruction {
+                    span: 20..23,
+                    operation: Operation::HLT,
+                    operands: ast::Operands::None(23..23),
+                }),
             ]
         );
     }
@@ -981,23 +952,19 @@ mod tests {
     fn constants() {
         assert_parse!(
             "label equ 42",
-            vec![ast::Line {
-                label: Some(ast::Label(0..5, "label".to_owned())),
-                content: ast::LineContent::Constant(6..12, expr_const!(10..12, 42))
-            }]
+            vec![
+                ast::Line::Label(ast::Label(0..5, "label".to_owned())),
+                ast::Line::Constant(6..12, expr_const!(10..12, 42)),
+            ]
         );
 
         assert_parse!(
             "first equ 10 ; first value\n\nsecond equ 20 ; second value\n\n",
             vec![
-                ast::Line {
-                    label: Some(ast::Label(0..5, "first".to_owned())),
-                    content: ast::LineContent::Constant(6..12, expr_const!(10..12, 10))
-                },
-                ast::Line {
-                    label: Some(ast::Label(28..34, "second".to_owned())),
-                    content: ast::LineContent::Constant(35..41, expr_const!(39..41, 20))
-                }
+                ast::Line::Label(ast::Label(0..5, "first".to_owned())),
+                ast::Line::Constant(6..12, expr_const!(10..12, 10)),
+                ast::Line::Label(ast::Label(28..34, "second".to_owned())),
+                ast::Line::Constant(35..41, expr_const!(39..41, 20)),
             ]
         );
     }
@@ -1006,17 +973,11 @@ mod tests {
     fn data() {
         assert_parse!(
             "db 10, 20, 30",
-            vec![ast::Line {
-                label: None,
-                content: ast::LineContent::Data(0..13, vec![10, 20, 30])
-            }]
+            vec![ast::Line::Data(0..13, vec![10, 20, 30])]
         );
         assert_parse!(
             "dw 10, 20, 30",
-            vec![ast::Line {
-                label: None,
-                content: ast::LineContent::Data(0..13, vec![10, 0, 20, 0, 30, 0]),
-            }]
+            vec![ast::Line::Data(0..13, vec![10, 0, 20, 0, 30, 0])]
         );
 
         assert_parse_err!("db ", ParserError::DataDefinitionWithoutData(0..2));
@@ -1091,66 +1052,57 @@ mod tests {
     fn indirect_encoding() {
         assert_parse!(
             "push word [cs: bx + si - 512]",
-            vec![ast::Line {
-                label: None,
-                content: ast::LineContent::Instruction(ast::Instruction {
-                    span: 0..29,
-                    operation: Operation::PUSH,
-                    operands: ast::Operands::Destination(
-                        5..29,
-                        ast::Operand::Indirect(
-                            10..29,
-                            ast::IndirectEncoding::BxSi,
-                            Some(expr_prefix!(23..28, Subtract, expr_const!(25..28, 512))),
-                            Some(ast::DataSize::Word),
-                            Some(ast::Segment::CS),
-                        )
+            vec![ast::Line::Instruction(ast::Instruction {
+                span: 0..29,
+                operation: Operation::PUSH,
+                operands: ast::Operands::Destination(
+                    5..29,
+                    ast::Operand::Indirect(
+                        10..29,
+                        ast::IndirectEncoding::BxSi,
+                        Some(expr_prefix!(23..28, Subtract, expr_const!(25..28, 512))),
+                        Some(ast::DataSize::Word),
+                        Some(ast::Segment::CS),
                     )
-                })
-            }]
+                )
+            })]
         );
 
         assert_parse!(
             "push [si - 512]",
-            vec![ast::Line {
-                label: None,
-                content: ast::LineContent::Instruction(ast::Instruction {
-                    span: 0..15,
-                    operation: Operation::PUSH,
-                    operands: ast::Operands::Destination(
+            vec![ast::Line::Instruction(ast::Instruction {
+                span: 0..15,
+                operation: Operation::PUSH,
+                operands: ast::Operands::Destination(
+                    5..15,
+                    ast::Operand::Indirect(
                         5..15,
-                        ast::Operand::Indirect(
-                            5..15,
-                            ast::IndirectEncoding::Si,
-                            Some(expr_prefix!(9..14, Subtract, expr_const!(11..14, 512))),
-                            None,
-                            None,
-                        )
+                        ast::IndirectEncoding::Si,
+                        Some(expr_prefix!(9..14, Subtract, expr_const!(11..14, 512))),
+                        None,
+                        None,
                     )
-                })
-            }]
+                )
+            })]
         );
 
         assert_parse!(
             "MOV AX,[SI+0x12]",
-            vec![ast::Line {
-                label: None,
-                content: ast::LineContent::Instruction(ast::Instruction {
-                    span: 0..16,
-                    operation: Operation::MOV,
-                    operands: ast::Operands::DestinationAndSource(
-                        4..16,
-                        ast::Operand::Register(4..6, ast::Register::Word(ast::WordRegister::Ax)),
-                        ast::Operand::Indirect(
-                            7..16,
-                            ast::IndirectEncoding::Si,
-                            Some(expr_prefix!(10..15, Add, expr_const!(11..15, 18))),
-                            None,
-                            None,
-                        )
+            vec![ast::Line::Instruction(ast::Instruction {
+                span: 0..16,
+                operation: Operation::MOV,
+                operands: ast::Operands::DestinationAndSource(
+                    4..16,
+                    ast::Operand::Register(4..6, ast::Register::Word(ast::WordRegister::Ax)),
+                    ast::Operand::Indirect(
+                        7..16,
+                        ast::IndirectEncoding::Si,
+                        Some(expr_prefix!(10..15, Add, expr_const!(11..15, 18))),
+                        None,
+                        None,
                     )
-                })
-            }]
+                )
+            })]
         );
     }
 }

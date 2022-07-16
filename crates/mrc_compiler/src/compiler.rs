@@ -157,8 +157,8 @@ impl Compiler {
         println!("First pass - calculate instruction sizes if possible:");
 
         for (num, output) in outputs.iter_mut().enumerate() {
-            match &mut output.line.content {
-                ast::LineContent::Instruction(instruction) => {
+            match &mut output.line {
+                ast::Line::Instruction(instruction) => {
                     match self.size_in_bytes(instruction) {
                         Ok(size_in_bytes) => {
                             output.size_in_bytes = size_in_bytes;
@@ -178,7 +178,7 @@ impl Compiler {
                     };
                 }
 
-                ast::LineContent::Data(_, data) => {
+                ast::Line::Data(_, data) => {
                     output.size_in_bytes = data.len() as u16;
                 }
 
@@ -265,7 +265,7 @@ impl Compiler {
                     // println!("diff: {diff}");
                     let output = &mut outputs[line_num];
 
-                    if let ast::LineContent::Instruction(instruction) = &mut output.line.content {
+                    if let ast::Line::Instruction(instruction) = &mut output.line {
                         instruction.operands.replace_label(&reference.label, diff);
 
                         match self.size_in_bytes(instruction) {
@@ -992,21 +992,12 @@ impl crate::LineConsumer for Compiler {
     type Err = CompileError;
 
     fn consume(&mut self, mut line: ast::Line) -> Result<(), Self::Err> {
-        let ast::Line { label, content } = &mut line;
-        match content {
-            ast::LineContent::None => {
-                if let Some(label) = label {
-                    self.current_labels.push(label.1.clone());
-                }
+        match &mut line {
+            ast::Line::Label(label) => {
+                self.current_labels.push(label.1.clone());
             }
 
-            ast::LineContent::Instruction(_)
-            | ast::LineContent::Data(_, _)
-            | ast::LineContent::Times(_, _, _) => {
-                if let Some(label) = label {
-                    self.current_labels.push(label.1.clone());
-                }
-
+            ast::Line::Instruction(_) | ast::Line::Data(_, _) | ast::Line::Times(_, _, _) => {
                 for label in &self.current_labels {
                     self.labels.insert(label.clone(), self.outputs.len());
                 }
@@ -1019,20 +1010,22 @@ impl crate::LineConsumer for Compiler {
                 self.current_labels.clear();
             }
 
-            ast::LineContent::Constant(span, expr) => {
-                if let Some(label) = label {
+            ast::Line::Constant(_, expr) => {
+                if let Some(label) = self.current_labels.pop() {
                     self.evaluate_expression(expr)?;
 
                     match expr.get_constant_value() {
                         Ok(value) => {
-                            self.constants.insert(label.1.clone(), value);
+                            self.constants.insert(label.clone(), value);
                         }
                         Err(_) => {
-                            return Err(CompileError::ConstantValueContainsVariables(span.clone()))
+                            return Err(CompileError::ConstantValueContainsVariables(
+                                line.span().clone(),
+                            ))
                         }
                     }
                 } else {
-                    return Err(CompileError::ConstantWithoutLabel(span.clone()));
+                    return Err(CompileError::ConstantWithoutLabel(line.span().clone()));
                 }
             }
         }
@@ -1050,10 +1043,7 @@ mod tests {
     fn basic() {
         let mut compiler = Compiler::default();
         compiler
-            .consume(ast::Line {
-                label: None,
-                content: ast::LineContent::None,
-            })
+            .consume(ast::Line::Label(ast::Label(0..0, "test".to_owned())))
             .unwrap();
         println!("{:?}", compiler.compile().unwrap());
     }
@@ -1062,23 +1052,20 @@ mod tests {
     fn basic_2() {
         let mut compiler = Compiler::default();
         compiler
-            .consume(ast::Line {
-                label: None,
-                content: ast::LineContent::Instruction(ast::Instruction {
-                    span: 0..0,
-                    operation: out::Operation::MOV,
-                    operands: ast::Operands::DestinationAndSource(
+            .consume(ast::Line::Instruction(ast::Instruction {
+                span: 0..0,
+                operation: out::Operation::MOV,
+                operands: ast::Operands::DestinationAndSource(
+                    0..0,
+                    ast::Operand::Address(
                         0..0,
-                        ast::Operand::Address(
-                            0..0,
-                            ast::Expression::Value(0..0, ast::Value::Constant(0)),
-                            None,
-                            None,
-                        ),
-                        ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
+                        ast::Expression::Value(0..0, ast::Value::Constant(0)),
+                        None,
+                        None,
                     ),
-                }),
-            })
+                    ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
+                ),
+            }))
             .unwrap();
         println!("{:?}", compiler.compile().unwrap());
     }

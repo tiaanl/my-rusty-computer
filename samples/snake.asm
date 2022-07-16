@@ -1166,10 +1166,13 @@ exit:
 
 
 ; data
-old_keyboard_int                       DD 0
-old_timer_int                          DD 0
+old_keyboard_int                       DW 0
+                                       DW 0
+old_timer_int                          DW 0
+                                       DW 0
 
-screen_buffer                          DD 0
+screen_buffer                          DW 0
+                                       DW 0
 
 lastkey                                DB 0
 key                                    TIMES 128 DB 0
