@@ -250,14 +250,14 @@ impl IndirectEncoding {
 impl std::fmt::Display for IndirectEncoding {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            IndirectEncoding::BxSi => write!(f, "bx + si"),
-            IndirectEncoding::BxDi => write!(f, "bx + di"),
-            IndirectEncoding::BpSi => write!(f, "bp + si"),
-            IndirectEncoding::BpDi => write!(f, "bp + di"),
-            IndirectEncoding::Si => write!(f, "si"),
-            IndirectEncoding::Di => write!(f, "di"),
-            IndirectEncoding::Bp => write!(f, "bx"),
-            IndirectEncoding::Bx => write!(f, "bp"),
+            IndirectEncoding::BxSi => write!(f, "BX + SI"),
+            IndirectEncoding::BxDi => write!(f, "BX + DI"),
+            IndirectEncoding::BpSi => write!(f, "BP + SI"),
+            IndirectEncoding::BpDi => write!(f, "BP + DI"),
+            IndirectEncoding::Si => write!(f, "SI"),
+            IndirectEncoding::Di => write!(f, "DI"),
+            IndirectEncoding::Bp => write!(f, "BX"),
+            IndirectEncoding::Bx => write!(f, "BP"),
         }
     }
 }
@@ -373,7 +373,7 @@ impl<'a> std::fmt::Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expression::PrefixOperator(_, operator, right) => {
-                write!(f, "{}({})", operator, right)
+                write!(f, "{} ({})", operator, right)
             }
             Expression::InfixOperator(_, operator, left, right) => {
                 write!(f, "({} {} {})", left, operator, right)
@@ -433,8 +433,7 @@ impl<'a> std::fmt::Display for Operand {
                     write!(f, "{}:", segment)?;
                 }
 
-                // expr.fmt(f)?;
-                write!(f, "{:?}", expr)?;
+                expr.fmt(f)?;
 
                 write!(f, "]")
             }
@@ -452,6 +451,7 @@ impl<'a> std::fmt::Display for Operand {
                 indirect_encoding.fmt(f)?;
 
                 if let Some(expr) = expr {
+                    " ".fmt(f)?;
                     expr.fmt(f)?;
                 }
 

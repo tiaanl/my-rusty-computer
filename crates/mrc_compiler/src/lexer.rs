@@ -85,6 +85,7 @@ impl Token {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct Cursor<'a> {
     source: &'a str,
     pos: usize,

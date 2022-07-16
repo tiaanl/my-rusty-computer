@@ -125,6 +125,7 @@ impl ast::Operator {
     }
 }
 
+#[derive(Clone)]
 pub struct Parser<'a> {
     cursor: Cursor<'a>,
 
@@ -137,6 +138,9 @@ pub struct Parser<'a> {
     // Position in the cursor where the last meaningful token ended.
     last_token_end: usize,
 }
+
+#[derive(Clone)]
+struct Checkpoint<'a>(Parser<'a>);
 
 impl<'a> Parser<'a> {
     pub fn new(source: &'a str) -> Self {
@@ -159,6 +163,14 @@ impl<'a> Parser<'a> {
 
     fn token_source(&self) -> &'a str {
         self.cursor.source_at(self.token_start, self.token.len())
+    }
+
+    fn checkpoint(&self) -> Checkpoint<'a> {
+        Checkpoint(self.clone())
+    }
+
+    fn jump_to_checkpoint(&mut self, checkpoint: Checkpoint<'a>) {
+        *self = checkpoint.0;
     }
 
     pub fn parse_line(&mut self) -> Result<Option<ast::Line>, ParserError> {
@@ -484,6 +496,8 @@ impl<'a> Parser<'a> {
         }
 
         let second = if let Token::Punctuation(_, PunctuationKind::Plus) = self.token {
+            let checkpoint = self.checkpoint();
+
             // Consume the +.
             self.next_token();
 
@@ -505,6 +519,11 @@ impl<'a> Parser<'a> {
                     }
                 }
             } else {
+                // The token after the first register was a + sign, but the second one is not a
+                // register, so we have to backtrack to before the + to allow the expression parser
+                // to parse a PrefixOperator in stead of just the value.
+                self.jump_to_checkpoint(checkpoint);
+
                 None
             }
         } else {
@@ -713,9 +732,14 @@ impl<'a> Parser<'a> {
 
             _ => {
                 if let Some(operator) = self.token.operator() {
-                    let end = self.last_token_end;
+                    // Consume the operator.
+                    self.next_token();
+
                     let ((), right_precedence) = Self::prefix_precedence(operator)?;
                     let right = self.parse_expression_with_precedence(right_precedence)?;
+
+                    let end = self.last_token_end;
+
                     ast::Expression::PrefixOperator(start..end, operator, Box::new(right))
                 } else {
                     ast::Expression::Value(start..self.token_range().end, self.parse_atom()?)
@@ -822,6 +846,12 @@ mod tests {
                 $span,
                 ast::Value::Label(ast::Label($span, $value.to_owned())),
             )
+        }};
+    }
+
+    macro_rules! expr_prefix {
+        ($span:expr, $operator:ident, $left:expr) => {{
+            ast::Expression::PrefixOperator($span, ast::Operator::$operator, Box::new($left))
         }};
     }
 
@@ -1040,6 +1070,87 @@ mod tests {
                 ),
                 expr_const!(16..17, 5)
             )
+        );
+    }
+
+    #[test]
+    fn expression_with_prefix_operator() {
+        let expr = parse_expression!("- 3 * 4");
+        assert_eq!(
+            expr,
+            expr_infix!(
+                0..7,
+                Multiply,
+                expr_prefix!(0..3, Subtract, expr_const!(2..3, 3)),
+                expr_const!(6..7, 4)
+            )
+        );
+    }
+
+    #[test]
+    fn indirect_encoding() {
+        assert_parse!(
+            "push word [cs: bx + si - 512]",
+            vec![ast::Line {
+                label: None,
+                content: ast::LineContent::Instruction(ast::Instruction {
+                    span: 0..29,
+                    operation: Operation::PUSH,
+                    operands: ast::Operands::Destination(
+                        5..29,
+                        ast::Operand::Indirect(
+                            10..29,
+                            ast::IndirectEncoding::BxSi,
+                            Some(expr_prefix!(23..28, Subtract, expr_const!(25..28, 512))),
+                            Some(ast::DataSize::Word),
+                            Some(ast::Segment::CS),
+                        )
+                    )
+                })
+            }]
+        );
+
+        assert_parse!(
+            "push [si - 512]",
+            vec![ast::Line {
+                label: None,
+                content: ast::LineContent::Instruction(ast::Instruction {
+                    span: 0..15,
+                    operation: Operation::PUSH,
+                    operands: ast::Operands::Destination(
+                        5..15,
+                        ast::Operand::Indirect(
+                            5..15,
+                            ast::IndirectEncoding::Si,
+                            Some(expr_prefix!(9..14, Subtract, expr_const!(11..14, 512))),
+                            None,
+                            None,
+                        )
+                    )
+                })
+            }]
+        );
+
+        assert_parse!(
+            "MOV AX,[SI+0x12]",
+            vec![ast::Line {
+                label: None,
+                content: ast::LineContent::Instruction(ast::Instruction {
+                    span: 0..16,
+                    operation: Operation::MOV,
+                    operands: ast::Operands::DestinationAndSource(
+                        4..16,
+                        ast::Operand::Register(4..6, ast::Register::Word(ast::WordRegister::Ax)),
+                        ast::Operand::Indirect(
+                            7..16,
+                            ast::IndirectEncoding::Si,
+                            Some(expr_prefix!(10..15, Add, expr_const!(11..15, 18))),
+                            None,
+                            None,
+                        )
+                    )
+                })
+            }]
         );
     }
 }
