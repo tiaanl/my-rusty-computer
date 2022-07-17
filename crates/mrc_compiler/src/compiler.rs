@@ -3,33 +3,6 @@ use mrc_instruction as out;
 use std::collections::{HashMap, LinkedList};
 use std::fmt::Formatter;
 
-impl ast::Expression {
-    // fn get_constant_value(&self) -> Result<i32, CompileError> {
-    //     match self {
-    //         ast::Expression::Value(_, ast::Value::Constant(value)) => Ok(*value),
-    //         _ => Err(CompileError::ConstantValueContainsVariables(
-    //             self.span().clone(),
-    //         )),
-    //     }
-    // }
-
-    // fn replace_label(&mut self, label: &ast::Label, value: i32) {
-    //     match self {
-    //         ast::Expression::Value(span, ast::Value::Label(l)) if l.1 == label.1 => {
-    //             *self = ast::Expression::Value(span.clone(), ast::Value::Constant(value as i32));
-    //         }
-    //         ast::Expression::PrefixOperator(_, _, expr) => {
-    //             expr.replace_label(label, value);
-    //         }
-    //         ast::Expression::InfixOperator(_, _, left, right) => {
-    //             left.replace_label(label, value);
-    //             right.replace_label(label, value);
-    //         }
-    //         _ => todo!(),
-    //     }
-    // }
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum CompileError {
@@ -111,14 +84,8 @@ pub struct Compiler {
     constants: HashMap<String, i32>,
 }
 
-// struct ForwardReference {
-//     line_num: usize,
-//     target_line_num: usize,
-//     label: ast::Label,
-// }
-
 impl Compiler {
-    pub fn compile(&mut self) -> Result<Vec<out::Instruction>, CompileError> {
+    pub fn compile(&mut self) -> Result<Vec<u8>, CompileError> {
         let mut last_offset = u16::MAX;
 
         let mut labels = LinkedList::new();
@@ -162,12 +129,6 @@ impl Compiler {
                             Err(err) => return Err(err),
                         }
                     }};
-                }
-
-                // Optimization that does not recalculate data for lines that were calculated
-                // before.
-                if output.size > 0 && !output.unresolved_references {
-                    continue;
                 }
 
                 match &mut output.line {
@@ -250,196 +211,8 @@ impl Compiler {
             offset += output.size;
         }
 
-        // let forward_references = self.calculate_size_of_each_instruction()?;
-        //
-        // {
-        //     let outputs = unsafe {
-        //         &mut *std::ptr::slice_from_raw_parts_mut(
-        //             self.outputs.as_mut_ptr(),
-        //             self.outputs.len(),
-        //         )
-        //     };
-        //     for output in outputs {
-        //         println!("    {}, {}", &output.size, &output.line);
-        //     }
-        // }
-        //
-        // if !forward_references.is_empty() {
-        //     self.resolve_forward_references(forward_references)?;
-        // }
-
         Ok(vec![])
     }
-
-    // /// Go through each output and compile instructions.  Returns a list of instructions that
-    // /// has references to other memory locations.
-    // fn calculate_size_of_each_instruction(
-    //     &mut self,
-    // ) -> Result<LinkedList<ForwardReference>, CompileError> {
-    //     let outputs = unsafe {
-    //         &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
-    //     };
-    //
-    //     let mut forward_references = LinkedList::new();
-    //
-    //     // Compile each line into a mrc_instruction::Instruction.
-    //
-    //     println!("First pass - calculate instruction sizes if possible:");
-    //
-    //     for (num, output) in outputs.iter_mut().enumerate() {
-    //         match &mut output.line {
-    //             ast::Line::Instruction(instruction) => {
-    //                 match self.size_in_bytes(instruction) {
-    //                     Ok(size_in_bytes) => {
-    //                         output.size = size_in_bytes;
-    //                     }
-    //
-    //                     Err(err) => match err {
-    //                         CompileError::ConstantValueContainsLabel(label) => {
-    //                             // forward_references.push_back((num, label.clone()));
-    //                             forward_references.push_back(ForwardReference {
-    //                                 line_num: num,
-    //                                 target_line_num: *self.labels.get(&label.1).unwrap(),
-    //                                 label: label.clone(),
-    //                             })
-    //                         }
-    //                         err => return Err(err),
-    //                     },
-    //                 };
-    //             }
-    //
-    //             ast::Line::Data(_, data) => {
-    //                 output.size = data.len() as u16;
-    //             }
-    //
-    //             _ => {}
-    //         }
-    //     }
-    //
-    //     Ok(forward_references)
-    // }
-
-    // fn resolve_forward_references(
-    //     &mut self,
-    //     forward_references: LinkedList<ForwardReference>,
-    // ) -> Result<(), CompileError> {
-    //     debug_assert!(!forward_references.is_empty());
-    //
-    //     // Take mutable ownership of the forward references in this scope.
-    //     let mut forward_references = forward_references;
-    //
-    //     println!(
-    //         "Second pass - resolve {} forward references:",
-    //         forward_references.len()
-    //     );
-    //
-    //     // TODO: if we sort the references by the difference in line numbers starting with smallest
-    //     //       we will do potentially less work.
-    //
-    //     let outputs = unsafe {
-    //         &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
-    //     };
-    //
-    //     let mut new_forward_references = LinkedList::new();
-    //     loop {
-    //         let mut removed = 0;
-    //
-    //         while let Some(reference) = forward_references.pop_front() {
-    //             println!("    Resolving reference: {}", &reference.label);
-    //             // println!("resolving label: {}", &reference.label);
-    //             // println!("num: {num}, label_num: {label_num}");
-    //
-    //             let line_num = reference.line_num;
-    //             let target_line_num = reference.target_line_num;
-    //
-    //             let diff = if line_num + 1 == target_line_num {
-    //                 Some(0)
-    //             } else {
-    //                 let mut inner_diff = 0_i32;
-    //
-    //                 if line_num < target_line_num {
-    //                     // Going forward we start from the next output.
-    //                     for output in &mut outputs[line_num + 1..target_line_num] {
-    //                         // println!("size: {i}: {}", &outputs[i].size_in_bytes);
-    //                         if output.size != 0 {
-    //                             inner_diff += output.size as i32;
-    //                         } else {
-    //                             println!("        down instruction with no size: {}", output.line);
-    //                             inner_diff = 0;
-    //                             break;
-    //                         }
-    //                     }
-    //                 } else {
-    //                     for output in &mut outputs[target_line_num..line_num] {
-    //                         // println!("size: {i}: {}", &outputs[i].size_in_bytes);
-    //                         if output.size != 0 {
-    //                             inner_diff -= output.size as i32;
-    //                         } else {
-    //                             println!("        up instruction with no size: {}", output.line);
-    //                             inner_diff = 0;
-    //                             break;
-    //                         }
-    //                     }
-    //                 }
-    //
-    //                 if inner_diff == 0 {
-    //                     println!("            nothing found");
-    //                     None
-    //                 } else {
-    //                     println!("            found diff: {inner_diff}");
-    //                     Some(inner_diff)
-    //                 }
-    //             };
-    //
-    //             if let Some(diff) = diff {
-    //                 // println!("diff: {diff}");
-    //                 let output = &mut outputs[line_num];
-    //
-    //                 if let ast::Line::Instruction(instruction) = &mut output.line {
-    //                     instruction.operands.replace_label(&reference.label, diff);
-    //
-    //                     match self.size_in_bytes(instruction) {
-    //                         Ok(size_in_bytes) => {
-    //                             output.size = size_in_bytes;
-    //                             removed += 1;
-    //                         }
-    //
-    //                         Err(_) => {
-    //                             // If we still can't figure out the size of the instruction
-    //                             // after replacing a label, then just add it to the list of
-    //                             // references again so we can try another time.
-    //                             new_forward_references.push_back(reference);
-    //                         }
-    //                     }
-    //                 }
-    //             } else {
-    //                 // println!("not found");
-    //                 new_forward_references.push_back(reference);
-    //             }
-    //         }
-    //
-    //         if removed == 0 {
-    //             // println!(
-    //             //     "Some references could not be resolved: {:?}",
-    //             //     new_forward_references
-    //             // );
-    //
-    //             return Err(CompileError::UnresolvedReference(
-    //                 new_forward_references.pop_front().unwrap().label,
-    //             ));
-    //         }
-    //
-    //         if new_forward_references.is_empty() {
-    //             break;
-    //         }
-    //
-    //         // println!("forward references: {}", new_forward_references.len());
-    //
-    //         std::mem::swap(&mut forward_references, &mut new_forward_references);
-    //     }
-    //
-    //     Ok(())
-    // }
 }
 
 impl Compiler {
@@ -523,277 +296,9 @@ impl Compiler {
 
         Ok(total_size)
     }
-
-    // fn _calc_mod_reg_rm_size(
-    //     &self,
-    //     destination: &ast::Operand,
-    //     source: &ast::Operand,
-    // ) -> Result<u16, CompileError> {
-    //     macro_rules! address_size {
-    //         ($segment:expr) => {{
-    //             let mut total = 1; // mod reg r/m byte.
-    //             total += 2; // direct address word.
-    //
-    //             // 1 byte if there is a segment override.
-    //             if let Some(segment) = $segment {
-    //                 if *segment != ast::Segment::DS {
-    //                     total += 1;
-    //                 }
-    //             }
-    //
-    //             total
-    //         }};
-    //     }
-    //
-    //     macro_rules! indirect_size {
-    //         ($expr:expr, $segment:expr) => {{
-    //             let mut total = 1; // mod reg r/m byte.
-    //
-    //             if let Some(expr) = $expr {
-    //                 let mut expr = expr.clone();
-    //                 self.evaluate_expression(&mut expr)?;
-    //                 let value = expr.get_constant_value()?;
-    //                 if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-    //                     total += 1;
-    //                 } else {
-    //                     total += 2;
-    //                 }
-    //             }
-    //
-    //             // 1 byte if there is a segment override.
-    //             if let Some(segment) = $segment {
-    //                 if *segment != ast::Segment::DS {
-    //                     total += 1;
-    //                 }
-    //             }
-    //
-    //             total
-    //         }};
-    //     }
-    //
-    //     macro_rules! immediate_size {
-    //         ($expr:expr) => {{
-    //             // FIXME: This needs to be calculated according to a passed in hint.
-    //             1
-    //         }};
-    //     }
-    //
-    //     match (destination, source) {
-    //         // Register
-    //         //
-    //         (ast::Operand::Register(_, _), ast::Operand::Register(_, _))
-    //         | (ast::Operand::Segment(_, _), ast::Operand::Register(_, _)) => Ok(1),
-    //
-    //         (ast::Operand::Register(_, _), ast::Operand::Immediate(_, imm_expr)) => {
-    //             Ok(immediate_size!(imm_expr))
-    //         }
-    //
-    //         (ast::Operand::Address(_, _, _, segment), ast::Operand::Register(_, _))
-    //         | (ast::Operand::Address(_, _, _, segment), ast::Operand::Segment(_, _))
-    //         | (ast::Operand::Register(_, _), ast::Operand::Address(_, _, _, segment)) => {
-    //             Ok(address_size!(segment))
-    //         }
-    //
-    //         (ast::Operand::Indirect(_, _, expr, _, segment), ast::Operand::Register(_, _))
-    //         | (ast::Operand::Indirect(_, _, expr, _, segment), ast::Operand::Segment(_, _))
-    //         | (ast::Operand::Register(_, _), ast::Operand::Indirect(_, _, expr, _, segment)) => {
-    //             Ok(indirect_size!(expr, segment))
-    //         }
-    //
-    //         // Immediate
-    //         //
-    //         (ast::Operand::Address(_, _, _, segment), ast::Operand::Immediate(_, imm_expr))
-    //         | (ast::Operand::Immediate(_, imm_expr), ast::Operand::Address(_, _, _, segment)) => {
-    //             Ok(address_size!(segment) + immediate_size!(imm_expr))
-    //         }
-    //
-    //         (
-    //             ast::Operand::Indirect(_, _, expr, _, segment),
-    //             ast::Operand::Immediate(_, imm_expr),
-    //         )
-    //         | (
-    //             ast::Operand::Immediate(_, imm_expr),
-    //             ast::Operand::Indirect(_, _, expr, _, segment),
-    //         ) => Ok(indirect_size!(expr, segment) + immediate_size!(imm_expr)),
-    //
-    //         _ => todo!("{:?}, {:?}", destination, source),
-    //     }
-    // }
 }
 
-// impl ast::Operand {
-//     fn replace_label(&mut self, label: &ast::Label, value: i32) {
-//         match self {
-//             ast::Operand::Immediate(_, expr) | ast::Operand::Address(_, expr, _, _) => {
-//                 expr.replace_label(label, value);
-//             }
-//             _ => {}
-//         }
-//     }
-// }
-
-// impl ast::Operands {
-//     fn replace_label(&mut self, label: &ast::Label, value: i32) {
-//         match self {
-//             ast::Operands::None(_) => {}
-//             ast::Operands::Destination(_, dst) => dst.replace_label(label, value),
-//             ast::Operands::DestinationAndSource(_, dst, src) => {
-//                 dst.replace_label(label, value);
-//                 src.replace_label(label, value);
-//             }
-//         }
-//     }
-// }
-
 impl Compiler {
-    // fn compile_instruction(
-    //     &self,
-    //     instruction: &mut ast::Instruction,
-    // ) -> Result<out::Instruction, CompileError> {
-    //     let id = self.find_instruction_data(instruction)?;
-    //
-    //     Ok(match &mut instruction.operands {
-    //         ast::Operands::None(_) => {
-    //             out::Instruction::new(instruction.operation, out::OperandSet::None)
-    //         }
-    //         ast::Operands::Destination(_, destination) => out::Instruction::new(
-    //             instruction.operation,
-    //             out::OperandSet::Destination(self.compile_operand(destination, &id.destination)?),
-    //         ),
-    //         ast::Operands::DestinationAndSource(_, destination, source) => out::Instruction::new(
-    //             instruction.operation,
-    //             out::OperandSet::DestinationAndSource(
-    //                 self.compile_operand(destination, &id.destination)?,
-    //                 self.compile_operand(source, &id.source)?,
-    //             ),
-    //         ),
-    //     })
-    // }
-    //
-    // fn compile_operand(
-    //     &self,
-    //     input: &mut ast::Operand,
-    //     hint: &out::db::OperandEncoding,
-    // ) -> Result<out::Operand, CompileError> {
-    //     Ok(match input {
-    //         ast::Operand::Immediate(_, expr) => {
-    //             self.evaluate_expression(expr)?;
-    //
-    //             let value = expr.get_constant_value()?;
-    //
-    //             match hint {
-    //                 out::db::OperandEncoding::Imm => {
-    //                     if value <= u8::MAX as i32 {
-    //                         out::Operand::Immediate(out::Immediate::Byte(value as u8))
-    //                     } else if value <= u16::MAX as i32 {
-    //                         out::Operand::Immediate(out::Immediate::Word(value as u16))
-    //                     } else {
-    //                         return Err(CompileError::ImmediateValueOutOfRange(
-    //                             input.span().clone(),
-    //                             value,
-    //                         ));
-    //                     }
-    //                 }
-    //
-    //                 out::db::OperandEncoding::Imm8 => {
-    //                     if value <= u8::MAX as i32 {
-    //                         out::Operand::Immediate(out::Immediate::Byte(value as u8))
-    //                     } else {
-    //                         return Err(CompileError::ImmediateValueOutOfRange(
-    //                             input.span().clone(),
-    //                             value,
-    //                         ));
-    //                     }
-    //                 }
-    //
-    //                 out::db::OperandEncoding::Imm16 => {
-    //                     if value <= u16::MAX as i32 {
-    //                         out::Operand::Immediate(out::Immediate::Word(value as u16))
-    //                     } else {
-    //                         return Err(CompileError::ImmediateValueOutOfRange(
-    //                             input.span().clone(),
-    //                             value,
-    //                         ));
-    //                     }
-    //                 }
-    //
-    //                 out::db::OperandEncoding::Disp8 => {
-    //                     if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-    //                         out::Operand::Displacement(out::Displacement::Byte(value as i8))
-    //                     } else {
-    //                         return Err(CompileError::ImmediateValueOutOfRange(
-    //                             input.span().clone(),
-    //                             value,
-    //                         ));
-    //                     }
-    //                 }
-    //
-    //                 out::db::OperandEncoding::Disp16 => {
-    //                     if value >= i16::MIN as i32 && value <= i16::MAX as i32 {
-    //                         out::Operand::Displacement(out::Displacement::Word(value as i16))
-    //                     } else {
-    //                         return Err(CompileError::ImmediateValueOutOfRange(
-    //                             input.span().clone(),
-    //                             value,
-    //                         ));
-    //                     }
-    //                 }
-    //
-    //                 _ => todo!("encode immediate to operand with hint: {:?}", hint),
-    //             }
-    //         }
-    //
-    //         ast::Operand::Address(_, expr, _data_size, segment) => {
-    //             self.evaluate_expression(expr)?;
-    //             let value = expr.get_constant_value()?;
-    //             let segment = segment.clone().unwrap_or(ast::Segment::DS);
-    //             let segment = out::Segment::try_from_encoding(segment.encoding()).unwrap();
-    //             out::Operand::Direct(segment, value as u16, out::OperandSize::Byte)
-    //         }
-    //
-    //         ast::Operand::Indirect(_, indirect_encoding, expr, _data_size, segment) => {
-    //             let value = if let Some(expr) = expr {
-    //                 self.evaluate_expression(expr)?;
-    //                 Some(expr.get_constant_value()?)
-    //             } else {
-    //                 None
-    //             };
-    //             let segment = segment.clone().unwrap_or(ast::Segment::DS);
-    //             let segment = out::Segment::try_from_encoding(segment.encoding()).unwrap();
-    //             out::Operand::Indirect(
-    //                 segment,
-    //                 AddressingMode::try_from_encoding(indirect_encoding.encoding()).unwrap(),
-    //                 if let Some(value) = value {
-    //                     if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-    //                         out::Displacement::Byte(value as i8)
-    //                     } else {
-    //                         out::Displacement::Word(value as i16)
-    //                     }
-    //                 } else {
-    //                     out::Displacement::None
-    //                 },
-    //                 out::OperandSize::Byte,
-    //             )
-    //         }
-    //
-    //         ast::Operand::Register(_, register) => match register {
-    //             ast::Register::Byte(r) => out::Operand::Register(out::SizedRegisterEncoding(
-    //                 out::RegisterEncoding::try_from_encoding(r.encoding())
-    //                     .map_err(|_| todo!("Error for invalid encoding"))?,
-    //                 out::OperandSize::Byte,
-    //             )),
-    //             ast::Register::Word(r) => out::Operand::Register(out::SizedRegisterEncoding(
-    //                 out::RegisterEncoding::try_from_encoding(r.encoding())
-    //                     .map_err(|_| todo!("Error for invalid encoding"))?,
-    //                 out::OperandSize::Word,
-    //             )),
-    //         },
-    //         ast::Operand::Segment(_, seg) => {
-    //             out::Operand::Segment(out::Segment::try_from_encoding(seg.encoding()).unwrap())
-    //         }
-    //     })
-    // }
-
     fn find_instruction_data(
         &self,
         instruction: &ast::Instruction,
@@ -1062,77 +567,13 @@ fn operand_encoding_size_hint(oe: &out::db::OperandEncoding) -> Option<ast::Data
 }
 
 impl Compiler {
-    pub fn consume(&mut self, line: ast::Line) {
+    pub fn push_line(&mut self, line: ast::Line) {
         self.outputs.push(Output {
             line,
             size: 0,
             unresolved_references: false,
         });
     }
-
-    // fn consume(&mut self, mut line: ast::Line) -> Result<(), Self::Err> {
-    //     macro_rules! drain_labels {
-    //         () => {{
-    //             for label in &self.current_labels {
-    //                 self.labels.insert(label.clone(), self.outputs.len());
-    //             }
-    //             self.current_labels.clear();
-    //         }};
-    //     }
-    //
-    //     match &mut line {
-    //         ast::Line::Label(label) => {
-    //             self.current_labels.push(label.1.clone());
-    //         }
-    //
-    //         ast::Line::Instruction(_) | ast::Line::Data(_, _) => {
-    //             drain_labels!();
-    //
-    //             self.outputs.push(Output {
-    //                 line,
-    //                 size_in_bytes: 0,
-    //                 unresolved_references: false,
-    //             });
-    //         }
-    //
-    //         ast::Line::Times(_, expr, line) => {
-    //             drain_labels!();
-    //
-    //             let mut expr = expr.clone();
-    //             self.evaluate_expression(&mut expr)?;
-    //             let times = expr.get_constant_value()?;
-    //
-    //             for _ in 0..times {
-    //                 self.outputs.push(Output {
-    //                     line: line.as_ref().clone(),
-    //                     size_in_bytes: 0,
-    //                     unresolved_references: false,
-    //                 });
-    //             }
-    //         }
-    //
-    //         ast::Line::Constant(_, expr) => {
-    //             if let Some(label) = self.current_labels.pop() {
-    //                 self.evaluate_expression(expr)?;
-    //
-    //                 match expr.get_constant_value() {
-    //                     Ok(value) => {
-    //                         self.constants.insert(label.clone(), value);
-    //                     }
-    //                     Err(_) => {
-    //                         return Err(CompileError::ConstantValueContainsVariables(
-    //                             line.span().clone(),
-    //                         ))
-    //                     }
-    //                 }
-    //             } else {
-    //                 return Err(CompileError::ConstantWithoutLabel(line.span().clone()));
-    //             }
-    //         }
-    //     }
-    //
-    //     Ok(())
-    // }
 }
 
 #[cfg(test)]
@@ -1142,14 +583,14 @@ mod tests {
     #[test]
     fn basic() {
         let mut compiler = Compiler::default();
-        compiler.consume(ast::Line::Label(ast::Label(0..0, "test".to_owned())));
-        println!("{:?}", compiler.compile().unwrap());
+        compiler.push_line(ast::Line::Label(ast::Label(0..0, "test".to_owned())));
+        assert_eq!(Vec::<u8>::new(), compiler.compile().unwrap());
     }
 
     #[test]
     fn basic_2() {
         let mut compiler = Compiler::default();
-        compiler.consume(ast::Line::Instruction(ast::Instruction {
+        compiler.push_line(ast::Line::Instruction(ast::Instruction {
             span: 0..0,
             operation: out::Operation::MOV,
             operands: ast::Operands::DestinationAndSource(
@@ -1163,6 +604,6 @@ mod tests {
                 ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
             ),
         }));
-        println!("{:?}", compiler.compile().unwrap());
+        assert_eq!(vec![0], compiler.compile().unwrap());
     }
 }

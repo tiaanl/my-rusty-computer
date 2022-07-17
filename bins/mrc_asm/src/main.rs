@@ -87,7 +87,7 @@ fn main() {
     } else {
         loop {
             match parser.parse_line() {
-                Ok(Some(line)) => compiler.consume(line),
+                Ok(Some(line)) => compiler.push_line(line),
                 Ok(None) => break,
                 Err(err) => {
                     diags.error(format!("{}", err), err.span().clone());
