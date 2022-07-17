@@ -4,30 +4,30 @@ use std::collections::{HashMap, LinkedList};
 use std::fmt::Formatter;
 
 impl ast::Expression {
-    fn get_constant_value(&self) -> Result<i32, CompileError> {
-        match self {
-            ast::Expression::Value(_, ast::Value::Constant(value)) => Ok(*value),
-            _ => Err(CompileError::ConstantValueContainsVariables(
-                self.span().clone(),
-            )),
-        }
-    }
+    // fn get_constant_value(&self) -> Result<i32, CompileError> {
+    //     match self {
+    //         ast::Expression::Value(_, ast::Value::Constant(value)) => Ok(*value),
+    //         _ => Err(CompileError::ConstantValueContainsVariables(
+    //             self.span().clone(),
+    //         )),
+    //     }
+    // }
 
-    fn replace_label(&mut self, label: &ast::Label, value: i32) {
-        match self {
-            ast::Expression::Value(span, ast::Value::Label(l)) if l.1 == label.1 => {
-                *self = ast::Expression::Value(span.clone(), ast::Value::Constant(value as i32));
-            }
-            ast::Expression::PrefixOperator(_, _, expr) => {
-                expr.replace_label(label, value);
-            }
-            ast::Expression::InfixOperator(_, _, left, right) => {
-                left.replace_label(label, value);
-                right.replace_label(label, value);
-            }
-            _ => todo!(),
-        }
-    }
+    // fn replace_label(&mut self, label: &ast::Label, value: i32) {
+    //     match self {
+    //         ast::Expression::Value(span, ast::Value::Label(l)) if l.1 == label.1 => {
+    //             *self = ast::Expression::Value(span.clone(), ast::Value::Constant(value as i32));
+    //         }
+    //         ast::Expression::PrefixOperator(_, _, expr) => {
+    //             expr.replace_label(label, value);
+    //         }
+    //         ast::Expression::InfixOperator(_, _, left, right) => {
+    //             left.replace_label(label, value);
+    //             right.replace_label(label, value);
+    //         }
+    //         _ => todo!(),
+    //     }
+    // }
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -35,7 +35,7 @@ impl ast::Expression {
 pub enum CompileError {
     InvalidOperands(
         ast::Span,
-        ast::Operands,
+        ast::Instruction,
         Vec<&'static out::db::InstructionData>,
     ),
     LabelNotFound(ast::Label),
@@ -100,440 +100,417 @@ impl std::fmt::Display for CompileError {
 #[derive(Debug)]
 struct Output {
     line: ast::Line,
-    size_in_bytes: u16,
+    size: u16,
+    unresolved_references: bool,
 }
 
 #[derive(Default)]
 pub struct Compiler {
     outputs: Vec<Output>,
-    labels: HashMap<String, usize>,
+    labels: HashMap<String, u16>,
     constants: HashMap<String, i32>,
-
-    current_labels: Vec<String>,
 }
 
-struct ForwardReference {
-    line_num: usize,
-    target_line_num: usize,
-    label: ast::Label,
-}
+// struct ForwardReference {
+//     line_num: usize,
+//     target_line_num: usize,
+//     label: ast::Label,
+// }
 
 impl Compiler {
     pub fn compile(&mut self) -> Result<Vec<out::Instruction>, CompileError> {
-        let forward_references = self.calculate_size_of_each_instruction()?;
+        let mut last_offset = u16::MAX;
 
-        {
+        let mut labels = LinkedList::new();
+
+        loop {
+            let mut unresolved_references = 0;
+            let mut offset = 0;
+
             let outputs = unsafe {
                 &mut *std::ptr::slice_from_raw_parts_mut(
                     self.outputs.as_mut_ptr(),
                     self.outputs.len(),
                 )
             };
+
             for output in outputs {
-                println!("    {}, {}", &output.size_in_bytes, &output.line);
+                macro_rules! drain_labels {
+                    () => {{
+                        while let Some(label) = labels.pop_back() {
+                            if let Some(label_offset) = self.labels.get_mut(label.1.as_str()) {
+                                *label_offset = offset;
+                            } else {
+                                self.labels.insert(label.1.clone(), offset);
+                            }
+                        }
+                    }};
+                }
+
+                macro_rules! line_size {
+                    ($line:expr) => {{
+                        match self.calculate_line_size($line) {
+                            Ok(size) => {
+                                output.unresolved_references = false;
+                                size
+                            }
+                            Err(CompileError::LabelNotFound(_)) => {
+                                unresolved_references += 1;
+                                output.unresolved_references = true;
+                                0
+                            }
+                            Err(err) => return Err(err),
+                        }
+                    }};
+                }
+
+                // Optimization that does not recalculate data for lines that were calculated
+                // before.
+                if output.size > 0 && !output.unresolved_references {
+                    continue;
+                }
+
+                match &mut output.line {
+                    ast::Line::Label(label) => {
+                        labels.push_back(label.clone());
+                    }
+
+                    line @ ast::Line::Instruction(..) => {
+                        drain_labels!();
+                        let size = line_size!(line);
+                        output.size = size;
+                        offset += size;
+                    }
+
+                    ast::Line::Data(_, data) => {
+                        drain_labels!();
+                        let size = data.len() as u16;
+                        output.size = size;
+                        offset += size;
+                    }
+
+                    ast::Line::Constant(span, expr) => {
+                        if let Some(label) = labels.pop_back() {
+                            let value = self.evaluate_expression(expr)?;
+                            self.constants.insert(label.1.clone(), value);
+                        } else {
+                            return Err(CompileError::ConstantWithoutLabel(span.clone()));
+                        }
+                    }
+
+                    ast::Line::Times(_, times_expr, inner_line) => {
+                        let times = self.evaluate_expression(times_expr)?;
+
+                        let mut size = 0;
+                        for _ in 0..times {
+                            size += line_size!(inner_line.as_ref());
+                        }
+
+                        output.size = size;
+                        offset += size;
+                    }
+                }
             }
+
+            // If there are no more unresolved references, then we can stop.
+            if unresolved_references == 0 {
+                break;
+            }
+
+            // Now we know there are unsolved references, but if we did not get new sizes for any
+            // of them, then we are done.
+            if offset == last_offset {
+                break;
+            }
+
+            last_offset = offset;
         }
 
-        if !forward_references.is_empty() {
-            self.resolve_forward_references(forward_references)?;
+        // if unresolved_references > 0 {
+        //     println!("WARNING: unresolved references!");
+        // }
+
+        let mut offset = 0;
+        for output in &self.outputs {
+            if matches!(&output.line, ast::Line::Label(..) | ast::Line::Constant(..)) {
+                continue;
+            }
+
+            println!(
+                "{:04X} {:04X} {} {}",
+                offset,
+                output.size,
+                if output.unresolved_references {
+                    "x"
+                } else {
+                    " "
+                },
+                output.line
+            );
+            offset += output.size;
         }
+
+        // let forward_references = self.calculate_size_of_each_instruction()?;
+        //
+        // {
+        //     let outputs = unsafe {
+        //         &mut *std::ptr::slice_from_raw_parts_mut(
+        //             self.outputs.as_mut_ptr(),
+        //             self.outputs.len(),
+        //         )
+        //     };
+        //     for output in outputs {
+        //         println!("    {}, {}", &output.size, &output.line);
+        //     }
+        // }
+        //
+        // if !forward_references.is_empty() {
+        //     self.resolve_forward_references(forward_references)?;
+        // }
 
         Ok(vec![])
     }
 
-    /// Go through each output and compile instructions.  Returns a list of instructions that
-    /// has references to other memory locations.
-    fn calculate_size_of_each_instruction(
-        &mut self,
-    ) -> Result<LinkedList<ForwardReference>, CompileError> {
-        let outputs = unsafe {
-            &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
-        };
+    // /// Go through each output and compile instructions.  Returns a list of instructions that
+    // /// has references to other memory locations.
+    // fn calculate_size_of_each_instruction(
+    //     &mut self,
+    // ) -> Result<LinkedList<ForwardReference>, CompileError> {
+    //     let outputs = unsafe {
+    //         &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
+    //     };
+    //
+    //     let mut forward_references = LinkedList::new();
+    //
+    //     // Compile each line into a mrc_instruction::Instruction.
+    //
+    //     println!("First pass - calculate instruction sizes if possible:");
+    //
+    //     for (num, output) in outputs.iter_mut().enumerate() {
+    //         match &mut output.line {
+    //             ast::Line::Instruction(instruction) => {
+    //                 match self.size_in_bytes(instruction) {
+    //                     Ok(size_in_bytes) => {
+    //                         output.size = size_in_bytes;
+    //                     }
+    //
+    //                     Err(err) => match err {
+    //                         CompileError::ConstantValueContainsLabel(label) => {
+    //                             // forward_references.push_back((num, label.clone()));
+    //                             forward_references.push_back(ForwardReference {
+    //                                 line_num: num,
+    //                                 target_line_num: *self.labels.get(&label.1).unwrap(),
+    //                                 label: label.clone(),
+    //                             })
+    //                         }
+    //                         err => return Err(err),
+    //                     },
+    //                 };
+    //             }
+    //
+    //             ast::Line::Data(_, data) => {
+    //                 output.size = data.len() as u16;
+    //             }
+    //
+    //             _ => {}
+    //         }
+    //     }
+    //
+    //     Ok(forward_references)
+    // }
 
-        let mut forward_references = LinkedList::new();
-
-        // Compile each line into a mrc_instruction::Instruction.
-
-        println!("First pass - calculate instruction sizes if possible:");
-
-        for (num, output) in outputs.iter_mut().enumerate() {
-            match &mut output.line {
-                ast::Line::Instruction(instruction) => {
-                    match self.size_in_bytes(instruction) {
-                        Ok(size_in_bytes) => {
-                            output.size_in_bytes = size_in_bytes;
-                        }
-
-                        Err(err) => match err {
-                            CompileError::ConstantValueContainsLabel(label) => {
-                                // forward_references.push_back((num, label.clone()));
-                                forward_references.push_back(ForwardReference {
-                                    line_num: num,
-                                    target_line_num: *self.labels.get(&label.1).unwrap(),
-                                    label: label.clone(),
-                                })
-                            }
-                            err => return Err(err),
-                        },
-                    };
-                }
-
-                ast::Line::Data(_, data) => {
-                    output.size_in_bytes = data.len() as u16;
-                }
-
-                _ => {}
-            }
-        }
-
-        Ok(forward_references)
-    }
-
-    fn resolve_forward_references(
-        &mut self,
-        forward_references: LinkedList<ForwardReference>,
-    ) -> Result<(), CompileError> {
-        debug_assert!(!forward_references.is_empty());
-
-        // Take mutable ownership of the forward references in this scope.
-        let mut forward_references = forward_references;
-
-        println!(
-            "Second pass - resolve {} forward references:",
-            forward_references.len()
-        );
-
-        // TODO: if we sort the references by the difference in line numbers starting with smallest
-        //       we will do potentially less work.
-
-        let outputs = unsafe {
-            &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
-        };
-
-        let mut new_forward_references = LinkedList::new();
-        loop {
-            let mut removed = 0;
-
-            while let Some(reference) = forward_references.pop_front() {
-                println!("    Resolving reference: {}", &reference.label);
-                // println!("resolving label: {}", &reference.label);
-                // println!("num: {num}, label_num: {label_num}");
-
-                let line_num = reference.line_num;
-                let target_line_num = reference.target_line_num;
-
-                let diff = if line_num + 1 == target_line_num {
-                    Some(0)
-                } else {
-                    let mut inner_diff = 0_i32;
-
-                    if line_num < target_line_num {
-                        // Going forward we start from the next output.
-                        for output in &mut outputs[line_num + 1..target_line_num] {
-                            // println!("size: {i}: {}", &outputs[i].size_in_bytes);
-                            if output.size_in_bytes != 0 {
-                                inner_diff += output.size_in_bytes as i32;
-                            } else {
-                                println!("down instruction with no size: {}", output.line);
-                                inner_diff = 0;
-                                break;
-                            }
-                        }
-                    } else {
-                        for output in &mut outputs[target_line_num..line_num] {
-                            // println!("size: {i}: {}", &outputs[i].size_in_bytes);
-                            if output.size_in_bytes != 0 {
-                                inner_diff -= output.size_in_bytes as i32;
-                            } else {
-                                println!("up instruction with no size: {}", output.line);
-                                inner_diff = 0;
-                                break;
-                            }
-                        }
-                    }
-
-                    if inner_diff == 0 {
-                        // println!("nothing found");
-                        None
-                    } else {
-                        // println!("found diff: {inner_diff}");
-                        Some(inner_diff)
-                    }
-                };
-
-                if let Some(diff) = diff {
-                    // println!("diff: {diff}");
-                    let output = &mut outputs[line_num];
-
-                    if let ast::Line::Instruction(instruction) = &mut output.line {
-                        instruction.operands.replace_label(&reference.label, diff);
-
-                        match self.size_in_bytes(instruction) {
-                            Ok(size_in_bytes) => {
-                                output.size_in_bytes = size_in_bytes;
-                                removed += 1;
-                            }
-
-                            Err(_) => {
-                                // If we still can't figure out the size of the instruction
-                                // after replacing a label, then just add it to the list of
-                                // references again so we can try another time.
-                                new_forward_references.push_back(reference);
-                            }
-                        }
-                    }
-                } else {
-                    // println!("not found");
-                    new_forward_references.push_back(reference);
-                }
-            }
-
-            if removed == 0 {
-                // println!(
-                //     "Some references could not be resolved: {:?}",
-                //     new_forward_references
-                // );
-
-                return Err(CompileError::UnresolvedReference(
-                    new_forward_references.pop_front().unwrap().label,
-                ));
-            }
-
-            if new_forward_references.is_empty() {
-                break;
-            }
-
-            println!("forward references: {}", new_forward_references.len());
-
-            std::mem::swap(&mut forward_references, &mut new_forward_references);
-        }
-
-        Ok(())
-    }
-
-    fn get_address_for_label(&self, label: &ast::Label) -> Result<u16, CompileError> {
-        let target_line_num = match self.labels.get(label.1.as_str()) {
-            Some(num) => *num,
-            None => return Err(CompileError::LabelNotFound(label.clone())),
-        };
-
-        let mut address = 0;
-        for num in 0..target_line_num {
-            let size_in_bytes = self.outputs[num].size_in_bytes;
-            if size_in_bytes == 0 {
-                todo!("size_in_bytes == 0");
-            }
-            address += size_in_bytes;
-        }
-
-        println!("address: {}", address);
-
-        todo!()
-    }
+    // fn resolve_forward_references(
+    //     &mut self,
+    //     forward_references: LinkedList<ForwardReference>,
+    // ) -> Result<(), CompileError> {
+    //     debug_assert!(!forward_references.is_empty());
+    //
+    //     // Take mutable ownership of the forward references in this scope.
+    //     let mut forward_references = forward_references;
+    //
+    //     println!(
+    //         "Second pass - resolve {} forward references:",
+    //         forward_references.len()
+    //     );
+    //
+    //     // TODO: if we sort the references by the difference in line numbers starting with smallest
+    //     //       we will do potentially less work.
+    //
+    //     let outputs = unsafe {
+    //         &mut *std::ptr::slice_from_raw_parts_mut(self.outputs.as_mut_ptr(), self.outputs.len())
+    //     };
+    //
+    //     let mut new_forward_references = LinkedList::new();
+    //     loop {
+    //         let mut removed = 0;
+    //
+    //         while let Some(reference) = forward_references.pop_front() {
+    //             println!("    Resolving reference: {}", &reference.label);
+    //             // println!("resolving label: {}", &reference.label);
+    //             // println!("num: {num}, label_num: {label_num}");
+    //
+    //             let line_num = reference.line_num;
+    //             let target_line_num = reference.target_line_num;
+    //
+    //             let diff = if line_num + 1 == target_line_num {
+    //                 Some(0)
+    //             } else {
+    //                 let mut inner_diff = 0_i32;
+    //
+    //                 if line_num < target_line_num {
+    //                     // Going forward we start from the next output.
+    //                     for output in &mut outputs[line_num + 1..target_line_num] {
+    //                         // println!("size: {i}: {}", &outputs[i].size_in_bytes);
+    //                         if output.size != 0 {
+    //                             inner_diff += output.size as i32;
+    //                         } else {
+    //                             println!("        down instruction with no size: {}", output.line);
+    //                             inner_diff = 0;
+    //                             break;
+    //                         }
+    //                     }
+    //                 } else {
+    //                     for output in &mut outputs[target_line_num..line_num] {
+    //                         // println!("size: {i}: {}", &outputs[i].size_in_bytes);
+    //                         if output.size != 0 {
+    //                             inner_diff -= output.size as i32;
+    //                         } else {
+    //                             println!("        up instruction with no size: {}", output.line);
+    //                             inner_diff = 0;
+    //                             break;
+    //                         }
+    //                     }
+    //                 }
+    //
+    //                 if inner_diff == 0 {
+    //                     println!("            nothing found");
+    //                     None
+    //                 } else {
+    //                     println!("            found diff: {inner_diff}");
+    //                     Some(inner_diff)
+    //                 }
+    //             };
+    //
+    //             if let Some(diff) = diff {
+    //                 // println!("diff: {diff}");
+    //                 let output = &mut outputs[line_num];
+    //
+    //                 if let ast::Line::Instruction(instruction) = &mut output.line {
+    //                     instruction.operands.replace_label(&reference.label, diff);
+    //
+    //                     match self.size_in_bytes(instruction) {
+    //                         Ok(size_in_bytes) => {
+    //                             output.size = size_in_bytes;
+    //                             removed += 1;
+    //                         }
+    //
+    //                         Err(_) => {
+    //                             // If we still can't figure out the size of the instruction
+    //                             // after replacing a label, then just add it to the list of
+    //                             // references again so we can try another time.
+    //                             new_forward_references.push_back(reference);
+    //                         }
+    //                     }
+    //                 }
+    //             } else {
+    //                 // println!("not found");
+    //                 new_forward_references.push_back(reference);
+    //             }
+    //         }
+    //
+    //         if removed == 0 {
+    //             // println!(
+    //             //     "Some references could not be resolved: {:?}",
+    //             //     new_forward_references
+    //             // );
+    //
+    //             return Err(CompileError::UnresolvedReference(
+    //                 new_forward_references.pop_front().unwrap().label,
+    //             ));
+    //         }
+    //
+    //         if new_forward_references.is_empty() {
+    //             break;
+    //         }
+    //
+    //         // println!("forward references: {}", new_forward_references.len());
+    //
+    //         std::mem::swap(&mut forward_references, &mut new_forward_references);
+    //     }
+    //
+    //     Ok(())
+    // }
 }
 
 impl Compiler {
-    fn evaluate_expression(&self, expression: &mut ast::Expression) -> Result<(), CompileError> {
+    fn evaluate_expression(&self, expression: &ast::Expression) -> Result<i32, CompileError> {
         match expression {
-            ast::Expression::InfixOperator(span, operator, left, right) => {
-                self.evaluate_expression(left)?;
-                self.evaluate_expression(right)?;
+            ast::Expression::PrefixOperator(_, operator, expr) => {
+                let value = self.evaluate_expression(expr)?;
+                Ok(operator.evaluate(0, value))
+            }
 
-                if let (
-                    ast::Expression::Value(_, ast::Value::Constant(left_value)),
-                    ast::Expression::Value(_, ast::Value::Constant(right_value)),
-                ) = (left.as_ref(), right.as_ref())
-                {
-                    *expression = ast::Expression::Value(
-                        span.clone(),
-                        ast::Value::Constant(operator.evaluate(*left_value, *right_value)),
-                    );
-                }
+            ast::Expression::InfixOperator(_, operator, left, right) => {
+                let left = self.evaluate_expression(left)?;
+                let right = self.evaluate_expression(right)?;
 
-                Ok(())
+                Ok(operator.evaluate(left, right))
             }
 
             ast::Expression::Value(_, ast::Value::Label(label)) => {
                 if let Some(value) = self.constants.get(label.1.as_str()) {
-                    *expression = ast::Expression::Value(0..0, ast::Value::Constant(*value));
-                } else if self.labels.get(label.1.as_str()).is_some() {
-                    let address = self.get_address_for_label(label)?;
-                    println!("address: {}", address);
-                    return Err(CompileError::ConstantValueContainsLabel(label.clone()));
+                    Ok(*value)
+                } else if let Some(label_offset) = self.labels.get(label.1.as_str()) {
+                    Ok(*label_offset as i32)
                 } else {
-                    return Err(CompileError::LabelNotFound(label.clone()));
+                    Err(CompileError::LabelNotFound(label.clone()))
                 }
-
-                Ok(())
             }
 
-            ast::Expression::Value(_, ast::Value::Constant(_)) => Ok(()),
-
-            _ => Ok(()),
+            ast::Expression::Value(_, ast::Value::Constant(value)) => Ok(*value),
         }
     }
 }
 
 impl Compiler {
-    fn size_in_bytes(&mut self, instruction: &mut ast::Instruction) -> Result<u16, CompileError> {
-        let id = self.find_instruction_data(instruction)?;
+    fn calculate_line_size(&self, line: &ast::Line) -> Result<u16, CompileError> {
+        Ok(match line {
+            ast::Line::Instruction(instruction) => {
+                match self.calculate_instruction_size(instruction) {
+                    Ok(size) => size,
+                    Err(err) => return Err(err),
+                }
+            }
+
+            ast::Line::Data(_, data) => data.len() as u16,
+
+            _ => todo!(),
+        })
+    }
+
+    fn calculate_instruction_size(
+        &self,
+        instruction: &ast::Instruction,
+    ) -> Result<u16, CompileError> {
+        let idata = self.find_instruction_data(instruction)?;
 
         let mut total_size = 0;
 
-        for code in id.codes {
+        for code in idata.codes {
             match code {
-                out::db::Code::ModRegRM => match &mut instruction.operands {
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, _),
-                        ast::Operand::Register(_, _),
-                    ) => total_size += 1,
+                out::db::Code::ModRegRM => total_size += 1,
 
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Address(_, _, _, seg),
-                        ast::Operand::Segment(_, _),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Segment(_, _),
-                        ast::Operand::Address(_, _, _, seg),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Address(_, _, _, seg),
-                        ast::Operand::Register(_, _),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, _),
-                        ast::Operand::Address(_, _, _, seg),
-                    ) => {
-                        // [address], seg
-                        if let Some(seg) = seg {
-                            if !matches!(seg, ast::Segment::DS) {
-                                total_size += 1;
-                            }
-                        }
+                out::db::Code::ModRM(_) => total_size += 1,
 
-                        total_size += 1; // The ModRegRM byte.
-                        total_size += 2; // The 16-bit address bytes.
-                    }
+                out::db::Code::PlusReg(_) => total_size += 1,
 
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Indirect(_, _, expr, _, seg),
-                        ast::Operand::Segment(_, _),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Segment(_, _),
-                        ast::Operand::Indirect(_, _, expr, _, seg),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Indirect(_, _, expr, _, seg),
-                        ast::Operand::Register(_, _),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, _),
-                        ast::Operand::Indirect(_, _, expr, _, seg),
-                    ) => {
-                        // [address], seg
-                        if let Some(seg) = seg {
-                            if !matches!(seg, ast::Segment::DS) {
-                                total_size += 1;
-                            }
-                        }
+                out::db::Code::Byte(_) | out::db::Code::ImmByte => total_size += 1,
 
-                        total_size += 1; // The ModRegRM byte.
+                out::db::Code::ImmWord => total_size += 2,
 
-                        if let Some(_expr) = expr {
-                            // FIXME: We need to calculate if this is a 8-bit or 16-bit
-                            //        displacement.
-                            total_size += 2;
-                        }
-                    }
+                out::db::Code::DispByte => total_size += 1,
 
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, _),
-                        ast::Operand::Segment(_, _),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Segment(_, _),
-                        ast::Operand::Register(_, _),
-                    ) => {
-                        total_size += 1;
-                    }
-
-                    _ => todo!("ModRegRM {:?}", instruction.operands),
-                },
-
-                out::db::Code::ModRM(_) => match &mut instruction.operands {
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Address(_, _expr, _, seg),
-                        _,
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        _,
-                        ast::Operand::Address(_, _expr, _, seg),
-                    )
-                    | ast::Operands::Destination(_, ast::Operand::Address(_, _expr, _, seg)) => {
-                        if let Some(seg) = seg {
-                            if !matches!(seg, ast::Segment::DS) {
-                                total_size += 1;
-                            }
-                        }
-                        // if let Some(size) = self.address_size_in_bytes(expr)? {
-                        //     total_size += size;
-                        // }
-                    }
-
-                    ast::Operands::DestinationAndSource(_, ast::Operand::Register(_, _), _)
-                    | ast::Operands::DestinationAndSource(_, _, ast::Operand::Register(_, _)) => {
-                        total_size += 1;
-                    }
-
-                    ast::Operands::Destination(_, ast::Operand::Register(_, _))
-                    | ast::Operands::Destination(_, ast::Operand::Segment(_, _)) => {
-                        total_size += 1;
-                    }
-
-                    _ => todo!("ModRM(?) {:?}", instruction.operands),
-                },
-
-                out::db::Code::PlusReg(_) => {
-                    total_size += 1;
-                }
-
-                out::db::Code::Byte(_) | out::db::Code::ImmByte => {
-                    total_size += 1;
-                }
-
-                out::db::Code::ImmWord => {
-                    total_size += 2;
-                }
-
-                // out::db::Code::DispByte => match (id.destination.clone(), id.source.clone()) {
-                //     (out::db::OperandEncoding::Disp8, out::db::OperandEncoding::None) => {
-                //         if let ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) =
-                //             &mut instruction.operands
-                //         {
-                //             match self.evaluate_expression(expr) {
-                //                 s => todo!("{:?}", s),
-                //             }
-                //         }
-                //     }
-                //     _ => todo!(),
-                // },
-                out::db::Code::DispWord => {
-                    todo!("Calculate the value of the operand and see if it is near/short/far.")
-                }
+                out::db::Code::DispWord => total_size += 2,
 
                 out::db::Code::ImmByteSign => {
                     // TODO: Not sure if this correct!
@@ -546,220 +523,127 @@ impl Compiler {
 
         Ok(total_size)
     }
+
+    // fn _calc_mod_reg_rm_size(
+    //     &self,
+    //     destination: &ast::Operand,
+    //     source: &ast::Operand,
+    // ) -> Result<u16, CompileError> {
+    //     macro_rules! address_size {
+    //         ($segment:expr) => {{
+    //             let mut total = 1; // mod reg r/m byte.
+    //             total += 2; // direct address word.
+    //
+    //             // 1 byte if there is a segment override.
+    //             if let Some(segment) = $segment {
+    //                 if *segment != ast::Segment::DS {
+    //                     total += 1;
+    //                 }
+    //             }
+    //
+    //             total
+    //         }};
+    //     }
+    //
+    //     macro_rules! indirect_size {
+    //         ($expr:expr, $segment:expr) => {{
+    //             let mut total = 1; // mod reg r/m byte.
+    //
+    //             if let Some(expr) = $expr {
+    //                 let mut expr = expr.clone();
+    //                 self.evaluate_expression(&mut expr)?;
+    //                 let value = expr.get_constant_value()?;
+    //                 if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
+    //                     total += 1;
+    //                 } else {
+    //                     total += 2;
+    //                 }
+    //             }
+    //
+    //             // 1 byte if there is a segment override.
+    //             if let Some(segment) = $segment {
+    //                 if *segment != ast::Segment::DS {
+    //                     total += 1;
+    //                 }
+    //             }
+    //
+    //             total
+    //         }};
+    //     }
+    //
+    //     macro_rules! immediate_size {
+    //         ($expr:expr) => {{
+    //             // FIXME: This needs to be calculated according to a passed in hint.
+    //             1
+    //         }};
+    //     }
+    //
+    //     match (destination, source) {
+    //         // Register
+    //         //
+    //         (ast::Operand::Register(_, _), ast::Operand::Register(_, _))
+    //         | (ast::Operand::Segment(_, _), ast::Operand::Register(_, _)) => Ok(1),
+    //
+    //         (ast::Operand::Register(_, _), ast::Operand::Immediate(_, imm_expr)) => {
+    //             Ok(immediate_size!(imm_expr))
+    //         }
+    //
+    //         (ast::Operand::Address(_, _, _, segment), ast::Operand::Register(_, _))
+    //         | (ast::Operand::Address(_, _, _, segment), ast::Operand::Segment(_, _))
+    //         | (ast::Operand::Register(_, _), ast::Operand::Address(_, _, _, segment)) => {
+    //             Ok(address_size!(segment))
+    //         }
+    //
+    //         (ast::Operand::Indirect(_, _, expr, _, segment), ast::Operand::Register(_, _))
+    //         | (ast::Operand::Indirect(_, _, expr, _, segment), ast::Operand::Segment(_, _))
+    //         | (ast::Operand::Register(_, _), ast::Operand::Indirect(_, _, expr, _, segment)) => {
+    //             Ok(indirect_size!(expr, segment))
+    //         }
+    //
+    //         // Immediate
+    //         //
+    //         (ast::Operand::Address(_, _, _, segment), ast::Operand::Immediate(_, imm_expr))
+    //         | (ast::Operand::Immediate(_, imm_expr), ast::Operand::Address(_, _, _, segment)) => {
+    //             Ok(address_size!(segment) + immediate_size!(imm_expr))
+    //         }
+    //
+    //         (
+    //             ast::Operand::Indirect(_, _, expr, _, segment),
+    //             ast::Operand::Immediate(_, imm_expr),
+    //         )
+    //         | (
+    //             ast::Operand::Immediate(_, imm_expr),
+    //             ast::Operand::Indirect(_, _, expr, _, segment),
+    //         ) => Ok(indirect_size!(expr, segment) + immediate_size!(imm_expr)),
+    //
+    //         _ => todo!("{:?}, {:?}", destination, source),
+    //     }
+    // }
 }
 
-impl ast::Operand {
-    fn matches_operand_encoding(
-        &self,
-        operand_encoding: &out::db::OperandEncoding,
-        size_hint: Option<ast::DataSize>,
-    ) -> bool {
-        match operand_encoding {
-            out::db::OperandEncoding::None => false,
+// impl ast::Operand {
+//     fn replace_label(&mut self, label: &ast::Label, value: i32) {
+//         match self {
+//             ast::Operand::Immediate(_, expr) | ast::Operand::Address(_, expr, _, _) => {
+//                 expr.replace_label(label, value);
+//             }
+//             _ => {}
+//         }
+//     }
+// }
 
-            out::db::OperandEncoding::Imm => {
-                if let Some(size_hint) = size_hint {
-                    match size_hint {
-                        ast::DataSize::Byte => matches!(self, ast::Operand::Immediate(_, _)),
-                        ast::DataSize::Word => matches!(self, ast::Operand::Immediate(_, _)),
-                    }
-                } else {
-                    panic!(
-                        "Size could not be determined {:?} {:?} {:?}",
-                        self, operand_encoding, size_hint
-                    );
-                }
-            }
-
-            out::db::OperandEncoding::Imm8 => {
-                if let ast::Operand::Immediate(_, expr) = self {
-                    let value = match expr.get_constant_value() {
-                        Ok(value) => value,
-                        Err(_) => return false,
-                    };
-
-                    value <= u8::MAX as i32
-                } else {
-                    false
-                }
-            }
-
-            out::db::OperandEncoding::Imm16 => {
-                if let ast::Operand::Immediate(_, expr) = self {
-                    let value = match expr.get_constant_value() {
-                        Ok(value) => value,
-                        Err(_) => return false,
-                    };
-
-                    value <= u16::MAX as i32
-                } else {
-                    false
-                }
-            }
-
-            out::db::OperandEncoding::Sbw => {
-                // TODO: Check the actual value here.
-                false
-            }
-
-            out::db::OperandEncoding::RegAl => matches!(
-                self,
-                ast::Operand::Register(_, ast::Register::Byte(ast::ByteRegister::Al)),
-            ),
-
-            out::db::OperandEncoding::RegAx => matches!(
-                self,
-                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Ax)),
-            ),
-
-            out::db::OperandEncoding::RegCl => matches!(
-                self,
-                ast::Operand::Register(_, ast::Register::Byte(ast::ByteRegister::Cl)),
-            ),
-
-            out::db::OperandEncoding::RegCx => matches!(
-                self,
-                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Cx)),
-            ),
-
-            out::db::OperandEncoding::RegDx => matches!(
-                self,
-                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Dx)),
-            ),
-
-            out::db::OperandEncoding::Reg8 => {
-                matches!(self, ast::Operand::Register(_, ast::Register::Byte(_)))
-            }
-
-            out::db::OperandEncoding::Reg16 => {
-                matches!(self, ast::Operand::Register(_, ast::Register::Word(_)))
-            }
-
-            out::db::OperandEncoding::Seg => {
-                matches!(self, ast::Operand::Segment(_, _))
-            }
-
-            out::db::OperandEncoding::Disp8 => matches!(self, ast::Operand::Immediate(_, _)),
-
-            out::db::OperandEncoding::Disp16 => matches!(self, ast::Operand::Immediate(_, _)),
-
-            out::db::OperandEncoding::Mem => {
-                if let Some(size_hint) = size_hint {
-                    match size_hint {
-                        ast::DataSize::Byte => {
-                            matches!(self, ast::Operand::Address(..) | ast::Operand::Indirect(..))
-                        }
-                        ast::DataSize::Word => {
-                            matches!(self, ast::Operand::Address(..) | ast::Operand::Indirect(..))
-                        }
-                    }
-                } else {
-                    println!("no size hint specified");
-                    panic!()
-                }
-            }
-
-            out::db::OperandEncoding::Mem8 => {
-                matches!(
-                    self,
-                    ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
-                        | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Byte), _)
-                )
-            }
-
-            out::db::OperandEncoding::Mem16 => {
-                matches!(
-                    self,
-                    ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
-                        | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Word), _)
-                )
-            }
-
-            out::db::OperandEncoding::RegMem8 => {
-                matches!(self, ast::Operand::Register(_, ast::Register::Byte(_)))
-                    || matches!(
-                        self,
-                        ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
-                            | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Byte), _)
-                    )
-            }
-
-            out::db::OperandEncoding::RegMem16 => {
-                matches!(self, ast::Operand::Register(_, ast::Register::Word(_)))
-                    || matches!(
-                        self,
-                        ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
-                            | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Word), _)
-                    )
-            }
-
-            out::db::OperandEncoding::SegEs => {
-                matches!(self, ast::Operand::Segment(_, ast::Segment::ES))
-            }
-            out::db::OperandEncoding::SegCs => {
-                matches!(self, ast::Operand::Segment(_, ast::Segment::CS))
-            }
-            out::db::OperandEncoding::SegSs => {
-                matches!(self, ast::Operand::Segment(_, ast::Segment::SS))
-            }
-            out::db::OperandEncoding::SegDs => {
-                matches!(self, ast::Operand::Segment(_, ast::Segment::DS))
-            }
-
-            out::db::OperandEncoding::SegOff => false, // TODO
-
-            _ => {
-                todo!("operand encoding: {:?}", operand_encoding);
-            }
-        }
-    }
-
-    fn replace_label(&mut self, label: &ast::Label, value: i32) {
-        match self {
-            ast::Operand::Immediate(_, expr) | ast::Operand::Address(_, expr, _, _) => {
-                expr.replace_label(label, value);
-            }
-            _ => {}
-        }
-    }
-}
-
-impl ast::Operands {
-    fn replace_label(&mut self, label: &ast::Label, value: i32) {
-        match self {
-            ast::Operands::None(_) => {}
-            ast::Operands::Destination(_, dst) => dst.replace_label(label, value),
-            ast::Operands::DestinationAndSource(_, dst, src) => {
-                dst.replace_label(label, value);
-                src.replace_label(label, value);
-            }
-        }
-    }
-}
-
-fn operand_set_matches_operand_encodings(
-    operand_set: &ast::Operands,
-    destination: &out::db::OperandEncoding,
-    source: &out::db::OperandEncoding,
-    size_hint: Option<ast::DataSize>,
-) -> bool {
-    match operand_set {
-        ast::Operands::None(_) => {
-            *destination == out::db::OperandEncoding::None
-                && *source == out::db::OperandEncoding::None
-        }
-
-        ast::Operands::Destination(_, d) => {
-            *source == out::db::OperandEncoding::None
-                && d.matches_operand_encoding(destination, size_hint)
-        }
-
-        ast::Operands::DestinationAndSource(_, d, s) => {
-            d.matches_operand_encoding(destination, size_hint.clone())
-                && s.matches_operand_encoding(source, size_hint)
-        }
-    }
-}
+// impl ast::Operands {
+//     fn replace_label(&mut self, label: &ast::Label, value: i32) {
+//         match self {
+//             ast::Operands::None(_) => {}
+//             ast::Operands::Destination(_, dst) => dst.replace_label(label, value),
+//             ast::Operands::DestinationAndSource(_, dst, src) => {
+//                 dst.replace_label(label, value);
+//                 src.replace_label(label, value);
+//             }
+//         }
+//     }
+// }
 
 impl Compiler {
     // fn compile_instruction(
@@ -919,12 +803,12 @@ impl Compiler {
                 continue;
             }
 
-            if operand_set_matches_operand_encodings(
+            if self.operand_set_matches_operand_encodings(
                 &instruction.operands,
                 &instruction_data.destination,
                 &instruction_data.source,
                 instruction_data_size_hint(instruction_data),
-            ) {
+            )? {
                 return Ok(instruction_data);
             }
         }
@@ -936,9 +820,198 @@ impl Compiler {
 
         Err(CompileError::InvalidOperands(
             instruction.operands.span().clone(),
-            instruction.operands.clone(),
+            instruction.clone(),
             possible,
         ))
+    }
+
+    fn operand_set_matches_operand_encodings(
+        &self,
+        operand_set: &ast::Operands,
+        destination: &out::db::OperandEncoding,
+        source: &out::db::OperandEncoding,
+        size_hint: Option<ast::DataSize>,
+    ) -> Result<bool, CompileError> {
+        Ok(match operand_set {
+            ast::Operands::None(_) => {
+                *destination == out::db::OperandEncoding::None
+                    && *source == out::db::OperandEncoding::None
+            }
+
+            ast::Operands::Destination(_, d) => {
+                *source == out::db::OperandEncoding::None
+                    && self.matches_operand_encoding(d, destination, size_hint)?
+            }
+
+            ast::Operands::DestinationAndSource(_, d, s) => {
+                self.matches_operand_encoding(d, destination, size_hint.clone())?
+                    && self.matches_operand_encoding(s, source, size_hint)?
+            }
+        })
+    }
+
+    fn matches_operand_encoding(
+        &self,
+        operand: &ast::Operand,
+        operand_encoding: &out::db::OperandEncoding,
+        size_hint: Option<ast::DataSize>,
+    ) -> Result<bool, CompileError> {
+        Ok(match operand_encoding {
+            out::db::OperandEncoding::None => false,
+
+            out::db::OperandEncoding::Imm => {
+                if let Some(size_hint) = size_hint {
+                    match size_hint {
+                        ast::DataSize::Byte => matches!(operand, ast::Operand::Immediate(_, _)),
+                        ast::DataSize::Word => matches!(operand, ast::Operand::Immediate(_, _)),
+                    }
+                } else {
+                    panic!(
+                        "Size could not be determined {:?} {:?} {:?}",
+                        operand, operand_encoding, size_hint
+                    );
+                }
+            }
+
+            out::db::OperandEncoding::Imm8 => match operand {
+                ast::Operand::Immediate(_, expr) => {
+                    let value = self.evaluate_expression(expr)?;
+                    value >= 0 && value <= u8::MAX as i32
+                }
+
+                _ => false,
+            },
+
+            out::db::OperandEncoding::Imm16 => match operand {
+                ast::Operand::Immediate(_, expr) => {
+                    let value = self.evaluate_expression(expr)?;
+                    value >= 0 && value <= u16::MAX as i32
+                }
+
+                _ => false,
+            },
+
+            out::db::OperandEncoding::Sbw => {
+                // TODO: Check the actual value here.
+                false
+            }
+
+            out::db::OperandEncoding::RegAl => matches!(
+                operand,
+                ast::Operand::Register(_, ast::Register::Byte(ast::ByteRegister::Al)),
+            ),
+
+            out::db::OperandEncoding::RegAx => matches!(
+                operand,
+                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Ax)),
+            ),
+
+            out::db::OperandEncoding::RegCl => matches!(
+                operand,
+                ast::Operand::Register(_, ast::Register::Byte(ast::ByteRegister::Cl)),
+            ),
+
+            out::db::OperandEncoding::RegCx => matches!(
+                operand,
+                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Cx)),
+            ),
+
+            out::db::OperandEncoding::RegDx => matches!(
+                operand,
+                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Dx)),
+            ),
+
+            out::db::OperandEncoding::Reg8 => {
+                matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
+            }
+
+            out::db::OperandEncoding::Reg16 => {
+                matches!(operand, ast::Operand::Register(_, ast::Register::Word(_)))
+            }
+
+            out::db::OperandEncoding::Seg => {
+                matches!(operand, ast::Operand::Segment(_, _))
+            }
+
+            out::db::OperandEncoding::Disp8 => matches!(operand, ast::Operand::Immediate(_, _)),
+
+            out::db::OperandEncoding::Disp16 => matches!(operand, ast::Operand::Immediate(_, _)),
+
+            out::db::OperandEncoding::Mem => {
+                if let Some(size_hint) = size_hint {
+                    match size_hint {
+                        ast::DataSize::Byte => {
+                            matches!(
+                                operand,
+                                ast::Operand::Address(..) | ast::Operand::Indirect(..)
+                            )
+                        }
+                        ast::DataSize::Word => {
+                            matches!(
+                                operand,
+                                ast::Operand::Address(..) | ast::Operand::Indirect(..)
+                            )
+                        }
+                    }
+                } else {
+                    println!("no size hint specified");
+                    panic!()
+                }
+            }
+
+            out::db::OperandEncoding::Mem8 => {
+                matches!(
+                    operand,
+                    ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
+                        | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Byte), _)
+                )
+            }
+
+            out::db::OperandEncoding::Mem16 => {
+                matches!(
+                    operand,
+                    ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
+                        | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Word), _)
+                )
+            }
+
+            out::db::OperandEncoding::RegMem8 => {
+                matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
+                    || matches!(
+                        operand,
+                        ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
+                            | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Byte), _)
+                    )
+            }
+
+            out::db::OperandEncoding::RegMem16 => {
+                matches!(operand, ast::Operand::Register(_, ast::Register::Word(_)))
+                    || matches!(
+                        operand,
+                        ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
+                            | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Word), _)
+                    )
+            }
+
+            out::db::OperandEncoding::SegEs => {
+                matches!(operand, ast::Operand::Segment(_, ast::Segment::ES))
+            }
+            out::db::OperandEncoding::SegCs => {
+                matches!(operand, ast::Operand::Segment(_, ast::Segment::CS))
+            }
+            out::db::OperandEncoding::SegSs => {
+                matches!(operand, ast::Operand::Segment(_, ast::Segment::SS))
+            }
+            out::db::OperandEncoding::SegDs => {
+                matches!(operand, ast::Operand::Segment(_, ast::Segment::DS))
+            }
+
+            out::db::OperandEncoding::SegOff => false, // TODO
+
+            _ => {
+                todo!("operand encoding: {:?}", operand_encoding);
+            }
+        })
     }
 }
 
@@ -988,85 +1061,108 @@ fn operand_encoding_size_hint(oe: &out::db::OperandEncoding) -> Option<ast::Data
     }
 }
 
-impl crate::LineConsumer for Compiler {
-    type Err = CompileError;
-
-    fn consume(&mut self, mut line: ast::Line) -> Result<(), Self::Err> {
-        match &mut line {
-            ast::Line::Label(label) => {
-                self.current_labels.push(label.1.clone());
-            }
-
-            ast::Line::Instruction(_) | ast::Line::Data(_, _) | ast::Line::Times(_, _, _) => {
-                for label in &self.current_labels {
-                    self.labels.insert(label.clone(), self.outputs.len());
-                }
-
-                self.outputs.push(Output {
-                    line,
-                    size_in_bytes: 0,
-                });
-
-                self.current_labels.clear();
-            }
-
-            ast::Line::Constant(_, expr) => {
-                if let Some(label) = self.current_labels.pop() {
-                    self.evaluate_expression(expr)?;
-
-                    match expr.get_constant_value() {
-                        Ok(value) => {
-                            self.constants.insert(label.clone(), value);
-                        }
-                        Err(_) => {
-                            return Err(CompileError::ConstantValueContainsVariables(
-                                line.span().clone(),
-                            ))
-                        }
-                    }
-                } else {
-                    return Err(CompileError::ConstantWithoutLabel(line.span().clone()));
-                }
-            }
-        }
-
-        Ok(())
+impl Compiler {
+    pub fn consume(&mut self, line: ast::Line) {
+        self.outputs.push(Output {
+            line,
+            size: 0,
+            unresolved_references: false,
+        });
     }
+
+    // fn consume(&mut self, mut line: ast::Line) -> Result<(), Self::Err> {
+    //     macro_rules! drain_labels {
+    //         () => {{
+    //             for label in &self.current_labels {
+    //                 self.labels.insert(label.clone(), self.outputs.len());
+    //             }
+    //             self.current_labels.clear();
+    //         }};
+    //     }
+    //
+    //     match &mut line {
+    //         ast::Line::Label(label) => {
+    //             self.current_labels.push(label.1.clone());
+    //         }
+    //
+    //         ast::Line::Instruction(_) | ast::Line::Data(_, _) => {
+    //             drain_labels!();
+    //
+    //             self.outputs.push(Output {
+    //                 line,
+    //                 size_in_bytes: 0,
+    //                 unresolved_references: false,
+    //             });
+    //         }
+    //
+    //         ast::Line::Times(_, expr, line) => {
+    //             drain_labels!();
+    //
+    //             let mut expr = expr.clone();
+    //             self.evaluate_expression(&mut expr)?;
+    //             let times = expr.get_constant_value()?;
+    //
+    //             for _ in 0..times {
+    //                 self.outputs.push(Output {
+    //                     line: line.as_ref().clone(),
+    //                     size_in_bytes: 0,
+    //                     unresolved_references: false,
+    //                 });
+    //             }
+    //         }
+    //
+    //         ast::Line::Constant(_, expr) => {
+    //             if let Some(label) = self.current_labels.pop() {
+    //                 self.evaluate_expression(expr)?;
+    //
+    //                 match expr.get_constant_value() {
+    //                     Ok(value) => {
+    //                         self.constants.insert(label.clone(), value);
+    //                     }
+    //                     Err(_) => {
+    //                         return Err(CompileError::ConstantValueContainsVariables(
+    //                             line.span().clone(),
+    //                         ))
+    //                     }
+    //                 }
+    //             } else {
+    //                 return Err(CompileError::ConstantWithoutLabel(line.span().clone()));
+    //             }
+    //         }
+    //     }
+    //
+    //     Ok(())
+    // }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::LineConsumer;
 
     #[test]
     fn basic() {
         let mut compiler = Compiler::default();
-        compiler
-            .consume(ast::Line::Label(ast::Label(0..0, "test".to_owned())))
-            .unwrap();
+        compiler.consume(ast::Line::Label(ast::Label(0..0, "test".to_owned())));
         println!("{:?}", compiler.compile().unwrap());
     }
 
     #[test]
     fn basic_2() {
         let mut compiler = Compiler::default();
-        compiler
-            .consume(ast::Line::Instruction(ast::Instruction {
-                span: 0..0,
-                operation: out::Operation::MOV,
-                operands: ast::Operands::DestinationAndSource(
+        compiler.consume(ast::Line::Instruction(ast::Instruction {
+            span: 0..0,
+            operation: out::Operation::MOV,
+            operands: ast::Operands::DestinationAndSource(
+                0..0,
+                ast::Operand::Address(
                     0..0,
-                    ast::Operand::Address(
-                        0..0,
-                        ast::Expression::Value(0..0, ast::Value::Constant(0)),
-                        None,
-                        None,
-                    ),
-                    ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
+                    ast::Expression::Value(0..0, ast::Value::Constant(0)),
+                    None,
+                    None,
                 ),
-            }))
-            .unwrap();
+                ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
+            ),
+        }));
         println!("{:?}", compiler.compile().unwrap());
     }
 }

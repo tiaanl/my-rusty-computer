@@ -152,11 +152,11 @@ mod private {
         id!(CALL, RegMem16, None, &[Byte(0xff), ModRM(2)]), // 8086, NOLONG, ND, BND |near
         id!(CALL, Mem, None, &[Byte(0xff), ModRM(2)]),   // 8086, BND
         id!(CALL, RegMem16, None, &[Byte(0xff), ModRM(2)]), // 8086, NOLONG, BND
-        id!(CBW, None, None, &[Byte(0x98),]),            // 8086
-        id!(CLC, None, None, &[Byte(0xf8),]),            // 8086
-        id!(CLD, None, None, &[Byte(0xfc),]),            // 8086
-        id!(CLI, None, None, &[Byte(0xfa),]),            // 8086
-        id!(CMC, None, None, &[Byte(0xf5),]),            // 8086
+        id!(CBW, None, None, &[Byte(0x98)]),             // 8086
+        id!(CLC, None, None, &[Byte(0xf8)]),             // 8086
+        id!(CLD, None, None, &[Byte(0xfc)]),             // 8086
+        id!(CLI, None, None, &[Byte(0xfa)]),             // 8086
+        id!(CMC, None, None, &[Byte(0xf5)]),             // 8086
         id!(CMP, Mem, Reg8, &[Byte(0x38), ModRegRM]),    // 8086, SM
         id!(CMP, Reg8, Reg8, &[Byte(0x38), ModRegRM]),   // 8086
         id!(CMP, Mem, Reg16, &[Byte(0x39), ModRegRM]),   // 8086, SM
@@ -204,8 +204,8 @@ mod private {
         id!(IRET, None, None, &[Byte(0xcf)]),            // 8086
         // id!(IRETW, None, None, &[Byte(0xcf), ]), // 8086
         id!(JCXZ, Imm, None, &[Byte(0xe3), DispByte]), // 8086, NOLONG
-        id!(JMP, Imm8, None, &[Byte(0xeb), DispByte]), // 8086  |short
-        id!(JMP, Imm16, None, &[Byte(0xe9), Disp]),    // 8086, BND
+        id!(JMP, Imm8, None, &[Byte(0xeb), DispByte]),
+        id!(JMP, Imm16, None, &[Byte(0xe9), DispWord]),
         id!(JMP, SegOff, None, &[Byte(0xea), SegOff]), // 8086, ND, NOLONG |far
         id!(JMP, Mem, None, &[Byte(0xff), ModRM(5)]),  // 8086, NOLONG |far
         id!(JMP, Mem16, None, &[Byte(0xff), ModRM(5)]), // 8086  |far
@@ -213,13 +213,13 @@ mod private {
         id!(JMP, RegMem16, None, &[Byte(0xff), ModRM(4)]), // 8086, NOLONG, ND, BND |near
         id!(JMP, Mem, None, &[Byte(0xff), ModRM(4)]),  // 8086, BND
         id!(JMP, RegMem16, None, &[Byte(0xff), ModRM(4)]), // 8086, NOLONG, BND
-        id!(LAHF, None, None, &[Byte(0x9f),]),         // 8086
+        id!(LAHF, None, None, &[Byte(0x9f)]),          // 8086
         id!(LDS, Reg16, Mem, &[Byte(0xc5), ModRegRM]), // 8086, NOLONG
         id!(LEA, Reg16, Mem, &[Byte(0x8d), ModRegRM]), // 8086, ANYSIZE
         id!(LEA, Reg16, Imm, &[Byte(0x8d), ModRegRM]), // 8086, ND, ANYSIZE
         id!(LES, Reg16, Mem, &[Byte(0xc4), ModRegRM]), // 8086, NOLONG
-        id!(LODSB, None, None, &[Byte(0xac),]),        // 8086
-        id!(LODSW, None, None, &[Byte(0xad),]),        // 8086
+        id!(LODSB, None, None, &[Byte(0xac)]),         // 8086
+        id!(LODSW, None, None, &[Byte(0xad)]),         // 8086
         id!(LOOP, Disp8, None, &[Byte(0xe2), DispByte]), // 8086
         id!(LOOP, Disp8, RegCx, &[Byte(0xe2), DispByte]), // 8086, NOLONG
         id!(LOOPE, Disp8, None, &[Byte(0xe1), DispByte]), // 8086
@@ -248,13 +248,13 @@ mod private {
         id!(MOV, RegMem16, Imm, &[Byte(0xc7), ModRM(0), ImmWord]), // 8086, SM
         id!(MOV, Mem, Imm8, &[Byte(0xc6), ModRM(0), ImmByte]), // 8086, SM
         id!(MOV, Mem, Imm16, &[Byte(0xc7), ModRM(0), ImmWord]), // 8086, SM
-        id!(MOVSB, None, None, &[Byte(0xa4),]),        // 8086
-        id!(MOVSW, None, None, &[Byte(0xa5),]),        // 8086
+        id!(MOVSB, None, None, &[Byte(0xa4)]),         // 8086
+        id!(MOVSW, None, None, &[Byte(0xa5)]),         // 8086
         id!(MUL, RegMem8, None, &[Byte(0xf6), ModRM(4)]), // 8086
         id!(MUL, RegMem16, None, &[Byte(0xf7), ModRM(4)]), // 8086
         id!(NEG, RegMem8, None, &[Byte(0xf6), ModRM(3)]), // 8086, LOCK
         id!(NEG, RegMem16, None, &[Byte(0xf7), ModRM(3)]), // 8086, LOCK
-        id!(NOP, None, None, &[Byte(0x90),]),          // 8086
+        id!(NOP, None, None, &[Byte(0x90)]),           // 8086
         id!(NOT, RegMem8, None, &[Byte(0xf6), ModRM(2)]), // 8086, LOCK
         id!(NOT, RegMem16, None, &[Byte(0xf7), ModRM(2)]), // 8086, LOCK
         id!(OR, Mem, Reg8, &[Byte(0x08), ModRegRM]),   // 8086, SM, LOCK
@@ -278,8 +278,8 @@ mod private {
         id!(OR, RegMem8, Imm, &[Byte(0x82), ModRM(1), ImmByte]), // 8086, SM, LOCK, ND, NOLONG
         id!(OUT, Imm, RegAl, &[Byte(0xe6), ImmByte]),  // 8086, SB
         id!(OUT, Imm, RegAx, &[Byte(0xe7), ImmByte]),  // 8086, SB
-        id!(OUT, RegDx, RegAl, &[Byte(0xee),]),        // 8086
-        id!(OUT, RegDx, RegAx, &[Byte(0xef),]),        // 8086
+        id!(OUT, RegDx, RegAl, &[Byte(0xee)]),         // 8086
+        id!(OUT, RegDx, RegAx, &[Byte(0xef)]),         // 8086
         // id!(PAUSE, None, None, &[Byte(0x90), ]), // 8086
         id!(POP, Reg16, None, &[PlusReg(0x58)]), // 8086
         id!(POP, RegMem16, None, &[Byte(0x8f), ModRM(0)]), // 8086
@@ -291,11 +291,11 @@ mod private {
         // id!(POPFW, None, None, &[9d]), // 8086
         id!(PUSH, Reg16, None, &[PlusReg(0x50)]), // 8086
         id!(PUSH, RegMem16, None, &[Byte(0xff), ModRM(6)]), // 8086
-        id!(PUSH, SegEs, None, &[Byte(0x06),]),   // 8086, NOLONG
-        id!(PUSH, SegCs, None, &[Byte(0x0e),]),   // 8086, NOLONG
-        id!(PUSH, SegSs, None, &[Byte(0x16),]),   // 8086, NOLONG
-        id!(PUSH, SegDs, None, &[Byte(0x1e),]),   // 8086, NOLONG
-        id!(PUSHF, None, None, &[Byte(0x9c),]),   // 8086
+        id!(PUSH, SegEs, None, &[Byte(0x06)]),    // 8086, NOLONG
+        id!(PUSH, SegCs, None, &[Byte(0x0e)]),    // 8086, NOLONG
+        id!(PUSH, SegSs, None, &[Byte(0x16)]),    // 8086, NOLONG
+        id!(PUSH, SegDs, None, &[Byte(0x1e)]),    // 8086, NOLONG
+        id!(PUSHF, None, None, &[Byte(0x9c)]),    // 8086
         // id!(PUSHFW, None, None, &[Byte(0x9c), ]), // 8086
         // id!(RCL, RegMem8, unity, &[Byte(0xd0), ModRM(2)]), // 8086
         id!(RCL, RegMem8, RegCl, &[Byte(0xd2), ModRM(2)]), // 8086
@@ -305,7 +305,7 @@ mod private {
         id!(RCR, RegMem8, RegCl, &[Byte(0xd2), ModRM(3)]), // 8086
         // id!(RCR, RegMem16, unity, &[Byte(0xd1), ModRM(3)]), // 8086
         id!(RCR, RegMem16, RegCl, &[Byte(0xd3), ModRM(3)]), // 8086
-        id!(RET, None, None, &[Byte(0xc3),]),               // 8086, BND
+        id!(RET, None, None, &[Byte(0xc3)]),                // 8086, BND
         id!(RET, Imm, None, &[Byte(0xc2), ImmWord]),        // 8086, SW, BND
         // id!(RETF, None, None, &[Byte(0xcb), ]), // 8086
         // id!(RETF, Imm, None, &[Byte(0xca), ImmediateWord]), // 8086, SW
@@ -331,12 +331,12 @@ mod private {
         id!(ROR, RegMem8, RegCl, &[Byte(0xd2), ModRM(1)]), // 8086
         // id!(ROR, RegMem16, unity, &[Byte(0xd1), ModRM(1)]), // 8086
         id!(ROR, RegMem16, RegCl, &[Byte(0xd3), ModRM(1)]), // 8086
-        id!(SAHF, None, None, &[Byte(0x9e),]),              // 8086
+        id!(SAHF, None, None, &[Byte(0x9e)]),               // 8086
         // id!(SAL, RegMem8, unity, &[Byte(0xd0), ModRM(4)]), // 8086, ND
         // id!(SAL, RegMem8, RegCl, &[Byte(0xd2), ModRM(4)]), // 8086, ND
         // id!(SAL, RegMem16, unity, &[Byte(0xd1), ModRM(4)]), // 8086, ND
         // id!(SAL, RegMem16, RegCl, &[Byte(0xd3), ModRM(4)]), // 8086, ND
-        id!(SALC, None, None, &[Byte(0xd6),]), // 8086, UNDOC
+        id!(SALC, None, None, &[Byte(0xd6)]), // 8086, UNDOC
         // id!(SAR, RegMem8, unity, &[Byte(0xd0), ModRM(7)]), // 8086
         id!(SAR, RegMem8, RegCl, &[Byte(0xd2), ModRM(7)]), // 8086
         // id!(SAR, RegMem16, unity, &[Byte(0xd1), ModRM(7)]), // 8086
@@ -370,11 +370,11 @@ mod private {
         id!(SHR, RegMem8, RegCl, &[Byte(0xd2), ModRM(5)]),  // 8086
         id!(SHR, RegMem16, Imm8, &[Byte(0xd1), ModRM(5)]),  // 8086 | unity?
         id!(SHR, RegMem16, RegCl, &[Byte(0xd3), ModRM(5)]), // 8086
-        id!(STC, None, None, &[Byte(0xf9),]),               // 8086
-        id!(STD, None, None, &[Byte(0xfd),]),               // 8086
-        id!(STI, None, None, &[Byte(0xfb),]),               // 8086
-        id!(STOSB, None, None, &[Byte(0xaa),]),             // 8086
-        id!(STOSW, None, None, &[Byte(0xab),]),             // 8086
+        id!(STC, None, None, &[Byte(0xf9)]),                // 8086
+        id!(STD, None, None, &[Byte(0xfd)]),                // 8086
+        id!(STI, None, None, &[Byte(0xfb)]),                // 8086
+        id!(STOSB, None, None, &[Byte(0xaa)]),              // 8086
+        id!(STOSW, None, None, &[Byte(0xab)]),              // 8086
         id!(SUB, Mem, Reg8, &[Byte(0x28), ModRegRM]),       // 8086, SM, LOCK
         id!(SUB, Reg8, Reg8, &[Byte(0x28), ModRegRM]),      // 8086
         id!(SUB, Mem, Reg16, &[Byte(0x29), ModRegRM]),      // 8086, SM, LOCK

@@ -98,22 +98,6 @@ impl<'a> Display for FoundToken<'a> {
     }
 }
 
-pub trait LineConsumer {
-    type Err;
-
-    fn consume(&mut self, line: ast::Line) -> Result<(), Self::Err>;
-}
-
-/// Allow lambdas to be passed as `LineConsumer`s
-impl<'a, E, T: FnMut(ast::Line) -> Result<(), E>> LineConsumer for T {
-    type Err = E;
-
-    #[inline]
-    fn consume(&mut self, line: ast::Line) -> Result<(), E> {
-        self(line)
-    }
-}
-
 impl ast::Operator {
     pub fn evaluate(&self, left: i32, right: i32) -> i32 {
         match self {
@@ -790,14 +774,10 @@ impl<'a> Parser<'a> {
 
                 self.next_token();
 
-                if let Ok(register) = ast::Register::from_str(identifier) {
-                    Ok(ast::Value::Register(register))
-                } else {
-                    Ok(ast::Value::Label(ast::Label(
-                        start..end,
-                        identifier.to_owned(),
-                    )))
-                }
+                Ok(ast::Value::Label(ast::Label(
+                    start..end,
+                    identifier.to_owned(),
+                )))
             }
 
             _ => Err(ParserError::OperandExpected(

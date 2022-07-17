@@ -4,4 +4,4 @@ pub mod diagnostics;
 pub mod lexer;
 mod parser;
 
-pub use parser::{LineConsumer, Parser, ParserError};
+pub use parser::{Parser, ParserError};

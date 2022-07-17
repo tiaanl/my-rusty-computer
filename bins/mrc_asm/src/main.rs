@@ -1,5 +1,5 @@
 use mrc_compiler::diagnostics::Diagnostics;
-use mrc_compiler::{ast::Span, compiler::Compiler, LineConsumer, Parser};
+use mrc_compiler::{ast::Span, compiler::Compiler, Parser};
 use structopt::StructOpt;
 
 fn _print_source_pos(source: &str, span: &Span, path: Option<&str>) {
@@ -87,12 +87,7 @@ fn main() {
     } else {
         loop {
             match parser.parse_line() {
-                Ok(Some(line)) => {
-                    if let Err(err) = compiler.consume(line) {
-                        diags.error(format!("{}", err), err.span().clone());
-                        break;
-                    }
-                }
+                Ok(Some(line)) => compiler.consume(line),
                 Ok(None) => break,
                 Err(err) => {
                     diags.error(format!("{}", err), err.span().clone());

@@ -266,7 +266,6 @@ impl std::fmt::Display for IndirectEncoding {
 pub enum Value {
     Constant(i32),
     Label(Label),
-    Register(Register),
 }
 
 impl<'a> std::fmt::Display for Value {
@@ -274,7 +273,6 @@ impl<'a> std::fmt::Display for Value {
         match self {
             Value::Constant(value) => write!(f, "{}", *value),
             Value::Label(label) => write!(f, "{}", *label),
-            Value::Register(register) => write!(f, "{}", *register),
         }
     }
 }
@@ -313,6 +311,10 @@ impl Expression {
             | Expression::InfixOperator(span, _, _, _)
             | Expression::Value(span, _) => span,
         }
+    }
+
+    pub fn is_constant(&self) -> bool {
+        matches!(self, Expression::Value(_, Value::Constant(_)))
     }
 
     pub fn iter_values(&self) -> IterValues<'_> {
