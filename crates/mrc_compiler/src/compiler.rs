@@ -77,20 +77,68 @@ struct Output {
     unresolved_references: bool,
 }
 
+#[derive(Debug)]
+struct LabelInfo {
+    offset: Option<u16>,
+    original: ast::Label,
+}
+
 #[derive(Default)]
 pub struct Compiler {
     outputs: Vec<Output>,
-    labels: HashMap<String, u16>,
+    labels: HashMap<String, LabelInfo>,
     constants: HashMap<String, i32>,
 }
 
 impl Compiler {
     pub fn compile(&mut self) -> Result<Vec<u8>, CompileError> {
+        if self.resolve_labels()? > 0 {
+            let label = self
+                .labels
+                .iter()
+                .filter(|(_, li)| li.offset.is_none())
+                .map(|(_, li)| li.original.clone())
+                .next()
+                .unwrap();
+            return Err(CompileError::UnresolvedReference(label));
+        }
+
+        self.debug_print_outputs();
+
+        Ok(vec![])
+    }
+
+    fn debug_print_outputs(&self) {
+        let mut offset = 0;
+        for output in &self.outputs {
+            if matches!(&output.line, ast::Line::Label(..) | ast::Line::Constant(..)) {
+                continue;
+            }
+
+            println!(
+                "{:04X} {:04X} {} {}",
+                offset,
+                output.size,
+                if output.unresolved_references {
+                    "x"
+                } else {
+                    " "
+                },
+                output.line
+            );
+            offset += output.size;
+        }
+    }
+
+    fn resolve_labels(&mut self) -> Result<usize, CompileError> {
         let mut last_offset = u16::MAX;
 
         let mut labels = LinkedList::new();
 
         loop {
+            // When we start a pass, there should not be any labels left over from a previous pass.
+            debug_assert!(labels.is_empty());
+
             let mut unresolved_references = 0;
             let mut offset = 0;
 
@@ -101,19 +149,15 @@ impl Compiler {
                 )
             };
 
-            for output in outputs {
-                macro_rules! drain_labels {
-                    () => {{
-                        while let Some(label) = labels.pop_back() {
-                            if let Some(label_offset) = self.labels.get_mut(label.1.as_str()) {
-                                *label_offset = offset;
-                            } else {
-                                self.labels.insert(label.1.clone(), offset);
-                            }
-                        }
-                    }};
-                }
+            macro_rules! drain_labels {
+                () => {{
+                    while let Some(label) = labels.pop_back() {
+                        self.set_label_offset(&label, Some(offset));
+                    }
+                }};
+            }
 
+            for output in outputs {
                 macro_rules! line_size {
                     ($line:expr) => {{
                         match self.calculate_line_size($line) {
@@ -121,7 +165,10 @@ impl Compiler {
                                 output.unresolved_references = false;
                                 size
                             }
-                            Err(CompileError::LabelNotFound(_)) => {
+                            Err(CompileError::LabelNotFound(label)) => {
+                                // If the label wasn't found, then we add the label without an
+                                // offset, stating that it is unresolved.
+                                self.set_label_offset(&label, None);
                                 unresolved_references += 1;
                                 output.unresolved_references = true;
                                 0
@@ -173,45 +220,35 @@ impl Compiler {
                 }
             }
 
+            drain_labels!();
+
             // If there are no more unresolved references, then we can stop.
             if unresolved_references == 0 {
-                break;
+                return Ok(0);
             }
 
             // Now we know there are unsolved references, but if we did not get new sizes for any
             // of them, then we are done.
             if offset == last_offset {
-                break;
+                return Ok(unresolved_references);
             }
 
             last_offset = offset;
         }
+    }
 
-        // if unresolved_references > 0 {
-        //     println!("WARNING: unresolved references!");
-        // }
-
-        let mut offset = 0;
-        for output in &self.outputs {
-            if matches!(&output.line, ast::Line::Label(..) | ast::Line::Constant(..)) {
-                continue;
-            }
-
-            println!(
-                "{:04X} {:04X} {} {}",
-                offset,
-                output.size,
-                if output.unresolved_references {
-                    "x"
-                } else {
-                    " "
+    fn set_label_offset(&mut self, label: &ast::Label, offset: Option<u16>) {
+        if let Some(li) = self.labels.get_mut(label.1.as_str()) {
+            li.offset = offset;
+        } else {
+            self.labels.insert(
+                label.1.clone(),
+                LabelInfo {
+                    offset,
+                    original: label.clone(),
                 },
-                output.line
             );
-            offset += output.size;
         }
-
-        Ok(vec![])
     }
 }
 
@@ -233,7 +270,11 @@ impl Compiler {
             ast::Expression::Value(_, ast::Value::Label(label)) => {
                 if let Some(value) = self.constants.get(label.1.as_str()) {
                     Ok(*value)
-                } else if let Some(label_offset) = self.labels.get(label.1.as_str()) {
+                } else if let Some(LabelInfo {
+                    offset: Some(label_offset),
+                    ..
+                }) = self.labels.get(label.1.as_str())
+                {
                     Ok(*label_offset as i32)
                 } else {
                     Err(CompileError::LabelNotFound(label.clone()))
@@ -459,8 +500,7 @@ impl Compiler {
                         }
                     }
                 } else {
-                    println!("no size hint specified");
-                    panic!()
+                    panic!("no size hint specified")
                 }
             }
 
