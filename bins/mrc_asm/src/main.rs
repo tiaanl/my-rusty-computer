@@ -96,10 +96,19 @@ fn main() {
             }
         }
 
-        if let Err(err) = compiler.compile() {
-            // eprintln!("COMPILE ERROR: {}", err);
-            // print_source_pos(source, err.span(), Some(opts.source.as_str()));
-            diags.error(format!("{}", err), err.span().clone());
+        match compiler.compile() {
+            Ok(bytes) => {
+                for b in &bytes {
+                    print!("{:02X} ", b);
+                }
+                println!();
+                std::fs::write("out.com", bytes).unwrap();
+            }
+            Err(err) => {
+                // eprintln!("COMPILE ERROR: {}", err);
+                // print_source_pos(source, err.span(), Some(opts.source.as_str()));
+                diags.error(format!("{}", err), err.span().clone());
+            }
         }
     }
 

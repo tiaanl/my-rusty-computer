@@ -256,8 +256,8 @@ impl std::fmt::Display for IndirectEncoding {
             IndirectEncoding::BpDi => write!(f, "BP + DI"),
             IndirectEncoding::Si => write!(f, "SI"),
             IndirectEncoding::Di => write!(f, "DI"),
-            IndirectEncoding::Bp => write!(f, "BX"),
-            IndirectEncoding::Bx => write!(f, "BP"),
+            IndirectEncoding::Bp => write!(f, "BP"),
+            IndirectEncoding::Bx => write!(f, "BX"),
         }
     }
 }
