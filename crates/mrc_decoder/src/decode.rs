@@ -532,14 +532,14 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
         }
 
         0xE0 => Ok(Instruction::new(
-            Operation::LOOPNE,
+            Operation::LOOPNZ,
             OperandSet::Destination(Operand::Displacement(
                 it.read_displacement(OperandSize::Byte)?,
             )),
         )),
 
         0xE1 => Ok(Instruction::new(
-            Operation::LOOPE,
+            Operation::LOOPZ,
             OperandSet::Destination(Operand::Displacement(
                 it.read_displacement(OperandSize::Byte)?,
             )),

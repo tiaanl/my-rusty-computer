@@ -15,7 +15,7 @@ macro_rules! test_decoder {
 #[test]
 fn test_00() {
     let mut it = [0x00, 0xF7, 0xDD, 0x92, 0x59, 0xA1].into_iter();
-    let left = crate::decode_instruction(&mut it).unwrap();
+    let left = decode_instruction(&mut it).unwrap();
     assert_eq!(
         left,
         (Instruction::new(
@@ -3347,7 +3347,7 @@ fn test_e0() {
     test_decoder!(
         [0xE0, 0x0B, 0xD9, 0xC2, 0x3F, 0x84], // LOOPNZ     LAB_0000_08d1
         Instruction::new(
-            Operation::LOOPNE,
+            Operation::LOOPNZ,
             OperandSet::Destination(Operand::Displacement(Displacement::Byte(0x0B)))
         )
     );
@@ -3358,7 +3358,7 @@ fn test_e1() {
     test_decoder!(
         [0xE1, 0xCB, 0x51, 0x61, 0x17, 0x3F], // LOOPZ      LAB_0000_089b
         Instruction::new(
-            Operation::LOOPE,
+            Operation::LOOPZ,
             OperandSet::Destination(Operand::Displacement(Displacement::Byte(-0x35)))
         )
     );

@@ -55,6 +55,7 @@ pub enum Operation {
     // String manipulation
     // TODO: Should these be without size and have the size as another operand type?
     REP,   // Repeat
+    REPZ,  // Repeat if zero
     MOVSB, // Move byte
     MOVSW, // Move word
     CMPSB, // Compare byte
@@ -87,8 +88,8 @@ pub enum Operation {
     JNO,    // Jump on not overflow
     JNS,    // Jump on not sign
     LOOP,   // Loop CX times
-    LOOPE,  // Loop while zero/equal (alias LOOPZ)
-    LOOPNE, // Loop while not zero/equal (alias LOOPNZ)
+    LOOPZ,  // Loop while zero/equal (alias LOOPZ)
+    LOOPNZ, // Loop while not zero/equal (alias LOOPNZ)
     JCXZ,   // Jump on CX zero
     INT,    // Interrupt
     INT1,   // Interrupt 1
@@ -169,6 +170,7 @@ impl std::fmt::Display for Operation {
                 OR => "or",
                 XOR => "xor",
                 REP => "rep",
+                REPZ => "repz",
                 MOVSB => "movsb",
                 MOVSW => "movsw",
                 CMPSB => "cmpsb",
@@ -199,8 +201,8 @@ impl std::fmt::Display for Operation {
                 JNO => "jno",
                 JNS => "jns",
                 LOOP => "loop",
-                LOOPE => "loopz",
-                LOOPNE => "loopnz",
+                LOOPZ => "loopz",
+                LOOPNZ => "loopnz",
                 JCXZ => "jcxz",
                 INT => "int",
                 INT1 => "int1",
@@ -239,6 +241,7 @@ impl std::str::FromStr for Operation {
             "adc" => ADC,
             "add" => ADD,
             "and" => AND,
+            "daa" => DAA,
             "call" => CALL,
             "cbw" => CBW,
             "clc" => CLC,
@@ -249,7 +252,6 @@ impl std::str::FromStr for Operation {
             "cmpsb" => CMPSB,
             "cmpsw" => CMPSW,
             "cwd" => CWD,
-            "daa" => DAA,
             "das" => DAS,
             "dec" => DEC,
             "div" => DIV,
@@ -302,10 +304,10 @@ impl std::str::FromStr for Operation {
             "lodsb" => LODSB,
             "lodsw" => LODSW,
             "loop" => LOOP,
-            "loope" => LOOPE,
-            "loopne" => LOOPNE,
-            "loopnz" => LOOPNE,
-            "loopz" => LOOPE,
+            "loope" => LOOPZ,
+            "loopne" => LOOPNZ,
+            "loopnz" => LOOPNZ,
+            "loopz" => LOOPZ,
             "mov" => MOV,
             "movsb" => MOVSB,
             "movsw" => MOVSW,
@@ -328,11 +330,11 @@ impl std::str::FromStr for Operation {
             "sahf" => SAHF,
             "salc" => SALC,
             "sar" => SAR,
-            "sbb" => SBB,
             "scasb" => SCASB,
             "scasw" => SCASW,
             "shl" => SHL,
             "shr" => SHR,
+            "ssb" => SBB,
             "stc" => STC,
             "std" => STD,
             "sti" => STI,

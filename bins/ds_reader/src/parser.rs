@@ -97,6 +97,14 @@ fn split_mnemonic_description(input: String) -> (String, String) {
     };
     let description = description[0..description.len()].to_owned();
 
+    let mnemonic = mnemonic.split('/').take(1).collect::<Vec<&str>>()[0].to_owned();
+
+    let mnemonic = match mnemonic.as_str() {
+        "SSB" => "SBB".to_owned(),
+        "BAA" => "DAA".to_owned(),
+        _ => mnemonic.to_owned(),
+    };
+
     (mnemonic, description)
 }
 

@@ -328,7 +328,7 @@ impl Compiler {
             match code {
                 out::db::Code::Byte(byte) => result.push(*byte),
 
-                out::db::Code::ImmByte => match &instruction.operands {
+                out::db::Code::Imm8 => match &instruction.operands {
                     ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
                         let value = self.evaluate_expression(expr)?;
                         for b in (value as u8).to_le_bytes() {
@@ -353,7 +353,7 @@ impl Compiler {
                     _ => todo!("{:?}", &instruction.operands),
                 },
 
-                out::db::Code::ImmWord => match &instruction.operands {
+                out::db::Code::Imm16 => match &instruction.operands {
                     ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
                         let value = self.evaluate_expression(expr)?;
                         for b in (value as u16).to_le_bytes() {
@@ -371,7 +371,7 @@ impl Compiler {
                     _ => todo!("{:?}", &instruction.operands),
                 },
 
-                out::db::Code::DispByte => {
+                out::db::Code::Disp8 => {
                     if let ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) =
                         &instruction.operands
                     {
@@ -382,7 +382,7 @@ impl Compiler {
                     }
                 }
 
-                out::db::Code::DispWord => {
+                out::db::Code::Disp16 => {
                     if let ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) =
                         &instruction.operands
                     {
@@ -561,7 +561,7 @@ impl Compiler {
                     _ => todo!("{:?}", &instruction.operands),
                 },
 
-                out::db::Code::ImmByteSign => match &instruction.operands {
+                out::db::Code::SignImm8 => match &instruction.operands {
                     ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
                         let value = self.evaluate_expression(expr)?;
                         for b in (value as i8 as u8 as u16).to_le_bytes() {
@@ -711,15 +711,15 @@ impl Compiler {
 
                 out::db::Code::PlusReg(_) => total_size += 1,
 
-                out::db::Code::Byte(_) | out::db::Code::ImmByte => total_size += 1,
+                out::db::Code::Byte(_) | out::db::Code::Imm8 => total_size += 1,
 
-                out::db::Code::ImmWord => total_size += 2,
+                out::db::Code::Imm16 => total_size += 2,
 
-                out::db::Code::DispByte => total_size += 1,
+                out::db::Code::Disp8 => total_size += 1,
 
-                out::db::Code::DispWord => total_size += 2,
+                out::db::Code::Disp16 => total_size += 2,
 
-                out::db::Code::ImmByteSign => {
+                out::db::Code::SignImm8 => {
                     // TODO: Not sure if this correct!
                     total_size += 2;
                 }
@@ -843,21 +843,6 @@ impl Compiler {
             out::db::OperandEncoding::RegAx => matches!(
                 operand,
                 ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Ax)),
-            ),
-
-            out::db::OperandEncoding::RegCl => matches!(
-                operand,
-                ast::Operand::Register(_, ast::Register::Byte(ast::ByteRegister::Cl)),
-            ),
-
-            out::db::OperandEncoding::RegCx => matches!(
-                operand,
-                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Cx)),
-            ),
-
-            out::db::OperandEncoding::RegDx => matches!(
-                operand,
-                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Dx)),
             ),
 
             out::db::OperandEncoding::Reg8 => {
