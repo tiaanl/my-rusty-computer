@@ -1,4 +1,5 @@
 use crate::ast;
+use mrc_decoder::TryFromEncoding;
 use mrc_instruction as out;
 use std::collections::{HashMap, LinkedList};
 use std::fmt::Formatter;
@@ -92,7 +93,7 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile(&mut self) -> Result<Vec<u8>, CompileError> {
+    pub fn compile(&mut self) -> Result<Vec<out::Instruction>, CompileError> {
         if self.resolve_labels()? > 0 {
             let label = self
                 .labels
@@ -104,25 +105,38 @@ impl Compiler {
             return Err(CompileError::UnresolvedReference(label));
         }
 
-        self.debug_print_outputs();
+        // self.debug_print_outputs();
 
-        let mut result = vec![];
+        let mut instructions = vec![];
 
-        let mut offset = 0;
         for output in &self.outputs {
-            if matches!(
-                output.line,
-                ast::Line::Instruction(..) | ast::Line::Data(..)
-            ) {
-                println!("line: {}", output.line);
-                for b in self.encode_line(&output.line, output.times, output.size, offset)? {
-                    result.push(b);
-                }
+            if let ast::Line::Instruction(instruction) = &output.line {
+                let id = self.find_instruction_data(instruction)?;
+                println!("id: {:?}", id);
+                let size_hint = instruction_data_size_hint(id);
+                instructions.push(self.compile_instruction(instruction, &size_hint)?);
             }
-            offset += output.size;
         }
 
-        Ok(result)
+        Ok(instructions)
+
+        // let mut result = vec![];
+        //
+        // let mut offset = 0;
+        // for output in &self.outputs {
+        //     if matches!(
+        //         output.line,
+        //         ast::Line::Instruction(..) | ast::Line::Data(..)
+        //     ) {
+        //         println!("line: {}", output.line);
+        //         for b in self.encode_line(&output.line, output.times, output.size, offset)? {
+        //             result.push(b);
+        //         }
+        //     }
+        //     offset += output.size;
+        // }
+        //
+        // Ok(result)
     }
 
     fn debug_print_outputs(&self) {
@@ -643,6 +657,125 @@ impl Compiler {
             Ok(())
         }
     }
+
+    fn compile_instruction(
+        &self,
+        instruction: &ast::Instruction,
+        size_hint: &Option<ast::DataSize>,
+    ) -> Result<out::Instruction, CompileError> {
+        Ok(match &instruction.operands {
+            ast::Operands::None(_) => out::Instruction {
+                operation: instruction.operation,
+                operands: out::OperandSet::None,
+                repeat: None,
+            },
+
+            ast::Operands::Destination(_, dst) => out::Instruction {
+                operation: instruction.operation,
+                operands: out::OperandSet::Destination(self.compile_operand(dst, size_hint)?),
+                repeat: None,
+            },
+
+            ast::Operands::DestinationAndSource(_, dst, src) => out::Instruction {
+                operation: instruction.operation,
+                operands: out::OperandSet::DestinationAndSource(
+                    self.compile_operand(dst, size_hint)?,
+                    self.compile_operand(src, size_hint)?,
+                ),
+                repeat: None,
+            },
+        })
+    }
+
+    fn compile_operand(
+        &self,
+        operand: &ast::Operand,
+        size_hint: &Option<ast::DataSize>,
+    ) -> Result<out::Operand, CompileError> {
+        Ok(match operand {
+            ast::Operand::Immediate(_, expr) => {
+                let value = self.evaluate_expression(expr)?;
+                out::Operand::Immediate(out::Immediate::Word(value as u16))
+            }
+
+            ast::Operand::Register(_, register) => {
+                out::Operand::Register(out::SizedRegisterEncoding(
+                    out::RegisterEncoding::try_from_encoding(register.encoding()).unwrap(),
+                    if matches!(register, ast::Register::Byte(_)) {
+                        out::OperandSize::Byte
+                    } else {
+                        out::OperandSize::Word
+                    },
+                ))
+            }
+
+            ast::Operand::Segment(_, segment) => {
+                out::Operand::Segment(out::Segment::try_from_encoding(segment.encoding()).unwrap())
+            }
+
+            ast::Operand::Address(_, expr, data_size, segment) => {
+                let segment = if let Some(segment) = segment {
+                    out::Segment::try_from_encoding(segment.encoding()).unwrap()
+                } else {
+                    out::Segment::DS
+                };
+
+                let value = self.evaluate_expression(expr)?;
+
+                let data_size = match (data_size, size_hint) {
+                    (Some(data_size), _) => data_size,
+                    (None, Some(size_hint)) => size_hint,
+                    (None, None) => panic!(),
+                };
+
+                let operand_size = if let ast::DataSize::Byte = data_size {
+                    out::OperandSize::Byte
+                } else {
+                    out::OperandSize::Word
+                };
+
+                out::Operand::Direct(segment, value as u16, operand_size)
+            }
+
+            ast::Operand::Indirect(_, indirect_encoding, expr, data_size, segment) => {
+                let segment = if let Some(segment) = segment {
+                    out::Segment::try_from_encoding(segment.encoding()).unwrap()
+                } else {
+                    out::Segment::DS
+                };
+
+                let addressing_mode =
+                    out::AddressingMode::try_from_encoding(indirect_encoding.encoding()).unwrap();
+
+                let displacement = if let Some(expr) = expr {
+                    let value = self.evaluate_expression(expr)?;
+                    if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
+                        out::Displacement::Byte(value as i8)
+                    } else {
+                        out::Displacement::Word(value as i16)
+                    }
+                } else {
+                    out::Displacement::None
+                };
+
+                let data_size = match (data_size, size_hint) {
+                    (Some(data_size), _) => data_size,
+                    (None, Some(size_hint)) => size_hint,
+                    (None, None) => panic!(),
+                };
+
+                let operand_size = if let ast::DataSize::Byte = data_size {
+                    out::OperandSize::Byte
+                } else {
+                    out::OperandSize::Word
+                };
+
+                out::Operand::Indirect(segment, addressing_mode, displacement, operand_size)
+            }
+
+            _ => todo!("compile_operand: {:?}", operand),
+        })
+    }
 }
 
 impl Compiler {
@@ -845,6 +978,11 @@ impl Compiler {
                 ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Ax)),
             ),
 
+            out::db::OperandEncoding::RegDx => matches!(
+                operand,
+                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Dx)),
+            ),
+
             out::db::OperandEncoding::Reg8 => {
                 matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
             }
@@ -920,16 +1058,22 @@ impl Compiler {
             out::db::OperandEncoding::SegEs => {
                 matches!(operand, ast::Operand::Segment(_, ast::Segment::ES))
             }
+
             out::db::OperandEncoding::SegCs => {
                 matches!(operand, ast::Operand::Segment(_, ast::Segment::CS))
             }
+
             out::db::OperandEncoding::SegSs => {
                 matches!(operand, ast::Operand::Segment(_, ast::Segment::SS))
             }
+
             out::db::OperandEncoding::SegDs => {
                 matches!(operand, ast::Operand::Segment(_, ast::Segment::DS))
             }
 
+            // out::db::OperandEncoding::SegDs => {
+            //     matches!(operand, ast::Operand::Segment(_, ast::Segment::DS))
+            // }
             out::db::OperandEncoding::SegOff => false, // TODO
 
             _ => {
@@ -1013,31 +1157,52 @@ impl Compiler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Parser;
+
+    // #[test]
+    // fn basic() {
+    //     let mut compiler = Compiler::default();
+    //     compiler.push_line(ast::Line::Label(ast::Label(0..0, "test".to_owned())));
+    //     assert_eq!(Vec::<u8>::new(), compiler.compile().unwrap());
+    // }
+
+    // #[test]
+    // fn basic_2() {
+    //     let mut compiler = Compiler::default();
+    //     compiler.push_line(ast::Line::Instruction(ast::Instruction {
+    //         span: 0..0,
+    //         operation: out::Operation::MOV,
+    //         operands: ast::Operands::DestinationAndSource(
+    //             0..0,
+    //             ast::Operand::Address(
+    //                 0..0,
+    //                 ast::Expression::Value(0..0, ast::Value::Constant(0)),
+    //                 None,
+    //                 None,
+    //             ),
+    //             ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
+    //         ),
+    //     }));
+    //     assert_eq!(vec![0], compiler.compile().unwrap());
+    // }
 
     #[test]
-    fn basic() {
-        let mut compiler = Compiler::default();
-        compiler.push_line(ast::Line::Label(ast::Label(0..0, "test".to_owned())));
-        assert_eq!(Vec::<u8>::new(), compiler.compile().unwrap());
-    }
-
-    #[test]
-    fn basic_2() {
-        let mut compiler = Compiler::default();
-        compiler.push_line(ast::Line::Instruction(ast::Instruction {
-            span: 0..0,
-            operation: out::Operation::MOV,
-            operands: ast::Operands::DestinationAndSource(
-                0..0,
-                ast::Operand::Address(
-                    0..0,
-                    ast::Expression::Value(0..0, ast::Value::Constant(0)),
-                    None,
-                    None,
+    fn compile() {
+        let mut c = Compiler::default();
+        let mut p = Parser::new("mov byte [0x100], 10");
+        while let Some(line) = p.parse_line().unwrap() {
+            c.push_line(line);
+        }
+        assert_eq!(
+            vec![out::Instruction {
+                operation: out::Operation::MOV,
+                operands: out::OperandSet::DestinationAndSource(
+                    out::Operand::Direct(out::Segment::DS, 0x100, out::OperandSize::Byte),
+                    out::Operand::Immediate(out::Immediate::Byte(10)),
                 ),
-                ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
-            ),
-        }));
-        assert_eq!(vec![0], compiler.compile().unwrap());
+                repeat: None
+            }],
+            c.compile().unwrap()
+        );
     }
 }
