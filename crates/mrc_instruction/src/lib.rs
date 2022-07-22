@@ -3,6 +3,7 @@
 
 mod address;
 pub mod db;
+pub mod db2;
 mod instruction;
 mod operand;
 mod operation;

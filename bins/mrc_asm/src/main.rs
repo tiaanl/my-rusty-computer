@@ -98,11 +98,12 @@ fn main() {
 
         match compiler.compile() {
             Ok(bytes) => {
-                for b in &bytes {
-                    print!("{:02X} ", b);
-                }
-                println!();
-                std::fs::write("out.com", bytes).unwrap();
+                // for b in &bytes {
+                //     print!("{:02X} ", b);
+                // }
+                // println!();
+                // std::fs::write("out.com", bytes).unwrap();
+                bytes.iter().for_each(|b| println!("{:?}", b));
             }
             Err(err) => {
                 // eprintln!("COMPILE ERROR: {}", err);
