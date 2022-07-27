@@ -15,6 +15,7 @@ pub const C_DISP_BYTE: Code = 0x09;
 pub const C_DISP_WORD: Code = 0x0A;
 pub const C_SEG_OFF: Code = 0x0B;
 
+#[allow(unused)]
 pub fn codes_to_string(codes: &[Code]) -> String {
     let mut parts = vec![];
 

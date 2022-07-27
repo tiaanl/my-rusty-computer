@@ -200,7 +200,8 @@ impl Segment {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DataSize {
     Byte,
     Word,

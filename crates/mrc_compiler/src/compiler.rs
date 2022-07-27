@@ -112,9 +112,8 @@ impl Compiler {
         for output in &self.outputs {
             if let ast::Line::Instruction(instruction) = &output.line {
                 let id = self.find_instruction_data(instruction)?;
-                println!("id: {:?}", id);
                 let size_hint = instruction_data_size_hint(id);
-                instructions.push(self.compile_instruction(instruction, &size_hint)?);
+                instructions.push(self.compile_instruction(instruction, size_hint)?);
             }
         }
 
@@ -139,7 +138,7 @@ impl Compiler {
         // Ok(result)
     }
 
-    fn debug_print_outputs(&self) {
+    fn _debug_print_outputs(&self) {
         let mut offset = 0;
         for output in &self.outputs {
             if matches!(&output.line, ast::Line::Label(..) | ast::Line::Constant(..)) {
@@ -289,7 +288,7 @@ impl Compiler {
         }
     }
 
-    fn encode_line(
+    fn _encode_line(
         &self,
         line: &ast::Line,
         times: u16,
@@ -298,7 +297,7 @@ impl Compiler {
     ) -> Result<Vec<u8>, CompileError> {
         match line {
             ast::Line::Instruction(instruction) => {
-                self.encode_instruction(instruction, size, offset)
+                self._encode_instruction(instruction, size, offset)
             }
 
             ast::Line::Data(_, data) => {
@@ -319,7 +318,7 @@ impl Compiler {
         }
     }
 
-    fn encode_instruction(
+    fn _encode_instruction(
         &self,
         instruction: &ast::Instruction,
         size: u16,
@@ -428,27 +427,27 @@ impl Compiler {
                         _,
                         ast::Operand::Address(_, expr, _, _),
                         ast::Operand::Register(_, register),
-                    ) => self.emit_mrrm_address(&mut result, register.encoding(), expr)?,
+                    ) => self._emit_mrrm_address(&mut result, register.encoding(), expr)?,
 
                     ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Address(_, expr, _, _),
                         ast::Operand::Segment(_, segment),
-                    ) => self.emit_mrrm_address(&mut result, segment.encoding(), expr)?,
+                    ) => self._emit_mrrm_address(&mut result, segment.encoding(), expr)?,
 
                     ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Register(_, register),
                         ast::Operand::Address(_, expr, _, _),
                     ) => {
-                        self.emit_mrrm_address(&mut result, register.encoding(), expr)?;
+                        self._emit_mrrm_address(&mut result, register.encoding(), expr)?;
                     }
 
                     ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Register(_, dst),
                         ast::Operand::Register(_, src),
-                    ) => self.emit_mrrm(&mut result, 0b11, dst.encoding(), src.encoding()),
+                    ) => self._emit_mrrm(&mut result, 0b11, dst.encoding(), src.encoding()),
 
                     ast::Operands::DestinationAndSource(
                         _,
@@ -459,7 +458,7 @@ impl Compiler {
                         _,
                         ast::Operand::Register(_, src),
                         ast::Operand::Segment(_, dst),
-                    ) => self.emit_mrrm(&mut result, 0b11, dst.encoding(), src.encoding()),
+                    ) => self._emit_mrrm(&mut result, 0b11, dst.encoding(), src.encoding()),
 
                     ast::Operands::DestinationAndSource(
                         _,
@@ -476,16 +475,16 @@ impl Compiler {
                         if let Some(expr) = expr {
                             let value = self.evaluate_expression(expr)?;
                             if value < i8::MIN as i32 || value > i8::MAX as i32 {
-                                self.emit_mrrm(&mut result, 0b01, r, indirect_encoding.encoding());
+                                self._emit_mrrm(&mut result, 0b01, r, indirect_encoding.encoding());
                                 result.push(value as i8 as u8);
                             } else {
-                                self.emit_mrrm(&mut result, 0b10, r, indirect_encoding.encoding());
+                                self._emit_mrrm(&mut result, 0b10, r, indirect_encoding.encoding());
                                 for b in (value as i16 as u16).to_le_bytes() {
                                     result.push(b);
                                 }
                             }
                         } else {
-                            self.emit_mrrm(&mut result, 0b11, r, indirect_encoding.encoding());
+                            self._emit_mrrm(&mut result, 0b11, r, indirect_encoding.encoding());
                         }
                     }
 
@@ -534,25 +533,25 @@ impl Compiler {
                         ast::Operand::Indirect(_, indirect_encoding, expr, data_size, _),
                         ast::Operand::Immediate(_, imm),
                     ) => {
-                        self.emit_indirect_mrrm(&mut result, *r, indirect_encoding, expr)?;
+                        self._emit_indirect_mrrm(&mut result, *r, indirect_encoding, expr)?;
                         match data_size {
                             Some(ast::DataSize::Byte) => {
-                                self.emit_immediate_byte(&mut result, imm)?;
+                                self._emit_immediate_byte(&mut result, imm)?;
                             }
                             Some(ast::DataSize::Word) => {
-                                self.emit_immediate_word(&mut result, imm)?;
+                                self._emit_immediate_word(&mut result, imm)?;
                             }
                             None => unreachable!(),
                         }
                     }
 
                     ast::Operands::Destination(_, ast::Operand::Address(_, expr, _, _)) => {
-                        self.emit_mrrm(&mut result, 0b00, *r, 0b110);
-                        self.emit_immediate_word(&mut result, expr)?;
+                        self._emit_mrrm(&mut result, 0b00, *r, 0b110);
+                        self._emit_immediate_word(&mut result, expr)?;
                     }
 
                     ast::Operands::Destination(_, ast::Operand::Register(_, register)) => {
-                        self.emit_mrrm(&mut result, 0b11, *r, register.encoding());
+                        self._emit_mrrm(&mut result, 0b11, *r, register.encoding());
                     }
 
                     ast::Operands::DestinationAndSource(
@@ -562,12 +561,12 @@ impl Compiler {
                     ) => {
                         match register {
                             ast::Register::Byte(register) => {
-                                self.emit_mrrm(&mut result, 0b11, *r, register.encoding());
-                                self.emit_immediate_byte(&mut result, expr)?;
+                                self._emit_mrrm(&mut result, 0b11, *r, register.encoding());
+                                self._emit_immediate_byte(&mut result, expr)?;
                             }
                             ast::Register::Word(register) => {
-                                self.emit_mrrm(&mut result, 0b11, *r, register.encoding());
-                                self.emit_immediate_word(&mut result, expr)?;
+                                self._emit_mrrm(&mut result, 0b11, *r, register.encoding());
+                                self._emit_immediate_word(&mut result, expr)?;
                             }
                         };
                     }
@@ -593,12 +592,12 @@ impl Compiler {
         Ok(result)
     }
 
-    fn emit_mrrm(&self, out: &mut Vec<u8>, mode: u8, reg: u8, reg_mem: u8) {
+    fn _emit_mrrm(&self, out: &mut Vec<u8>, mode: u8, reg: u8, reg_mem: u8) {
         let mrrm = (mode << 6) + (reg << 3) + reg_mem;
         out.push(mrrm);
     }
 
-    fn emit_immediate_byte(
+    fn _emit_immediate_byte(
         &self,
         out: &mut Vec<u8>,
         expr: &ast::Expression,
@@ -610,7 +609,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn emit_immediate_word(
+    fn _emit_immediate_word(
         &self,
         out: &mut Vec<u8>,
         expr: &ast::Expression,
@@ -622,18 +621,18 @@ impl Compiler {
         Ok(())
     }
 
-    fn emit_mrrm_address(
+    fn _emit_mrrm_address(
         &self,
         out: &mut Vec<u8>,
         reg: u8,
         expr: &ast::Expression,
     ) -> Result<(), CompileError> {
-        self.emit_mrrm(out, 0b00, reg, 0b110);
-        self.emit_immediate_word(out, expr)?;
+        self._emit_mrrm(out, 0b00, reg, 0b110);
+        self._emit_immediate_word(out, expr)?;
         Ok(())
     }
 
-    fn emit_indirect_mrrm(
+    fn _emit_indirect_mrrm(
         &self,
         out: &mut Vec<u8>,
         reg: u8,
@@ -643,17 +642,17 @@ impl Compiler {
         if let Some(expr) = expr {
             let value = self.evaluate_expression(expr)?;
             if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-                self.emit_mrrm(out, 0b01, reg, indirect_encoding.encoding());
+                self._emit_mrrm(out, 0b01, reg, indirect_encoding.encoding());
                 out.push(value as i8 as u8);
             } else {
-                self.emit_mrrm(out, 0b10, reg, indirect_encoding.encoding());
+                self._emit_mrrm(out, 0b10, reg, indirect_encoding.encoding());
                 for b in (value as i16 as u16).to_le_bytes() {
                     out.push(b);
                 }
             }
             Ok(())
         } else {
-            self.emit_mrrm(out, 0b00, reg, indirect_encoding.encoding());
+            self._emit_mrrm(out, 0b00, reg, indirect_encoding.encoding());
             Ok(())
         }
     }
@@ -661,7 +660,7 @@ impl Compiler {
     fn compile_instruction(
         &self,
         instruction: &ast::Instruction,
-        size_hint: &Option<ast::DataSize>,
+        size_hint: Option<ast::DataSize>,
     ) -> Result<out::Instruction, CompileError> {
         Ok(match &instruction.operands {
             ast::Operands::None(_) => out::Instruction {
@@ -690,7 +689,7 @@ impl Compiler {
     fn compile_operand(
         &self,
         operand: &ast::Operand,
-        size_hint: &Option<ast::DataSize>,
+        size_hint: Option<ast::DataSize>,
     ) -> Result<out::Operand, CompileError> {
         Ok(match operand {
             ast::Operand::Immediate(_, expr) => {
@@ -722,7 +721,7 @@ impl Compiler {
 
                 let value = self.evaluate_expression(expr)?;
 
-                let data_size = match (data_size, size_hint) {
+                let data_size = match (data_size, &size_hint) {
                     (Some(data_size), _) => data_size,
                     (None, Some(size_hint)) => size_hint,
                     (None, None) => panic!(),
@@ -758,7 +757,7 @@ impl Compiler {
                     out::Displacement::None
                 };
 
-                let data_size = match (data_size, size_hint) {
+                let data_size = match (data_size, &size_hint) {
                     (Some(data_size), _) => data_size,
                     (None, Some(size_hint)) => size_hint,
                     (None, None) => panic!(),
@@ -772,8 +771,6 @@ impl Compiler {
 
                 out::Operand::Indirect(segment, addressing_mode, displacement, operand_size)
             }
-
-            _ => todo!("compile_operand: {:?}", operand),
         })
     }
 }
