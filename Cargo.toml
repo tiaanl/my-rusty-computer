@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "bins/ds_reader",
     "bins/gen_test_bin",
     "bins/led_show",
     "bins/mrc_asm",
@@ -10,6 +9,7 @@ members = [
     "bins/pop",
     "bins/romcheck",
     "bins/tests",
+    "crates/data_sheet",
     "crates/mrc_compiler",
     "crates/mrc_decoder",
     "crates/mrc_dos",

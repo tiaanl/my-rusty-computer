@@ -1,7 +1,0 @@
-[package]
-name = "ds_reader"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-mrc_instruction = { path = "../../crates/mrc_instruction" }

@@ -1,14 +1,16 @@
-use crate::parser::Category;
-use mrc_instruction::db2::{
-    class, codes_to_string, format_type_flags, size, sub_class, Code, HasFlags, TypeFlags, C_BYTE,
-    C_DISP_BYTE, C_DISP_WORD, C_IMM_BYTE, C_IMM_BYTE_SIGN, C_IMM_WORD, C_IMM_WORD_SIGN,
-    C_MOD_REG_RM, C_MOD_RM, C_REG_BASE, C_SEG_OFF, T_BITS_16, T_BITS_8, T_DISP, T_IMM, T_MEM,
-    T_NONE, T_REG, T_REG_AL_AX, T_SEG, T_SEG_CS, T_SEG_DS, T_SEG_ES, T_SEG_OFF, T_SEG_SS, T_SIGNED,
-};
+#[path = "src/template/type_flags.rs"]
+mod type_flags;
+
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
+use std::io::Write;
+use type_flags::*;
 
-mod parser;
+#[path = "src/template/codes.rs"]
+mod codes;
+use codes::*;
+
+use data_sheet::get_data_sheet;
 
 #[derive(Eq, PartialEq)]
 struct Line {
@@ -59,46 +61,103 @@ impl Debug for Line {
     }
 }
 
-fn dst_and_src_from_string(s: &str) -> (TypeFlags, TypeFlags) {
-    match s {
-        "Register/Memory to/from Register" => (T_REG, T_REG | T_MEM),
-        "Immediate to Register/Memory" => (T_REG | T_MEM, T_IMM),
-        "Immediate to Register" => (T_REG, T_IMM),
-        "Memory to Accumulator" => (T_REG | T_REG_AL_AX, T_MEM),
-        "Accumulator to Memory" => (T_MEM, T_REG | T_REG_AL_AX),
-        "Register/Memory to Segment Register" => (T_SEG | T_BITS_16, T_REG | T_MEM),
-        "Segment Register to Register/Memory" => (T_REG | T_MEM, T_SEG | T_BITS_16),
-        "Register/Memory" => (T_REG | T_MEM, T_NONE),
-        "Register" => (T_REG, T_NONE),
-        "Segment Register" => (T_SEG | T_BITS_16, T_NONE),
-        "Register/Memory with Register" => (T_REG, T_REG | T_MEM),
-        "Register with Accumulator" => (T_REG | T_REG_AL_AX, T_REG),
-        "Fixed Port" => (T_IMM, T_NONE),
-        "Variable Port" => (T_IMM, T_NONE),
-        "" => (T_NONE, T_NONE),
-        "Reg./Memory with Register to Either" => (T_REG, T_REG | T_MEM),
-        "Immediate to Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
-        "Reg./Memory and Register to Either" => (T_REG, T_REG | T_MEM),
-        "Immediate from Register/Memory" => (T_IMM, T_REG | T_MEM),
-        "Immediate from Accumulator" => (T_IMM, T_REG | T_REG_AL_AX),
-        "Register/memory" => (T_REG | T_MEM, T_NONE),
-        "Register/Memory and Register" => (T_REG, T_REG | T_MEM),
-        "Immediate with Register/Memory" => (T_REG | T_MEM, T_IMM),
-        "Immediate with Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
-        "Immediate Data and Register/Memory" => (T_REG | T_MEM, T_IMM),
-        "Immediate Data and Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
-        "Direct Within Segment" => (T_DISP | T_BITS_16, T_NONE),
-        "Indirect Within Segment" => (T_REG | T_MEM | T_BITS_16, T_NONE),
-        "Direct Intersegment" => (T_SEG_OFF, T_NONE),
-        "Indirect Intersegment" => (T_REG | T_MEM | T_BITS_16, T_NONE),
-        "Direct Within Segment-Short" => (T_DISP | T_BITS_8, T_NONE),
-        "Within Segment" => (T_NONE, T_NONE),
-        "Within Seg Adding Immed to SP" => (T_DISP | T_BITS_16, T_NONE),
-        "Intersegment" => (T_NONE, T_NONE),
-        "Intersegment Adding Immediate to SP" => (T_DISP | T_BITS_16, T_NONE),
-        "Type Specified" => (T_IMM | T_BITS_8, T_NONE),
-        "Type 3" => (T_NONE, T_NONE),
-        _ => unreachable!("operands: {}", s),
+fn push_line(
+    lines: &mut Vec<Line>,
+    mnemonic: &str,
+    dst: TypeFlags,
+    src: TypeFlags,
+    codes: Vec<Code>,
+) {
+    if dst != T_NONE && class::only(dst) != T_SEG_OFF {
+        assert!(
+            class::only(dst) != 0 && size::only(dst) != 0,
+            "{} ({})",
+            dst,
+            format_type_flags(dst)
+        );
+    }
+
+    lines.push(Line {
+        mnemonic: mnemonic.to_owned(),
+        destination: dst,
+        source: src,
+        codes,
+    });
+}
+
+fn data_to(v: Vec<String>, to: &str) -> Vec<String> {
+    v.iter()
+        .filter(|&s| s.as_str() != "data if w = 1" && s.as_str() != "data if s:w = 01")
+        .map(|s| {
+            if s.as_str() == "data" {
+                to.to_owned()
+            } else {
+                s.clone()
+            }
+        })
+        .collect()
+}
+
+fn data_low_high_to(v: Vec<String>, to: &str) -> Vec<String> {
+    v.iter()
+        .filter(|&s| s.as_str() != "data-high")
+        .map(|s| {
+            if s.as_str() == "data-low" {
+                to.to_owned()
+            } else {
+                s.clone()
+            }
+        })
+        .collect()
+}
+
+fn disp_to(v: Vec<String>, to: &str) -> Vec<String> {
+    v.iter()
+        .filter(|&s| s.as_str() != "disp-high")
+        .map(|s| {
+            if s.as_str() == "disp-low" {
+                to.to_owned()
+            } else {
+                s.clone()
+            }
+        })
+        .collect()
+}
+
+fn addr_to(v: Vec<String>, to: &str) -> Vec<String> {
+    v.iter()
+        .filter(|&s| s.as_str() != "addr-high")
+        .map(|s| {
+            if s.as_str() == "addr-low" {
+                to.to_owned()
+            } else {
+                s.clone()
+            }
+        })
+        .collect()
+}
+
+fn seg_off_to(v: Vec<String>, to: &str) -> Vec<String> {
+    v.iter()
+        .filter(|&s| {
+            s.as_str() != "offset-high" && s.as_str() != "seg-low" && s.as_str() != "seg-high"
+        })
+        .map(|s| {
+            if s.as_str() == "offset-low" {
+                to.to_owned()
+            } else {
+                s.clone()
+            }
+        })
+        .collect()
+}
+
+fn set_size(flags: TypeFlags, size: TypeFlags) -> TypeFlags {
+    if flags != T_NONE {
+        debug_assert_eq!(size::only(flags), 0);
+        flags | size
+    } else {
+        flags
     }
 }
 
@@ -147,107 +206,50 @@ fn bytes_to_codes(bytes: Vec<String>) -> Vec<Code> {
     result
 }
 
-fn push_line(
-    lines: &mut Vec<Line>,
-    mnemonic: &str,
-    dst: TypeFlags,
-    src: TypeFlags,
-    codes: Vec<Code>,
-) {
-    if dst != T_NONE && class::only(dst) != T_SEG_OFF {
-        assert!(
-            class::only(dst) != 0 && size::only(dst) != 0,
-            "{} ({})",
-            dst,
-            format_type_flags(dst)
-        );
-    }
-
-    lines.push(Line {
-        mnemonic: mnemonic.to_owned(),
-        destination: dst,
-        source: src,
-        codes,
-    });
-}
-
-fn disp_to(v: Vec<String>, to: &str) -> Vec<String> {
-    v.iter()
-        .filter(|&s| s.as_str() != "disp-high")
-        .map(|s| {
-            if s.as_str() == "disp-low" {
-                to.to_owned()
-            } else {
-                s.clone()
-            }
-        })
-        .collect()
-}
-
-fn addr_to(v: Vec<String>, to: &str) -> Vec<String> {
-    v.iter()
-        .filter(|&s| s.as_str() != "addr-high")
-        .map(|s| {
-            if s.as_str() == "addr-low" {
-                to.to_owned()
-            } else {
-                s.clone()
-            }
-        })
-        .collect()
-}
-
-fn seg_off_to(v: Vec<String>, to: &str) -> Vec<String> {
-    v.iter()
-        .filter(|&s| {
-            s.as_str() != "offset-high" && s.as_str() != "seg-low" && s.as_str() != "seg-high"
-        })
-        .map(|s| {
-            if s.as_str() == "offset-low" {
-                to.to_owned()
-            } else {
-                s.clone()
-            }
-        })
-        .collect()
-}
-
-fn data_to(v: Vec<String>, to: &str) -> Vec<String> {
-    v.iter()
-        .filter(|&s| s.as_str() != "data if w = 1" && s.as_str() != "data if s:w = 01")
-        .map(|s| {
-            if s.as_str() == "data" {
-                to.to_owned()
-            } else {
-                s.clone()
-            }
-        })
-        .collect()
-}
-
-fn data_low_high_to(v: Vec<String>, to: &str) -> Vec<String> {
-    v.iter()
-        .filter(|&s| s.as_str() != "data-high")
-        .map(|s| {
-            if s.as_str() == "data-low" {
-                to.to_owned()
-            } else {
-                s.clone()
-            }
-        })
-        .collect()
-}
-
-fn set_size(flags: TypeFlags, size: TypeFlags) -> TypeFlags {
-    if flags != T_NONE {
-        debug_assert_eq!(size::only(flags), 0);
-        flags | size
-    } else {
-        flags
+fn dst_and_src_from_string(s: &str) -> (TypeFlags, TypeFlags) {
+    match s {
+        "Register/Memory to/from Register" => (T_REG, T_REG | T_MEM),
+        "Immediate to Register/Memory" => (T_REG | T_MEM, T_IMM),
+        "Immediate to Register" => (T_REG, T_IMM),
+        "Memory to Accumulator" => (T_REG | T_REG_AL_AX, T_MEM),
+        "Accumulator to Memory" => (T_MEM, T_REG | T_REG_AL_AX),
+        "Register/Memory to Segment Register" => (T_SEG | T_BITS_16, T_REG | T_MEM),
+        "Segment Register to Register/Memory" => (T_REG | T_MEM, T_SEG | T_BITS_16),
+        "Register/Memory" => (T_REG | T_MEM, T_NONE),
+        "Register" => (T_REG, T_NONE),
+        "Segment Register" => (T_SEG | T_BITS_16, T_NONE),
+        "Register/Memory with Register" => (T_REG, T_REG | T_MEM),
+        "Register with Accumulator" => (T_REG | T_REG_AL_AX, T_REG),
+        "Fixed Port" => (T_IMM, T_NONE),
+        "Variable Port" => (T_IMM, T_NONE),
+        "" => (T_NONE, T_NONE),
+        "Reg./Memory with Register to Either" => (T_REG, T_REG | T_MEM),
+        "Immediate to Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+        "Reg./Memory and Register to Either" => (T_REG, T_REG | T_MEM),
+        "Immediate from Register/Memory" => (T_IMM, T_REG | T_MEM),
+        "Immediate from Accumulator" => (T_IMM, T_REG | T_REG_AL_AX),
+        "Register/memory" => (T_REG | T_MEM, T_NONE),
+        "Register/Memory and Register" => (T_REG, T_REG | T_MEM),
+        "Immediate with Register/Memory" => (T_REG | T_MEM, T_IMM),
+        "Immediate with Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+        "Immediate Data and Register/Memory" => (T_REG | T_MEM, T_IMM),
+        "Immediate Data and Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+        "Direct Within Segment" => (T_DISP | T_BITS_16, T_NONE),
+        "Indirect Within Segment" => (T_REG | T_MEM | T_BITS_16, T_NONE),
+        "Direct Intersegment" => (T_SEG_OFF, T_NONE),
+        "Indirect Intersegment" => (T_REG | T_MEM | T_BITS_16, T_NONE),
+        "Direct Within Segment-Short" => (T_DISP | T_BITS_8, T_NONE),
+        "Within Segment" => (T_NONE, T_NONE),
+        "Within Seg Adding Immed to SP" => (T_DISP | T_BITS_16, T_NONE),
+        "Intersegment" => (T_NONE, T_NONE),
+        "Intersegment Adding Immediate to SP" => (T_DISP | T_BITS_16, T_NONE),
+        "Type Specified" => (T_IMM | T_BITS_8, T_NONE),
+        "Type 3" => (T_NONE, T_NONE),
+        _ => unreachable!("operands: {}", s),
     }
 }
 
-fn generate_table(categories: &[Category]) {
+fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Category]) {
     let mut lines = vec![];
 
     for category in categories.iter() {
@@ -656,104 +658,98 @@ fn generate_table(categories: &[Category]) {
     lines.sort();
 
     for line in lines {
-        if line.destination == T_NONE && line.source == T_NONE {
-            println!("t!({}, [{}]),", line.mnemonic, codes_to_string(&line.codes));
+        let s = if line.destination == T_NONE && line.source == T_NONE {
+            format!(
+                "    t!({}, [{}]),\n",
+                line.mnemonic,
+                codes_to_string(&line.codes)
+            )
         } else if line.source == T_NONE {
-            println!(
-                "t!({}, {}, [{}]),",
+            format!(
+                "    t!({}, {}, [{}]),\n",
                 line.mnemonic,
                 format_type_flags(line.destination),
                 codes_to_string(&line.codes)
-            );
+            )
         } else {
-            println!(
-                "t!({}, {}, {}, [{}]),",
+            format!(
+                "    t!({}, {}, {}, [{}]),\n",
                 line.mnemonic,
                 format_type_flags(line.destination),
                 format_type_flags(line.source),
                 codes_to_string(&line.codes)
-            );
-        }
+            )
+        };
+
+        writer.write_all(s.as_bytes()).unwrap();
     }
 }
+
+const ABOVE: &str = "//! This file is generated by [build.rs]. DO NOT MODIFY.
+
+use crate::{Operation};
+use super::type_flags::*;
+use super::codes::*;
+
+pub struct Template {
+    pub operation: Operation,
+    pub dst: TypeFlags,
+    pub src: TypeFlags,
+    pub codes: &'static [Code],
+}
+
+impl std::fmt::Display for Template {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            \"{} [{}] [{}]\",
+            self.operation,
+            super::type_flags::format_type_flags(self.dst),
+            super::type_flags::format_type_flags(self.src),
+        )
+    }
+}
+
+macro_rules! t {
+    ($operation:ident, [$($more:expr),+]) => {{
+        Template {
+            operation: Operation::$operation,
+            dst: T_NONE,
+            src: T_NONE,
+            codes: &[$($more),*],
+        }
+    }};
+
+    ($operation:ident, $dst:expr, [$($more:expr),+]) => {{
+        Template {
+            operation: Operation::$operation,
+            dst: $dst,
+            src: T_NONE,
+            codes: &[$($more),*],
+        }
+    }};
+
+    ($operation:ident, $dst:expr, $src:expr, [$($more:expr),+]) => {{
+        Template {
+            operation: Operation::$operation,
+            dst: $dst,
+            src: $src,
+            codes: &[$($more),*],
+        }
+    }};
+}
+
+pub(crate) const TEMPLATES: &[Template] = &[
+";
+
+const BELOW: &str = "];
+";
 
 fn main() {
-    let data_sheet = include_str!("../data_sheet.txt");
+    let data_sheet = get_data_sheet();
+    let mut file = std::fs::File::create("src/template/templates.rs").unwrap();
 
-    let mut lines = parser::Lines::from_vec(data_sheet.split('\n').map(|s| s.to_owned()).collect());
-
-    let categories = parser::parse_categories(&mut lines);
-
-    // for category in categories {
-    //     println!("{}", category.name);
-    //     for instruction in category.instructions {
-    //         println!("  - {} ({})", instruction.mnemonic, instruction.description);
-    //         for encoding in instruction.encodings {
-    //             println!("      - {:40}  {:?}", encoding.operands, encoding.bytes);
-    //         }
-    //     }
-    // }
-
-    // categories.iter().for_each(|c| {
-    //     c.instructions.iter().for_each(|i| {
-    //         i.encodings.iter().for_each(|e| {
-    //             println!("{:?}", split_operands(e.operands.clone()));
-    //         })
-    //     })
-    // });
-
-    generate_table(&categories[..]);
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::Line;
-    use mrc_instruction::db2::{T_BITS_16, T_BITS_8, T_IMM, T_MEM, T_REG, T_REG_AL_AX};
-
-    macro_rules! line {
-        ($mnemonic:literal, $dst:expr, $src: expr) => {{
-            Line {
-                mnemonic: $mnemonic.to_string(),
-                destination: $dst,
-                source: $src,
-                codes: vec![],
-            }
-        }};
-    }
-
-    #[test]
-    fn sorted_on_size() {
-        let mut sorted = vec![
-            line!("ADC", T_REG | T_BITS_16, T_IMM | T_BITS_16),
-            line!("ADC", T_REG | T_BITS_8, T_IMM | T_BITS_8),
-        ];
-        sorted.sort();
-        assert_eq!(
-            sorted,
-            vec![
-                line!("ADC", T_REG | T_BITS_8, T_IMM | T_BITS_8),
-                line!("ADC", T_REG | T_BITS_16, T_IMM | T_BITS_16),
-            ]
-        );
-    }
-
-    #[test]
-    fn sorted_on_class() {
-        let mut sorted = vec![
-            line!("ADC", T_REG | T_MEM, T_REG),
-            line!("ADC", T_REG | T_REG_AL_AX, T_IMM),
-            line!("ADC", T_REG, T_REG | T_MEM),
-            line!("ADC", T_REG | T_MEM, T_IMM),
-        ];
-        sorted.sort();
-        assert_eq!(
-            sorted,
-            vec![
-                line!("ADC", T_REG | T_REG_AL_AX, T_IMM),
-                line!("ADC", T_REG, T_REG | T_MEM),
-                line!("ADC", T_REG | T_MEM, T_IMM),
-                line!("ADC", T_REG | T_MEM, T_REG),
-            ],
-        );
-    }
+    file.write_all(ABOVE.as_bytes()).unwrap();
+    generate_templates(&mut file, data_sheet.as_slice());
+    file.write_all(BELOW.as_bytes()).unwrap();
 }
