@@ -102,8 +102,8 @@ fn main() {
                 //     print!("{:02X} ", b);
                 // }
                 // println!();
-                // std::fs::write("out.com", bytes).unwrap();
-                bytes.iter().for_each(|b| println!("{:?}", b));
+                std::fs::write("out.com", bytes).unwrap();
+                // bytes.iter().for_each(|b| println!("{:?}", b));
             }
             Err(err) => {
                 // eprintln!("COMPILE ERROR: {}", err);

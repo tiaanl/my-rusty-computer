@@ -8,24 +8,40 @@ use crate::{
     SizedRegisterEncoding,
 };
 
-fn find_internal(
-    operation: Operation,
-    dst: TypeFlags,
-    src: TypeFlags,
-) -> Option<&'static Template> {
+pub fn find(operation: Operation, dst: TypeFlags, src: TypeFlags) -> Option<&'static Template> {
+    const PRINT: bool = false;
+
+    if PRINT {
+        println!(
+            "finding: {:?} [{}] [{}]",
+            operation,
+            format_type_flags(dst),
+            format_type_flags(src)
+        );
+    }
+
     for temp in TEMPLATES {
         macro_rules! check_type_flags {
             ($tf:ident) => {{
                 if $tf != T_NONE {
                     if !temp.$tf.contains(class::only($tf)) {
+                        if PRINT {
+                            println!("class does not match");
+                        }
                         continue;
                     }
 
-                    if !$tf.contains(sub_class::only(temp.$tf)) {
+                    if sub_class::only(temp.$tf) != 0 && !$tf.contains(sub_class::only(temp.$tf)) {
+                        if PRINT {
+                            println!("sub class does not match");
+                        }
                         continue;
                     }
 
-                    if !temp.$tf.contains(size::only($tf)) {
+                    if class::only($tf) != 0 && !temp.$tf.contains(size::only($tf)) {
+                        if PRINT {
+                            println!("size does not match");
+                        }
                         continue;
                     }
                 }
@@ -36,20 +52,27 @@ fn find_internal(
             continue;
         }
 
-        // println!(
-        //     "{:?} [{}] [{}] ==> [{}] [{}]",
-        //     temp.operation,
-        //     format_type_flags(temp.dst),
-        //     format_type_flags(temp.src),
-        //     format_type_flags(dst),
-        //     format_type_flags(src),
-        // );
+        if PRINT {
+            print!(
+                "  {:?} [{}] [{}] ==> [{}] [{}] ",
+                temp.operation,
+                format_type_flags(temp.dst),
+                format_type_flags(temp.src),
+                format_type_flags(dst),
+                format_type_flags(src),
+            );
+        }
 
         check_type_flags!(dst);
         check_type_flags!(src);
 
+        if PRINT {
+            println!();
+        }
+
         return Some(temp);
     }
+
     None
 }
 
@@ -58,6 +81,16 @@ fn operand_to_type(operand: &Operand) -> TypeFlags {
         Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size)) => {
             T_REG
                 | T_REG_AL_AX
+                | if let OperandSize::Byte = operand_size {
+                    T_BITS_8
+                } else {
+                    T_BITS_16
+                }
+        }
+
+        Operand::Register(SizedRegisterEncoding(RegisterEncoding::DlDx, operand_size)) => {
+            T_REG
+                | T_REG_DL_DX
                 | if let OperandSize::Byte = operand_size {
                     T_BITS_8
                 } else {
@@ -83,7 +116,7 @@ fn operand_to_type(operand: &Operand) -> TypeFlags {
                 }
         }
 
-        Operand::Direct(_, _, operand_size) => {
+        Operand::Direct(_, _, operand_size) | Operand::Indirect(_, _, _, operand_size) => {
             T_MEM
                 | if let OperandSize::Byte = operand_size {
                     T_BITS_8
@@ -96,15 +129,15 @@ fn operand_to_type(operand: &Operand) -> TypeFlags {
     }
 }
 
-pub fn find(insn: &Instruction) -> Option<&'static Template> {
-    let (dst, src) = match &insn.operands {
-        OperandSet::DestinationAndSource(dst, src) => (operand_to_type(dst), operand_to_type(src)),
-        OperandSet::Destination(dst) => (operand_to_type(dst), T_NONE),
-        OperandSet::None => (T_NONE, T_NONE),
-    };
-
-    find_internal(insn.operation, dst, src)
-}
+// pub fn find(insn: &Instruction) -> Option<&'static Template> {
+//     let (dst, src) = match &insn.operands {
+//         OperandSet::DestinationAndSource(dst, src) => (operand_to_type(dst), operand_to_type(src)),
+//         OperandSet::Destination(dst) => (operand_to_type(dst), T_NONE),
+//         OperandSet::None => (T_NONE, T_NONE),
+//     };
+//
+//     find_internal(insn.operation, dst, src)
+// }
 
 macro_rules! imm8 {
     ($value:expr) => {{

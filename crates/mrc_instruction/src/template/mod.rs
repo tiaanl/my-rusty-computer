@@ -1,6 +1,7 @@
-mod codes;
 mod find;
 mod templates;
-mod type_flags;
 
-pub use find::find;
+pub mod codes;
+pub mod type_flags;
+
+pub use {find::find, templates::Template};

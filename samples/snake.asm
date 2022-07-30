@@ -512,7 +512,8 @@ draw_char:                                           ; AX - x, BX - y, CL - colo
         MOV DI,AX
         MOV AX,0
         MOV AL,CH
-        SHL AX,3
+        MOV CL,3
+        SHL AX,CL
         ADD DI,AX
         POP AX
         MOV DX,CX

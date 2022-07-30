@@ -127,6 +127,15 @@ pub enum Register {
     Word(WordRegister),
 }
 
+impl Register {
+    pub fn data_size(&self) -> DataSize {
+        match self {
+            Register::Byte(_) => DataSize::Byte,
+            Register::Word(_) => DataSize::Word,
+        }
+    }
+}
+
 impl std::fmt::Display for Register {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -272,7 +281,7 @@ pub enum Value {
 impl<'a> std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Constant(value) => write!(f, "{}", *value),
+            Value::Constant(value) => write!(f, "{:#04X}", *value),
             Value::Label(label) => write!(f, "{}", *label),
         }
     }
@@ -402,14 +411,6 @@ pub enum Operand {
 }
 
 impl Operand {
-    pub fn is_memory(&self) -> bool {
-        matches!(self, Operand::Address(..) | Operand::Indirect(..))
-    }
-
-    pub fn is_register(&self) -> bool {
-        matches!(self, Operand::Register(..))
-    }
-
     pub fn span(&self) -> &Span {
         match self {
             Self::Immediate(span, _)
@@ -417,6 +418,16 @@ impl Operand {
             | Self::Indirect(span, _, _, _, _)
             | Self::Register(span, _)
             | Self::Segment(span, _) => span,
+        }
+    }
+
+    pub fn data_size(&self) -> Option<DataSize> {
+        match self {
+            Operand::Immediate(_, _) => None,
+            Operand::Address(_, _, data_size, _) => *data_size,
+            Operand::Indirect(_, _, _, data_size, _) => *data_size,
+            Operand::Register(_, register) => Some(register.data_size()),
+            Operand::Segment(_, _) => Some(DataSize::Word),
         }
     }
 }
@@ -540,7 +551,12 @@ impl<'a> std::fmt::Display for Line {
         match self {
             Line::Label(label) => write!(f, "{}:", label),
             Line::Instruction(instruction) => write!(f, "{}", instruction),
-            Line::Data(_, data) => write!(f, "db {:?}", data),
+            Line::Data(_, data) => data
+                .iter()
+                .map(|b| format!("{:#04X}", b))
+                .collect::<Vec<String>>()
+                .join(", ")
+                .fmt(f),
             Line::Constant(_, expr) => write!(f, "equ {}", expr),
             Line::Times(_, expr, content) => write!(f, "times {} {}", expr, content),
         }

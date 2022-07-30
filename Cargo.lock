@@ -1066,6 +1066,7 @@ name = "mrc_compiler"
 version = "0.1.0"
 dependencies = [
  "mrc_decoder",
+ "mrc_encoder",
  "mrc_instruction",
 ]
 
@@ -1100,7 +1101,6 @@ dependencies = [
 name = "mrc_encoder"
 version = "0.0.1"
 dependencies = [
- "mrc_decoder",
  "mrc_instruction",
 ]
 

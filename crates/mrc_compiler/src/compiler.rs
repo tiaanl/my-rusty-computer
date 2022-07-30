@@ -93,7 +93,7 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile(&mut self) -> Result<Vec<out::Instruction>, CompileError> {
+    pub fn compile(&mut self) -> Result<Vec<u8>, CompileError> {
         if self.resolve_labels()? > 0 {
             let label = self
                 .labels
@@ -105,37 +105,25 @@ impl Compiler {
             return Err(CompileError::UnresolvedReference(label));
         }
 
-        // self.debug_print_outputs();
+        self._debug_print_outputs();
 
-        let mut instructions = vec![];
+        let mut result = vec![];
 
+        let mut offset = 0;
         for output in &self.outputs {
-            if let ast::Line::Instruction(instruction) = &output.line {
-                let id = self.find_instruction_data(instruction)?;
-                let size_hint = instruction_data_size_hint(id);
-                instructions.push(self.compile_instruction(instruction, size_hint)?);
+            if matches!(
+                output.line,
+                ast::Line::Instruction(..) | ast::Line::Data(..)
+            ) {
+                // println!("line: {}", output.line);
+                for b in self.encode_line(&output.line, output.times, offset + output.size)? {
+                    result.push(b);
+                }
             }
+            offset += output.size;
         }
 
-        Ok(instructions)
-
-        // let mut result = vec![];
-        //
-        // let mut offset = 0;
-        // for output in &self.outputs {
-        //     if matches!(
-        //         output.line,
-        //         ast::Line::Instruction(..) | ast::Line::Data(..)
-        //     ) {
-        //         println!("line: {}", output.line);
-        //         for b in self.encode_line(&output.line, output.times, output.size, offset)? {
-        //             result.push(b);
-        //         }
-        //     }
-        //     offset += output.size;
-        // }
-        //
-        // Ok(result)
+        Ok(result)
     }
 
     fn _debug_print_outputs(&self) {
@@ -288,17 +276,14 @@ impl Compiler {
         }
     }
 
-    fn _encode_line(
+    fn encode_line(
         &self,
         line: &ast::Line,
         times: u16,
-        size: u16,
         offset: u16,
     ) -> Result<Vec<u8>, CompileError> {
         match line {
-            ast::Line::Instruction(instruction) => {
-                self._encode_instruction(instruction, size, offset)
-            }
+            ast::Line::Instruction(instruction) => self.encode_instruction(instruction, offset),
 
             ast::Line::Data(_, data) => {
                 let mut result = vec![];
@@ -318,321 +303,413 @@ impl Compiler {
         }
     }
 
-    fn _encode_instruction(
+    fn encode_instruction(
         &self,
         instruction: &ast::Instruction,
-        size: u16,
         offset: u16,
     ) -> Result<Vec<u8>, CompileError> {
-        let id = self.find_instruction_data(instruction)?;
-
-        macro_rules! displacement_to {
-            ($ts:ty, $tu:ty, $expr:expr, $offset:expr, $size:expr) => {{
-                let target_offset = self.evaluate_expression($expr)?;
-                let displacement = target_offset as i32 - ($offset as i32 + $size as i32);
-                assert!(displacement >= <$ts>::MIN as i32 && displacement <= <$ts>::MAX as i32);
-                displacement as $ts as $tu
-            }};
-        }
+        let template = self.find_instruction_template(instruction)?;
 
         let mut result = vec![];
 
-        for code in id.codes {
+        use out::template::codes::*;
+
+        match &instruction.operands {
+            ast::Operands::Destination(
+                _,
+                ast::Operand::Address(_, _, _, segment)
+                | ast::Operand::Indirect(_, _, _, _, segment),
+            ) => self.emit_segment_override(&mut result, segment),
+
+            ast::Operands::DestinationAndSource(
+                _,
+                ast::Operand::Address(_, _, _, segment)
+                | ast::Operand::Indirect(_, _, _, _, segment),
+                _,
+            ) => self.emit_segment_override(&mut result, segment),
+
+            ast::Operands::DestinationAndSource(
+                _,
+                _,
+                ast::Operand::Address(_, _, _, segment)
+                | ast::Operand::Indirect(_, _, _, _, segment),
+            ) => self.emit_segment_override(&mut result, segment),
+
+            // No segment override if we don't have some kind of address.
+            _ => {}
+        }
+
+        let mut it = template.codes.iter();
+        while let Some(&code) = it.next() {
             match code {
-                out::db::Code::Byte(byte) => result.push(*byte),
+                C_BYTE => {
+                    let byte = *it.next().unwrap();
+                    result.push(byte);
+                }
 
-                out::db::Code::Imm8 => match &instruction.operands {
-                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
-                        let value = self.evaluate_expression(expr)?;
-                        for b in (value as u8).to_le_bytes() {
-                            result.push(b);
+                C_REG_BASE => {
+                    let base = (*it.next().unwrap()) as u8;
+
+                    let reg = match &instruction.operands {
+                        ast::Operands::DestinationAndSource(
+                            _,
+                            ast::Operand::Register(_, register),
+                            _,
+                        ) => register.encoding(),
+
+                        ast::Operands::Destination(_, ast::Operand::Register(_, register)) => {
+                            register.encoding()
                         }
-                    }
 
-                    ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
-                        let value = self.evaluate_expression(expr)?;
-                        for b in (value as u8).to_le_bytes() {
-                            result.push(b);
+                        _ => unreachable!("C_REG_BASE {:?}", instruction),
+                    };
+
+                    result.push((base + reg) as Code);
+                }
+
+                C_MOD_RM => {
+                    let reg = *it.next().unwrap() as u8;
+                    match &instruction.operands {
+                        ast::Operands::Destination(_, ast::Operand::Register(_, src)) => {
+                            self.emit_mrrm_register(&mut result, reg, src.encoding());
                         }
-                    }
 
-                    ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _) => {
-                        let value = self.evaluate_expression(expr)?;
-                        for b in (value as u8).to_le_bytes() {
-                            result.push(b);
+                        ast::Operands::Destination(_, ast::Operand::Address(_, expr, _, _)) => {
+                            self.emit_mrrm_address(&mut result, reg, expr)?;
                         }
-                    }
 
-                    _ => todo!("{:?}", &instruction.operands),
-                },
-
-                out::db::Code::Imm16 => match &instruction.operands {
-                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
-                        let value = self.evaluate_expression(expr)?;
-                        for b in (value as u16).to_le_bytes() {
-                            result.push(b);
+                        ast::Operands::Destination(
+                            _,
+                            ast::Operand::Indirect(_, encoding, expr, _, _),
+                        ) => {
+                            self.emit_mrrm_indirect(&mut result, reg, encoding, expr)?;
                         }
-                    }
 
-                    ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
-                        let value = self.evaluate_expression(expr)?;
-                        for b in (value as u16).to_le_bytes() {
-                            result.push(b);
+                        ast::Operands::DestinationAndSource(
+                            _,
+                            ast::Operand::Register(_, other),
+                            _,
+                        )
+                        | ast::Operands::DestinationAndSource(
+                            _,
+                            _,
+                            ast::Operand::Register(_, other),
+                        ) => {
+                            self.emit_mrrm_register(&mut result, reg, other.encoding());
                         }
-                    }
 
-                    _ => todo!("{:?}", &instruction.operands),
-                },
-
-                out::db::Code::Disp8 => {
-                    if let ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) =
-                        &instruction.operands
-                    {
-                        let displacement = displacement_to!(i8, u8, expr, offset, size);
-                        for b in (displacement as i8 as u8).to_le_bytes() {
-                            result.push(b);
+                        ast::Operands::DestinationAndSource(
+                            _,
+                            ast::Operand::Address(_, expr, _, _),
+                            _,
+                        )
+                        | ast::Operands::DestinationAndSource(
+                            _,
+                            _,
+                            ast::Operand::Address(_, expr, _, _),
+                        ) => {
+                            self.emit_mrrm_address(&mut result, reg, expr)?;
                         }
+
+                        ast::Operands::DestinationAndSource(
+                            _,
+                            ast::Operand::Indirect(_, encoding, expr, _, _),
+                            _,
+                        )
+                        | ast::Operands::DestinationAndSource(
+                            _,
+                            _,
+                            ast::Operand::Indirect(_, encoding, expr, _, _),
+                        ) => {
+                            self.emit_mrrm_indirect(&mut result, reg, encoding, expr)?;
+                        }
+
+                        _ => unreachable!("C_MOD_RM {:?}", instruction),
                     }
                 }
 
-                out::db::Code::Disp16 => {
-                    if let ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) =
-                        &instruction.operands
-                    {
-                        let displacement = displacement_to!(i16, u16, expr, offset, size);
-                        for b in (displacement as i16 as u16).to_le_bytes() {
-                            result.push(b);
-                        }
-                    }
-                }
-
-                out::db::Code::PlusReg(start) => match &instruction.operands {
-                    ast::Operands::Destination(_, ast::Operand::Register(_, register)) => {
-                        result.push(start + register.encoding());
+                C_MOD_REG_RM => match &instruction.operands {
+                    ast::Operands::DestinationAndSource(
+                        _,
+                        ast::Operand::Register(_, dst),
+                        ast::Operand::Register(_, src),
+                    ) => {
+                        self.emit_mrrm_register(&mut result, dst.encoding(), src.encoding());
                     }
 
                     ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Register(_, register),
+                        ast::Operand::Register(_, reg),
+                        ast::Operand::Segment(_, seg),
+                    )
+                    | ast::Operands::DestinationAndSource(
                         _,
+                        ast::Operand::Segment(_, seg),
+                        ast::Operand::Register(_, reg),
                     ) => {
-                        result.push(start + register.encoding());
+                        self.emit_mrrm_register(&mut result, seg.encoding(), reg.encoding());
                     }
 
-                    _ => todo!("{:?}", &instruction.operands),
-                },
-
-                out::db::Code::ModRegRM => match &instruction.operands {
                     ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Address(_, expr, _, _),
                         ast::Operand::Register(_, register),
-                    ) => self._emit_mrrm_address(&mut result, register.encoding(), expr)?,
+                    )
+                    | ast::Operands::DestinationAndSource(
+                        _,
+                        ast::Operand::Register(_, register),
+                        ast::Operand::Address(_, expr, _, _),
+                    ) => {
+                        self.emit_mrrm_address(&mut result, register.encoding(), expr)?;
+                    }
 
                     ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Address(_, expr, _, _),
                         ast::Operand::Segment(_, segment),
-                    ) => self._emit_mrrm_address(&mut result, segment.encoding(), expr)?,
-
-                    ast::Operands::DestinationAndSource(
+                    )
+                    | ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Register(_, register),
+                        ast::Operand::Segment(_, segment),
                         ast::Operand::Address(_, expr, _, _),
                     ) => {
-                        self._emit_mrrm_address(&mut result, register.encoding(), expr)?;
+                        self.emit_mrrm_address(&mut result, segment.encoding(), expr)?;
                     }
 
                     ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Register(_, dst),
-                        ast::Operand::Register(_, src),
-                    ) => self._emit_mrrm(&mut result, 0b11, dst.encoding(), src.encoding()),
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Segment(_, dst),
-                        ast::Operand::Register(_, src),
+                        ast::Operand::Indirect(_, encoding, expr, _, _),
+                        ast::Operand::Register(_, register),
                     )
                     | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, src),
-                        ast::Operand::Segment(_, dst),
-                    ) => self._emit_mrrm(&mut result, 0b11, dst.encoding(), src.encoding()),
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Indirect(_, indirect_encoding, expr, _, _),
-                        ast::Operand::Register(_, reg),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, reg),
-                        ast::Operand::Indirect(_, indirect_encoding, expr, _, _),
-                    ) => {
-                        let r = reg.encoding();
-
-                        if let Some(expr) = expr {
-                            let value = self.evaluate_expression(expr)?;
-                            if value < i8::MIN as i32 || value > i8::MAX as i32 {
-                                self._emit_mrrm(&mut result, 0b01, r, indirect_encoding.encoding());
-                                result.push(value as i8 as u8);
-                            } else {
-                                self._emit_mrrm(&mut result, 0b10, r, indirect_encoding.encoding());
-                                for b in (value as i16 as u16).to_le_bytes() {
-                                    result.push(b);
-                                }
-                            }
-                        } else {
-                            self._emit_mrrm(&mut result, 0b11, r, indirect_encoding.encoding());
-                        }
-                    }
-
-                    // ast::Operands::DestinationAndSource(_, ast::Operand::Indirect(_, indirect_encoding, expr, _, _), ast::Operand::Immediate(_, imm_expr)) => {
-                    //
-                    // }
-                    _ => todo!("{:?}", &instruction.operands),
-                },
-
-                out::db::Code::ModRM(r) => match &instruction.operands {
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Address(_, expr, data_size, _),
-                        ast::Operand::Immediate(_, imm),
-                    ) => {
-                        let mrrm = (0b00 << 6) + (0b110 << 3) + r;
-                        result.push(mrrm);
-
-                        let value = self.evaluate_expression(expr)?;
-                        for b in (value as u16).to_le_bytes() {
-                            result.push(b);
-                        }
-
-                        let value = self.evaluate_expression(imm)?;
-
-                        if let Some(data_size) = data_size {
-                            match data_size {
-                                ast::DataSize::Byte => {
-                                    for b in (value as u8).to_le_bytes() {
-                                        result.push(b);
-                                    }
-                                }
-                                ast::DataSize::Word => {
-                                    for b in (value as u16).to_le_bytes() {
-                                        result.push(b);
-                                    }
-                                }
-                            }
-                        } else {
-                            unreachable!()
-                        }
-                    }
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Indirect(_, indirect_encoding, expr, data_size, _),
-                        ast::Operand::Immediate(_, imm),
-                    ) => {
-                        self._emit_indirect_mrrm(&mut result, *r, indirect_encoding, expr)?;
-                        match data_size {
-                            Some(ast::DataSize::Byte) => {
-                                self._emit_immediate_byte(&mut result, imm)?;
-                            }
-                            Some(ast::DataSize::Word) => {
-                                self._emit_immediate_word(&mut result, imm)?;
-                            }
-                            None => unreachable!(),
-                        }
-                    }
-
-                    ast::Operands::Destination(_, ast::Operand::Address(_, expr, _, _)) => {
-                        self._emit_mrrm(&mut result, 0b00, *r, 0b110);
-                        self._emit_immediate_word(&mut result, expr)?;
-                    }
-
-                    ast::Operands::Destination(_, ast::Operand::Register(_, register)) => {
-                        self._emit_mrrm(&mut result, 0b11, *r, register.encoding());
-                    }
-
-                    ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Register(_, register),
-                        ast::Operand::Immediate(_, expr),
+                        ast::Operand::Indirect(_, encoding, expr, _, _),
                     ) => {
-                        match register {
-                            ast::Register::Byte(register) => {
-                                self._emit_mrrm(&mut result, 0b11, *r, register.encoding());
-                                self._emit_immediate_byte(&mut result, expr)?;
-                            }
-                            ast::Register::Word(register) => {
-                                self._emit_mrrm(&mut result, 0b11, *r, register.encoding());
-                                self._emit_immediate_word(&mut result, expr)?;
-                            }
-                        };
+                        self.emit_mrrm_indirect(&mut result, register.encoding(), encoding, expr)?;
                     }
 
-                    _ => todo!("{:?}", &instruction.operands),
+                    _ => unreachable!("C_MOD_REG_RM {:?}", instruction),
                 },
 
-                out::db::Code::SignImm8 => match &instruction.operands {
+                C_IMM_BYTE => match &instruction.operands {
+                    ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _) => {
+                        self.emit_immediate_byte(&mut result, expr)?;
+                    }
+
                     ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
-                        let value = self.evaluate_expression(expr)?;
-                        for b in (value as i8 as u8 as u16).to_le_bytes() {
-                            result.push(b);
-                        }
+                        self.emit_immediate_byte(&mut result, expr)?;
                     }
 
-                    _ => todo!("{:?}", &instruction.operands),
+                    ast::Operands::Destination(_, dst) => match dst {
+                        ast::Operand::Immediate(_, expr) => {
+                            self.emit_immediate_byte(&mut result, expr)?;
+                        }
+
+                        _ => unreachable!(),
+                    },
+
+                    _ => unreachable!("C_IMM_BYTE {:?}", instruction),
                 },
 
-                _ => todo!("{:?}", code),
+                C_IMM_WORD => match &instruction.operands {
+                    ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _)
+                    | ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr))
+                    | ast::Operands::Destination(_, ast::Operand::Immediate(_, expr))
+                    | ast::Operands::DestinationAndSource(
+                        _,
+                        ast::Operand::Address(_, expr, _, _),
+                        _,
+                    )
+                    | ast::Operands::DestinationAndSource(
+                        _,
+                        _,
+                        ast::Operand::Address(_, expr, _, _),
+                    ) => {
+                        self.emit_immediate_word(&mut result, expr)?;
+                    }
+
+                    _ => unreachable!("C_IMM_WORD {:?}", instruction),
+                },
+
+                C_IMM_BYTE_SIGN => todo!(),
+
+                C_IMM_WORD_SIGN => todo!(),
+
+                C_DISP_BYTE => match &instruction.operands {
+                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+                        // The value stored in the expression is the address of the instruction
+                        // we want to go to, so calculate the displacement.
+                        let value = self.evaluate_expression(expr)? - (offset as i32);
+
+                        self.emit_immediate_signed_byte(
+                            &mut result,
+                            &ast::Expression::Value(
+                                expr.span().clone(),
+                                ast::Value::Constant(value),
+                            ),
+                        )?;
+                    }
+
+                    _ => unreachable!("C_DISP_BYTE {:?}", instruction),
+                },
+
+                C_DISP_WORD => match &instruction.operands {
+                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr))
+                    | ast::Operands::DestinationAndSource(
+                        _,
+                        ast::Operand::Address(_, expr, _, _),
+                        _,
+                    )
+                    | ast::Operands::DestinationAndSource(
+                        _,
+                        _,
+                        ast::Operand::Address(_, expr, _, _),
+                    ) => {
+                        // The value stored in the expression is the address of the instruction
+                        // we want to go to, so calculate the displacement.
+                        let value = self.evaluate_expression(expr)? - (offset as i32);
+
+                        self.emit_immediate_signed_word(
+                            &mut result,
+                            &ast::Expression::Value(
+                                expr.span().clone(),
+                                ast::Value::Constant(value),
+                            ),
+                        )?;
+                    }
+
+                    _ => unreachable!("C_DISP_WORD {:?}", instruction),
+                },
+
+                C_SEG_OFF => todo!(),
+
+                _ => unreachable!(),
             }
         }
 
         Ok(result)
     }
 
-    fn _emit_mrrm(&self, out: &mut Vec<u8>, mode: u8, reg: u8, reg_mem: u8) {
+    fn emit_mrrm(&self, out: &mut Vec<u8>, mode: u8, reg: u8, reg_mem: u8) {
         let mrrm = (mode << 6) + (reg << 3) + reg_mem;
         out.push(mrrm);
     }
 
-    fn _emit_immediate_byte(
+    fn emit_segment_override(&self, out: &mut Vec<u8>, segment: &Option<ast::Segment>) {
+        // ES = 26 = 100110
+        // CS = 2E = 101110
+        // SS = 36 = 110110
+        // DS = 3E = 111110
+
+        match segment {
+            None | Some(ast::Segment::DS) => {}
+            Some(ast::Segment::ES) => out.push(0b100110),
+            Some(ast::Segment::SS) => out.push(0b110110),
+            Some(ast::Segment::CS) => out.push(0b101110),
+        }
+    }
+
+    fn emit_immediate_byte(
         &self,
         out: &mut Vec<u8>,
         expr: &ast::Expression,
     ) -> Result<(), CompileError> {
         let value = self.evaluate_expression(expr)?;
+
+        if value < 0 || value >= u8::MAX as i32 {
+            return Err(CompileError::ImmediateValueOutOfRange(
+                expr.span().clone(),
+                value,
+            ));
+        }
+
         for b in (value as u8).to_le_bytes() {
             out.push(b);
         }
+
         Ok(())
     }
 
-    fn _emit_immediate_word(
+    fn emit_immediate_signed_byte(
         &self,
         out: &mut Vec<u8>,
         expr: &ast::Expression,
     ) -> Result<(), CompileError> {
         let value = self.evaluate_expression(expr)?;
-        for b in (value as u16).to_le_bytes() {
+
+        if value <= i8::MIN as i32 || value >= i8::MAX as i32 {
+            return Err(CompileError::ImmediateValueOutOfRange(
+                expr.span().clone(),
+                value,
+            ));
+        }
+
+        for b in (value as i8 as u8).to_le_bytes() {
             out.push(b);
         }
+
         Ok(())
     }
 
-    fn _emit_mrrm_address(
+    fn emit_immediate_word(
+        &self,
+        out: &mut Vec<u8>,
+        expr: &ast::Expression,
+    ) -> Result<(), CompileError> {
+        let value = self.evaluate_expression(expr)?;
+
+        if value < 0 || value >= u16::MAX as i32 {
+            return Err(CompileError::ImmediateValueOutOfRange(
+                expr.span().clone(),
+                value,
+            ));
+        }
+
+        for b in (value as u16).to_le_bytes() {
+            out.push(b);
+        }
+
+        Ok(())
+    }
+
+    fn emit_immediate_signed_word(
+        &self,
+        out: &mut Vec<u8>,
+        expr: &ast::Expression,
+    ) -> Result<(), CompileError> {
+        let value = self.evaluate_expression(expr)?;
+
+        if value < i16::MIN as i32 || value >= i16::MAX as i32 {
+            return Err(CompileError::ImmediateValueOutOfRange(
+                expr.span().clone(),
+                value,
+            ));
+        }
+
+        for b in (value as i16 as u16).to_le_bytes() {
+            out.push(b);
+        }
+
+        Ok(())
+    }
+
+    fn emit_mrrm_register(&self, out: &mut Vec<u8>, reg: u8, reg_mem: u8) {
+        self.emit_mrrm(out, 0b11, reg, reg_mem);
+    }
+
+    fn emit_mrrm_address(
         &self,
         out: &mut Vec<u8>,
         reg: u8,
         expr: &ast::Expression,
     ) -> Result<(), CompileError> {
-        self._emit_mrrm(out, 0b00, reg, 0b110);
-        self._emit_immediate_word(out, expr)?;
+        self.emit_mrrm(out, 0b00, reg, 0b110);
+        self.emit_immediate_word(out, expr)?;
         Ok(())
     }
 
-    fn _emit_indirect_mrrm(
+    fn emit_mrrm_indirect(
         &self,
         out: &mut Vec<u8>,
         reg: u8,
@@ -642,25 +719,24 @@ impl Compiler {
         if let Some(expr) = expr {
             let value = self.evaluate_expression(expr)?;
             if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-                self._emit_mrrm(out, 0b01, reg, indirect_encoding.encoding());
+                self.emit_mrrm(out, 0b01, reg, indirect_encoding.encoding());
                 out.push(value as i8 as u8);
             } else {
-                self._emit_mrrm(out, 0b10, reg, indirect_encoding.encoding());
+                self.emit_mrrm(out, 0b10, reg, indirect_encoding.encoding());
                 for b in (value as i16 as u16).to_le_bytes() {
                     out.push(b);
                 }
             }
             Ok(())
         } else {
-            self._emit_mrrm(out, 0b00, reg, indirect_encoding.encoding());
+            self.emit_mrrm(out, 0b00, reg, indirect_encoding.encoding());
             Ok(())
         }
     }
 
-    fn compile_instruction(
+    fn _compile_instruction(
         &self,
         instruction: &ast::Instruction,
-        size_hint: Option<ast::DataSize>,
     ) -> Result<out::Instruction, CompileError> {
         Ok(match &instruction.operands {
             ast::Operands::None(_) => out::Instruction {
@@ -671,22 +747,31 @@ impl Compiler {
 
             ast::Operands::Destination(_, dst) => out::Instruction {
                 operation: instruction.operation,
-                operands: out::OperandSet::Destination(self.compile_operand(dst, size_hint)?),
+                operands: out::OperandSet::Destination(self._compile_operand(dst, None)?),
                 repeat: None,
             },
 
-            ast::Operands::DestinationAndSource(_, dst, src) => out::Instruction {
-                operation: instruction.operation,
-                operands: out::OperandSet::DestinationAndSource(
-                    self.compile_operand(dst, size_hint)?,
-                    self.compile_operand(src, size_hint)?,
-                ),
-                repeat: None,
-            },
+            ast::Operands::DestinationAndSource(_, dst, src) => {
+                let size_hint = match (dst.data_size(), src.data_size()) {
+                    (Some(d), Some(s)) if d == s => Some(d),
+                    (Some(d), None) => Some(d),
+                    (None, Some(s)) => Some(s),
+                    _ => unreachable!(),
+                };
+
+                out::Instruction {
+                    operation: instruction.operation,
+                    operands: out::OperandSet::DestinationAndSource(
+                        self._compile_operand(dst, size_hint)?,
+                        self._compile_operand(src, size_hint)?,
+                    ),
+                    repeat: None,
+                }
+            }
         })
     }
 
-    fn compile_operand(
+    fn _compile_operand(
         &self,
         operand: &ast::Operand,
         size_hint: Option<ast::DataSize>,
@@ -813,10 +898,9 @@ impl Compiler {
     fn calculate_line_size(&self, line: &ast::Line) -> Result<u16, CompileError> {
         Ok(match line {
             ast::Line::Instruction(instruction) => {
-                match self.calculate_instruction_size(instruction) {
-                    Ok(size) => size,
-                    Err(err) => return Err(err),
-                }
+                let size_in_bytes = self.calculate_instruction_size(instruction)?;
+
+                size_in_bytes as u16
             }
 
             ast::Line::Data(_, data) => data.len() as u16,
@@ -829,300 +913,241 @@ impl Compiler {
         &self,
         instruction: &ast::Instruction,
     ) -> Result<u16, CompileError> {
-        let idata = self.find_instruction_data(instruction)?;
+        use out::template::codes::*;
+
+        let template = self.find_instruction_template(instruction)?;
 
         let mut total_size = 0;
-
-        for code in idata.codes {
-            match code {
-                out::db::Code::ModRegRM => total_size += 1,
-
-                out::db::Code::ModRM(_) => total_size += 1,
-
-                out::db::Code::PlusReg(_) => total_size += 1,
-
-                out::db::Code::Byte(_) | out::db::Code::Imm8 => total_size += 1,
-
-                out::db::Code::Imm16 => total_size += 2,
-
-                out::db::Code::Disp8 => total_size += 1,
-
-                out::db::Code::Disp16 => total_size += 2,
-
-                out::db::Code::SignImm8 => {
-                    // TODO: Not sure if this correct!
-                    total_size += 2;
+        let mut i = template.codes.iter();
+        while let Some(code) = i.next() {
+            match *code {
+                C_BYTE => {
+                    total_size += 1;
+                    let _ = i.next();
                 }
 
-                _ => todo!("{:?}", code),
+                C_REG_BASE => {
+                    total_size += 1;
+                    let _ = i.next();
+                }
+
+                C_MOD_RM => {
+                    let _encoding = i.next().unwrap();
+                    match &instruction.operands {
+                        ast::Operands::Destination(_, dst) => {
+                            // Use a dummy source, because it is just an encoding.
+                            total_size += self.calculate_mrrm_size(
+                                dst,
+                                &ast::Operand::Register(
+                                    0..0,
+                                    ast::Register::Word(ast::WordRegister::Ax),
+                                ),
+                            )?;
+                        }
+
+                        ast::Operands::DestinationAndSource(_, dst, src) => {
+                            total_size += self.calculate_mrrm_size(dst, src)?;
+                        }
+
+                        _ => unreachable!("Invalid operands for mrrm {:?}", &instruction.operands),
+                    }
+                }
+
+                C_MOD_REG_RM => {
+                    if let ast::Operands::DestinationAndSource(_, dst, src) = &instruction.operands
+                    {
+                        total_size += self.calculate_mrrm_size(dst, src)?;
+                    } else {
+                        unreachable!("Invalid operands for mrrm {:?}", &instruction.operands)
+                    };
+                }
+
+                C_IMM_BYTE => total_size += 1,
+
+                C_IMM_WORD => total_size += 2,
+
+                C_IMM_BYTE_SIGN => total_size += 1,
+
+                C_IMM_WORD_SIGN => total_size += 2,
+
+                C_DISP_BYTE => total_size += 1,
+
+                C_DISP_WORD => total_size += 2,
+
+                C_SEG_OFF => total_size += 4,
+
+                _ => unreachable!(),
             }
         }
 
+        // print!("{} == {}", template, total_size);
+
         Ok(total_size)
+    }
+
+    fn calculate_mrrm_size(
+        &self,
+        dst: &ast::Operand,
+        src: &ast::Operand,
+    ) -> Result<u16, CompileError> {
+        fn segment_size(seg: &Option<ast::Segment>) -> u16 {
+            match seg {
+                None | Some(ast::Segment::DS) => 0,
+                _ => 1,
+            }
+        }
+
+        Ok(match (dst, src) {
+            (
+                ast::Operand::Register(_, _),
+                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
+            )
+            | (ast::Operand::Segment(_, _), ast::Operand::Register(_, _)) => 1,
+
+            (
+                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
+                ast::Operand::Address(_, _, _, segment),
+            )
+            | (
+                ast::Operand::Address(_, _, _, segment),
+                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
+            ) => 3 + segment_size(segment),
+
+            (
+                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
+                ast::Operand::Indirect(_, _, expr, _, segment),
+            )
+            | (
+                ast::Operand::Indirect(_, _, expr, _, segment),
+                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
+            ) => self.indirect_mrrm_size(expr)? + segment_size(segment),
+
+            (
+                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
+                ast::Operand::Immediate(_, _),
+            ) => {
+                // mrrm + direct address (immediate gets calculated by another code.
+                3
+            }
+
+            (ast::Operand::Address(_, _, _, segment), ast::Operand::Immediate(_, _)) => {
+                // mrrm + direct address (immediate gets calculated by another code.
+                3 + segment_size(segment)
+            }
+
+            (ast::Operand::Indirect(_, _, expr, _, segment), ast::Operand::Immediate(_, _)) => {
+                self.indirect_mrrm_size(expr)? + segment_size(segment)
+            }
+
+            (d, s) => todo!("{:?}, {:?}", d, s),
+        })
+    }
+
+    fn indirect_mrrm_size(&self, expr: &Option<ast::Expression>) -> Result<u16, CompileError> {
+        Ok(if let Some(expr) = expr {
+            let value = self.evaluate_expression(expr)?;
+            if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
+                // Byte displacement.
+                2
+            } else {
+                // Word displacement.
+                3
+            }
+        } else {
+            // No displacement.
+            1
+        })
     }
 }
 
 impl Compiler {
-    fn find_instruction_data(
+    fn find_instruction_template(
         &self,
         instruction: &ast::Instruction,
-    ) -> Result<&out::db::InstructionData, CompileError> {
-        for instruction_data in out::db::INSTRUCTIONS {
-            if instruction.operation != instruction_data.operation {
-                continue;
-            }
+    ) -> Result<&out::template::Template, CompileError> {
+        use out::template::type_flags::*;
 
-            if self.operand_set_matches_operand_encodings(
-                &instruction.operands,
-                &instruction_data.destination,
-                &instruction_data.source,
-                instruction_data_size_hint(instruction_data),
-            )? {
-                return Ok(instruction_data);
-            }
+        let operands = match &instruction.operands {
+            ast::Operands::None(_) => (T_NONE, T_NONE),
+            ast::Operands::Destination(_, dst) => (self.operand_to_type_flags(dst)?, T_NONE),
+            ast::Operands::DestinationAndSource(_, dst, src) => (
+                self.operand_to_type_flags(dst)?,
+                self.operand_to_type_flags(src)?,
+            ),
+        };
+
+        match out::template::find(instruction.operation, operands.0, operands.1) {
+            Some(template) => Ok(template),
+            None => Err(CompileError::InvalidOperands(
+                instruction.operands.span().clone(),
+                instruction.clone(),
+                vec![],
+            )),
         }
-
-        let possible: Vec<&out::db::InstructionData> = out::db::INSTRUCTIONS
-            .iter()
-            .filter(|ie| ie.operation == instruction.operation)
-            .collect();
-
-        Err(CompileError::InvalidOperands(
-            instruction.operands.span().clone(),
-            instruction.clone(),
-            possible,
-        ))
     }
 
-    fn operand_set_matches_operand_encodings(
-        &self,
-        operand_set: &ast::Operands,
-        destination: &out::db::OperandEncoding,
-        source: &out::db::OperandEncoding,
-        size_hint: Option<ast::DataSize>,
-    ) -> Result<bool, CompileError> {
-        Ok(match operand_set {
-            ast::Operands::None(_) => {
-                *destination == out::db::OperandEncoding::None
-                    && *source == out::db::OperandEncoding::None
-            }
-
-            ast::Operands::Destination(_, d) => {
-                *source == out::db::OperandEncoding::None
-                    && self.matches_operand_encoding(d, destination, size_hint)?
-            }
-
-            ast::Operands::DestinationAndSource(_, d, s) => {
-                self.matches_operand_encoding(d, destination, size_hint.clone())?
-                    && self.matches_operand_encoding(s, source, size_hint)?
-            }
-        })
-    }
-
-    fn matches_operand_encoding(
+    fn operand_to_type_flags(
         &self,
         operand: &ast::Operand,
-        operand_encoding: &out::db::OperandEncoding,
-        size_hint: Option<ast::DataSize>,
-    ) -> Result<bool, CompileError> {
-        Ok(match operand_encoding {
-            out::db::OperandEncoding::None => false,
-
-            out::db::OperandEncoding::Imm => {
-                if let Some(size_hint) = size_hint {
-                    match size_hint {
-                        ast::DataSize::Byte => matches!(operand, ast::Operand::Immediate(_, _)),
-                        ast::DataSize::Word => matches!(operand, ast::Operand::Immediate(_, _)),
-                    }
+    ) -> Result<out::template::type_flags::TypeFlags, CompileError> {
+        use out::template::type_flags::*;
+        Ok(match operand {
+            ast::Operand::Immediate(_, expr) => {
+                let value = self.evaluate_expression(expr)?;
+                if value == 1 {
+                    T_IMM | T_ONE
                 } else {
-                    panic!(
-                        "Size could not be determined {:?} {:?} {:?}",
-                        operand, operand_encoding, size_hint
-                    );
+                    T_IMM
                 }
             }
 
-            out::db::OperandEncoding::Imm8 => match operand {
-                ast::Operand::Immediate(_, expr) => {
-                    let value = self.evaluate_expression(expr)?;
-                    value >= 0 && value <= u8::MAX as i32
-                }
-
-                _ => false,
-            },
-
-            out::db::OperandEncoding::Imm16 => match operand {
-                ast::Operand::Immediate(_, expr) => {
-                    let value = self.evaluate_expression(expr)?;
-                    value >= 0 && value <= u16::MAX as i32
-                }
-
-                _ => false,
-            },
-
-            out::db::OperandEncoding::Sbw => {
-                // TODO: Check the actual value here.
-                false
-            }
-
-            out::db::OperandEncoding::RegAl => matches!(
-                operand,
-                ast::Operand::Register(_, ast::Register::Byte(ast::ByteRegister::Al)),
-            ),
-
-            out::db::OperandEncoding::RegAx => matches!(
-                operand,
-                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Ax)),
-            ),
-
-            out::db::OperandEncoding::RegDx => matches!(
-                operand,
-                ast::Operand::Register(_, ast::Register::Word(ast::WordRegister::Dx)),
-            ),
-
-            out::db::OperandEncoding::Reg8 => {
-                matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
-            }
-
-            out::db::OperandEncoding::Reg16 => {
-                matches!(operand, ast::Operand::Register(_, ast::Register::Word(_)))
-            }
-
-            out::db::OperandEncoding::Seg => {
-                matches!(operand, ast::Operand::Segment(_, _))
-            }
-
-            out::db::OperandEncoding::Disp8 => matches!(operand, ast::Operand::Immediate(_, _)),
-
-            out::db::OperandEncoding::Disp16 => matches!(operand, ast::Operand::Immediate(_, _)),
-
-            out::db::OperandEncoding::Mem => {
-                if let Some(size_hint) = size_hint {
-                    match size_hint {
-                        ast::DataSize::Byte => {
-                            matches!(
-                                operand,
-                                ast::Operand::Address(..) | ast::Operand::Indirect(..)
-                            )
-                        }
-                        ast::DataSize::Word => {
-                            matches!(
-                                operand,
-                                ast::Operand::Address(..) | ast::Operand::Indirect(..)
-                            )
-                        }
+            ast::Operand::Register(_, ast::Register::Byte(register)) => {
+                T_REG
+                    | T_BITS_8
+                    | match register {
+                        ast::ByteRegister::Al => T_REG_AL_AX,
+                        ast::ByteRegister::Cl => T_REG_CL_CX,
+                        ast::ByteRegister::Dl => T_REG_DL_DX,
+                        _ => 0,
                     }
-                } else {
-                    // panic!("no size hint specified")
-                    false
-                }
             }
 
-            out::db::OperandEncoding::Mem8 => {
-                matches!(
-                    operand,
-                    ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
-                        | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Byte), _)
-                )
+            ast::Operand::Register(_, ast::Register::Word(register)) => {
+                T_REG
+                    | T_BITS_16
+                    | match register {
+                        ast::WordRegister::Ax => T_REG_AL_AX,
+                        ast::WordRegister::Cx => T_REG_CL_CX,
+                        ast::WordRegister::Dx => T_REG_DL_DX,
+                        _ => 0,
+                    }
             }
 
-            out::db::OperandEncoding::Mem16 => {
-                matches!(
-                    operand,
-                    ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
-                        | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Word), _)
-                )
+            ast::Operand::Address(_, _, data_size, _) => {
+                T_MEM_DIR
+                    | match data_size {
+                        None => 0,
+                        Some(ast::DataSize::Byte) => T_BITS_8,
+                        Some(ast::DataSize::Word) => T_BITS_16,
+                    }
             }
 
-            out::db::OperandEncoding::RegMem8 => {
-                matches!(operand, ast::Operand::Register(_, ast::Register::Byte(_)))
-                    || matches!(
-                        operand,
-                        ast::Operand::Address(_, _, Some(ast::DataSize::Byte), _)
-                            | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Byte), _)
-                    )
+            ast::Operand::Indirect(_, _, _, data_size, _) => {
+                T_MEM_IND
+                    | match data_size {
+                        None => 0,
+                        Some(ast::DataSize::Byte) => T_BITS_8,
+                        Some(ast::DataSize::Word) => T_BITS_16,
+                    }
             }
 
-            out::db::OperandEncoding::RegMem16 => {
-                matches!(operand, ast::Operand::Register(_, ast::Register::Word(_)))
-                    || matches!(
-                        operand,
-                        ast::Operand::Address(_, _, Some(ast::DataSize::Word), _)
-                            | ast::Operand::Indirect(_, _, _, Some(ast::DataSize::Word), _)
-                    )
-            }
-
-            out::db::OperandEncoding::SegEs => {
-                matches!(operand, ast::Operand::Segment(_, ast::Segment::ES))
-            }
-
-            out::db::OperandEncoding::SegCs => {
-                matches!(operand, ast::Operand::Segment(_, ast::Segment::CS))
-            }
-
-            out::db::OperandEncoding::SegSs => {
-                matches!(operand, ast::Operand::Segment(_, ast::Segment::SS))
-            }
-
-            out::db::OperandEncoding::SegDs => {
-                matches!(operand, ast::Operand::Segment(_, ast::Segment::DS))
-            }
-
-            // out::db::OperandEncoding::SegDs => {
-            //     matches!(operand, ast::Operand::Segment(_, ast::Segment::DS))
-            // }
-            out::db::OperandEncoding::SegOff => false, // TODO
-
-            _ => {
-                todo!("operand encoding: {:?}", operand_encoding);
-            }
+            ast::Operand::Segment(_, segment) => match segment {
+                ast::Segment::ES => T_SEG | T_SEG_ES | T_BITS_16,
+                ast::Segment::CS => T_SEG | T_SEG_CS | T_BITS_16,
+                ast::Segment::SS => T_SEG | T_SEG_SS | T_BITS_16,
+                ast::Segment::DS => T_SEG | T_SEG_DS | T_BITS_16,
+            },
         })
-    }
-}
-
-fn instruction_data_size_hint(id: &out::db::InstructionData) -> Option<ast::DataSize> {
-    match (
-        operand_encoding_size_hint(&id.destination),
-        operand_encoding_size_hint(&id.source),
-    ) {
-        (Some(d), Some(s)) if d == s => Some(d),
-        (Some(size), None) => Some(size),
-        (None, Some(size)) => Some(size),
-        (Some(_), Some(_)) => None,
-        (None, None) => None,
-    }
-}
-
-fn operand_encoding_size_hint(oe: &out::db::OperandEncoding) -> Option<ast::DataSize> {
-    use out::db::OperandEncoding;
-    match oe {
-        OperandEncoding::None => None,
-        OperandEncoding::Imm => None,
-        OperandEncoding::Imm8 => Some(ast::DataSize::Byte),
-        OperandEncoding::Imm16 => Some(ast::DataSize::Word),
-        OperandEncoding::Sbw => None,
-        OperandEncoding::Sbw8 => Some(ast::DataSize::Byte),
-        OperandEncoding::Sbw16 => Some(ast::DataSize::Word),
-        OperandEncoding::RegAl => Some(ast::DataSize::Byte),
-        OperandEncoding::RegAx => Some(ast::DataSize::Word),
-        OperandEncoding::RegCl => Some(ast::DataSize::Byte),
-        OperandEncoding::RegCx => Some(ast::DataSize::Word),
-        OperandEncoding::RegDx => Some(ast::DataSize::Word),
-        OperandEncoding::Reg8 => Some(ast::DataSize::Byte),
-        OperandEncoding::Reg16 => Some(ast::DataSize::Word),
-        OperandEncoding::SegEs => Some(ast::DataSize::Word),
-        OperandEncoding::SegCs => Some(ast::DataSize::Word),
-        OperandEncoding::SegSs => Some(ast::DataSize::Word),
-        OperandEncoding::SegDs => Some(ast::DataSize::Word),
-        OperandEncoding::Seg => Some(ast::DataSize::Word),
-        OperandEncoding::SegOff => None,
-        OperandEncoding::Mem => None,
-        OperandEncoding::Mem8 => Some(ast::DataSize::Byte),
-        OperandEncoding::Mem16 => Some(ast::DataSize::Word),
-        OperandEncoding::RegMem8 => Some(ast::DataSize::Byte),
-        OperandEncoding::RegMem16 => Some(ast::DataSize::Word),
-        OperandEncoding::Disp8 => Some(ast::DataSize::Byte),
-        OperandEncoding::Disp16 => Some(ast::DataSize::Word),
     }
 }
 
@@ -1156,50 +1181,25 @@ mod tests {
     use super::*;
     use crate::Parser;
 
-    // #[test]
-    // fn basic() {
-    //     let mut compiler = Compiler::default();
-    //     compiler.push_line(ast::Line::Label(ast::Label(0..0, "test".to_owned())));
-    //     assert_eq!(Vec::<u8>::new(), compiler.compile().unwrap());
-    // }
+    macro_rules! compile_test {
+        ($source:literal, $binary:literal) => {{
+            let source = include_str!($source);
 
-    // #[test]
-    // fn basic_2() {
-    //     let mut compiler = Compiler::default();
-    //     compiler.push_line(ast::Line::Instruction(ast::Instruction {
-    //         span: 0..0,
-    //         operation: out::Operation::MOV,
-    //         operands: ast::Operands::DestinationAndSource(
-    //             0..0,
-    //             ast::Operand::Address(
-    //                 0..0,
-    //                 ast::Expression::Value(0..0, ast::Value::Constant(0)),
-    //                 None,
-    //                 None,
-    //             ),
-    //             ast::Operand::Register(0..0, ast::Register::Byte(ast::ByteRegister::Al)),
-    //         ),
-    //     }));
-    //     assert_eq!(vec![0], compiler.compile().unwrap());
-    // }
+            let mut compiler = Compiler::default();
+            let mut parser = Parser::new(source);
+            while let Some(line) = parser.parse_line().unwrap() {
+                compiler.push_line(line);
+            }
+            let actual = compiler.compile().unwrap();
+
+            let expected = include_bytes!($binary);
+            assert_eq!(expected, actual.as_slice());
+        }};
+    }
 
     #[test]
     fn compile() {
-        let mut c = Compiler::default();
-        let mut p = Parser::new("mov byte [0x100], 10");
-        while let Some(line) = p.parse_line().unwrap() {
-            c.push_line(line);
-        }
-        assert_eq!(
-            vec![out::Instruction {
-                operation: out::Operation::MOV,
-                operands: out::OperandSet::DestinationAndSource(
-                    out::Operand::Direct(out::Segment::DS, 0x100, out::OperandSize::Byte),
-                    out::Operand::Immediate(out::Immediate::Byte(10)),
-                ),
-                repeat: None
-            }],
-            c.compile().unwrap()
-        );
+        compile_test!("../tests/calljmp.asm", "../tests/calljmp.bin");
+        compile_test!("../tests/ea.asm", "../tests/ea.bin");
     }
 }

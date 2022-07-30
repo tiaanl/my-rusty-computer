@@ -6,8 +6,9 @@ use std::str::FromStr;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ParserError {
-    Expected(ast::Span, String),
+    Expected(ast::Span, String, String),
     InstructionExpected(ast::Span, String),
+    SecondOperandExpected(ast::Span, String),
     OperandExpected(ast::Span, String),
     InvalidPrefixOperator(ast::Span),
     DataDefinitionWithoutData(ast::Span),
@@ -18,8 +19,9 @@ pub enum ParserError {
 impl ParserError {
     pub fn span(&self) -> &ast::Span {
         match self {
-            ParserError::Expected(span, _)
+            ParserError::Expected(span, _, _)
             | ParserError::InstructionExpected(span, _)
+            | ParserError::SecondOperandExpected(span, _)
             | ParserError::OperandExpected(span, _)
             | ParserError::InvalidPrefixOperator(span)
             | ParserError::DataDefinitionWithoutData(span)
@@ -32,9 +34,14 @@ impl ParserError {
 impl Display for ParserError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParserError::Expected(_, expected) => write!(f, "expected {}.", expected),
+            ParserError::Expected(_, expected, found) => {
+                write!(f, "expected {}, found {}.", expected, found)
+            }
             ParserError::InstructionExpected(_, found) => {
                 write!(f, "Instruction expected, found {}.", found)
+            }
+            ParserError::SecondOperandExpected(_, found) => {
+                write!(f, "Second operand expected, found {}.", found)
             }
             ParserError::OperandExpected(_, found) => {
                 write!(f, "Operand expected, found {}.", found)
@@ -214,7 +221,7 @@ impl<'a> Parser<'a> {
         } else if let Token::EndOfFile(_) = self.token {
             Ok(())
         } else {
-            Err(self.expected("Expected new line".to_owned()))
+            Err(self.expected("new line".to_string()))
         }
     }
 
@@ -299,7 +306,7 @@ impl<'a> Parser<'a> {
                     ))
                 }
 
-                _ => Err(self.expected("An unexpected token was encountered.".to_owned())),
+                _ => Err(self.expected("comma".to_string())),
             }
         }
     }
@@ -587,12 +594,7 @@ impl<'a> Parser<'a> {
                     self.next_token();
                 }
 
-                _ => {
-                    return Err(ParserError::Expected(
-                        self.token_range(),
-                        "literal expected for data definition".to_owned(),
-                    ))
-                }
+                _ => return Err(self.expected("literal expected for data definition".to_owned())),
             }
         }
 
@@ -626,8 +628,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expected(&self, message: String) -> ParserError {
-        ParserError::Expected(0..0, message)
+    fn expected(&self, expected: String) -> ParserError {
+        ParserError::Expected(
+            self.token_range(),
+            expected,
+            FoundToken(self.token.clone(), self.token_source()).to_string(),
+        )
     }
 
     fn instruction_expected(&self) -> ParserError {
@@ -963,11 +969,19 @@ mod tests {
         assert_parse_err!("db ", ParserError::DataDefinitionWithoutData(0..2));
         assert_parse_err!(
             "db test",
-            ParserError::Expected(3..7, "literal expected for data definition".to_owned())
+            ParserError::Expected(
+                3..7,
+                "literal expected for data definition".to_owned(),
+                "".to_owned()
+            )
         );
         assert_parse_err!(
             "db 10, test",
-            ParserError::Expected(7..11, "literal expected for data definition".to_owned())
+            ParserError::Expected(
+                7..11,
+                "literal expected for data definition".to_owned(),
+                "".to_owned()
+            )
         );
     }
 
