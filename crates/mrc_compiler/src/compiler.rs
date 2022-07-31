@@ -105,7 +105,7 @@ impl Compiler {
             return Err(CompileError::UnresolvedReference(label));
         }
 
-        self._debug_print_outputs();
+        // self._debug_print_outputs();
 
         let mut result = vec![];
 
@@ -116,7 +116,7 @@ impl Compiler {
                 ast::Line::Instruction(..) | ast::Line::Data(..)
             ) {
                 // println!("line: {}", output.line);
-                for b in self.encode_line(&output.line, output.times, offset + output.size)? {
+                for b in self.encode_line(&output.line, output.times, offset, output.size)? {
                     result.push(b);
                 }
             }
@@ -261,7 +261,15 @@ impl Compiler {
     }
 
     fn set_label_offset(&mut self, label: &ast::Label, offset: Option<u16>) {
-        // println!("setting \"{}\" to {:?}", label, offset);
+        println!(
+            "setting \"{}\" to {:?}",
+            label,
+            if let Some(offset) = offset {
+                format!("{:#04x}", offset)
+            } else {
+                "NONE".to_string()
+            }
+        );
 
         if let Some(li) = self.labels.get_mut(label.1.as_str()) {
             li.offset = offset;
@@ -281,9 +289,12 @@ impl Compiler {
         line: &ast::Line,
         times: u16,
         offset: u16,
+        size: u16,
     ) -> Result<Vec<u8>, CompileError> {
         match line {
-            ast::Line::Instruction(instruction) => self.encode_instruction(instruction, offset),
+            ast::Line::Instruction(instruction) => {
+                self.encode_instruction(instruction, offset, size)
+            }
 
             ast::Line::Data(_, data) => {
                 let mut result = vec![];
@@ -307,8 +318,12 @@ impl Compiler {
         &self,
         instruction: &ast::Instruction,
         offset: u16,
+        size: u16,
     ) -> Result<Vec<u8>, CompileError> {
         let template = self.find_instruction_template(instruction)?;
+
+        println!("{instruction:?}");
+        println!("{template:}");
 
         let mut result = vec![];
 
@@ -374,8 +389,18 @@ impl Compiler {
                             self.emit_mrrm_register(&mut result, reg, src.encoding());
                         }
 
-                        ast::Operands::Destination(_, ast::Operand::Address(_, expr, _, _)) => {
-                            self.emit_mrrm_address(&mut result, reg, expr)?;
+                        ast::Operands::Destination(
+                            _,
+                            ast::Operand::Address(_, expr, _, seg_override),
+                        ) => {
+                            self.emit_mrrm_address(
+                                &mut result,
+                                reg,
+                                offset,
+                                size,
+                                expr,
+                                seg_override.is_some(),
+                            )?;
                         }
 
                         ast::Operands::Destination(
@@ -400,15 +425,22 @@ impl Compiler {
 
                         ast::Operands::DestinationAndSource(
                             _,
-                            ast::Operand::Address(_, expr, _, _),
+                            ast::Operand::Address(_, expr, _, seg_override),
                             _,
                         )
                         | ast::Operands::DestinationAndSource(
                             _,
                             _,
-                            ast::Operand::Address(_, expr, _, _),
+                            ast::Operand::Address(_, expr, _, seg_override),
                         ) => {
-                            self.emit_mrrm_address(&mut result, reg, expr)?;
+                            self.emit_mrrm_address(
+                                &mut result,
+                                reg,
+                                offset,
+                                size,
+                                expr,
+                                seg_override.is_some(),
+                            )?;
                         }
 
                         ast::Operands::DestinationAndSource(
@@ -452,28 +484,42 @@ impl Compiler {
 
                     ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Address(_, expr, _, _),
+                        ast::Operand::Address(_, expr, _, seg_override),
                         ast::Operand::Register(_, register),
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Register(_, register),
-                        ast::Operand::Address(_, expr, _, _),
+                        ast::Operand::Address(_, expr, _, seg_override),
                     ) => {
-                        self.emit_mrrm_address(&mut result, register.encoding(), expr)?;
+                        self.emit_mrrm_address(
+                            &mut result,
+                            register.encoding(),
+                            offset,
+                            size,
+                            expr,
+                            seg_override.is_some(),
+                        )?;
                     }
 
                     ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Address(_, expr, _, _),
+                        ast::Operand::Address(_, expr, _, seg_override),
                         ast::Operand::Segment(_, segment),
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Segment(_, segment),
-                        ast::Operand::Address(_, expr, _, _),
+                        ast::Operand::Address(_, expr, _, seg_override),
                     ) => {
-                        self.emit_mrrm_address(&mut result, segment.encoding(), expr)?;
+                        self.emit_mrrm_address(
+                            &mut result,
+                            segment.encoding(),
+                            offset,
+                            size,
+                            expr,
+                            seg_override.is_some(),
+                        )?;
                     }
 
                     ast::Operands::DestinationAndSource(
@@ -493,6 +539,10 @@ impl Compiler {
                 },
 
                 C_IMM_BYTE => match &instruction.operands {
+                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+                        self.emit_immediate_byte(&mut result, expr)?;
+                    }
+
                     ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _) => {
                         self.emit_immediate_byte(&mut result, expr)?;
                     }
@@ -500,14 +550,6 @@ impl Compiler {
                     ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
                         self.emit_immediate_byte(&mut result, expr)?;
                     }
-
-                    ast::Operands::Destination(_, dst) => match dst {
-                        ast::Operand::Immediate(_, expr) => {
-                            self.emit_immediate_byte(&mut result, expr)?;
-                        }
-
-                        _ => unreachable!(),
-                    },
 
                     _ => unreachable!("C_IMM_BYTE {:?}", instruction),
                 },
@@ -532,15 +574,28 @@ impl Compiler {
                     _ => unreachable!("C_IMM_WORD {:?}", instruction),
                 },
 
-                C_IMM_BYTE_SIGN => todo!(),
+                C_IMM_SIGN_BYTE => match &instruction.operands {
+                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+                        self.emit_immediate_signed_byte(&mut result, expr)?;
+                    }
 
-                C_IMM_WORD_SIGN => todo!(),
+                    ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _) => {
+                        self.emit_immediate_signed_byte(&mut result, expr)?;
+                    }
+
+                    ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
+                        self.emit_immediate_signed_byte(&mut result, expr)?;
+                    }
+
+                    _ => unreachable!("C_IMM_BYTE_SIGN {:?}", instruction),
+                },
 
                 C_DISP_BYTE => match &instruction.operands {
                     ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
                         // The value stored in the expression is the address of the instruction
                         // we want to go to, so calculate the displacement.
-                        let value = self.evaluate_expression(expr)? - (offset as i32);
+                        let value = self.evaluate_expression(expr)?;
+                        let value = value - (offset as i32 + size as i32);
 
                         self.emit_immediate_signed_byte(
                             &mut result,
@@ -555,22 +610,36 @@ impl Compiler {
                 },
 
                 C_DISP_WORD => match &instruction.operands {
-                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr))
-                    | ast::Operands::DestinationAndSource(
+                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+                        let value = self.evaluate_expression(expr)? - offset as i32 - size as i32;
+
+                        self.emit_immediate_word(
+                            &mut result,
+                            &ast::Expression::Value(
+                                expr.span().clone(),
+                                ast::Value::Constant(value),
+                            ),
+                        )?;
+                    }
+
+                    ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Address(_, expr, _, _),
+                        ast::Operand::Address(_, expr, _, seg_override),
                         _,
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
                         _,
-                        ast::Operand::Address(_, expr, _, _),
+                        ast::Operand::Address(_, expr, _, seg_override),
                     ) => {
-                        // The value stored in the expression is the address of the instruction
-                        // we want to go to, so calculate the displacement.
-                        let value = self.evaluate_expression(expr)? - (offset as i32);
+                        let value = self.evaluate_expression(expr)?;
+                        let value = if seg_override.is_none() {
+                            value - (offset as i32 + size as i32)
+                        } else {
+                            value - size as i32
+                        };
 
-                        self.emit_immediate_signed_word(
+                        self.emit_immediate_word(
                             &mut result,
                             &ast::Expression::Value(
                                 expr.span().clone(),
@@ -603,10 +672,11 @@ impl Compiler {
         // DS = 3E = 111110
 
         match segment {
-            None | Some(ast::Segment::DS) => {}
+            None => {}
             Some(ast::Segment::ES) => out.push(0b100110),
             Some(ast::Segment::SS) => out.push(0b110110),
             Some(ast::Segment::CS) => out.push(0b101110),
+            Some(ast::Segment::DS) => out.push(0b111110),
         }
     }
 
@@ -617,16 +687,25 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         let value = self.evaluate_expression(expr)?;
 
-        if value < 0 || value >= u8::MAX as i32 {
-            return Err(CompileError::ImmediateValueOutOfRange(
-                expr.span().clone(),
-                value,
-            ));
-        }
+        let emit_value = if value < 0 {
+            if value < i8::MIN as i32 || value > i8::MAX as i32 {
+                return Err(CompileError::ImmediateValueOutOfRange(
+                    expr.span().clone(),
+                    value,
+                ));
+            }
+            value as i8 as u8
+        } else {
+            if value > u8::MAX as i32 {
+                return Err(CompileError::ImmediateValueOutOfRange(
+                    expr.span().clone(),
+                    value,
+                ));
+            }
+            value as u8
+        };
 
-        for b in (value as u8).to_le_bytes() {
-            out.push(b);
-        }
+        out.push(emit_value);
 
         Ok(())
     }
@@ -636,20 +715,7 @@ impl Compiler {
         out: &mut Vec<u8>,
         expr: &ast::Expression,
     ) -> Result<(), CompileError> {
-        let value = self.evaluate_expression(expr)?;
-
-        if value <= i8::MIN as i32 || value >= i8::MAX as i32 {
-            return Err(CompileError::ImmediateValueOutOfRange(
-                expr.span().clone(),
-                value,
-            ));
-        }
-
-        for b in (value as i8 as u8).to_le_bytes() {
-            out.push(b);
-        }
-
-        Ok(())
+        self.emit_immediate_byte(out, expr)
     }
 
     fn emit_immediate_word(
@@ -659,35 +725,25 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         let value = self.evaluate_expression(expr)?;
 
-        if value < 0 || value >= u16::MAX as i32 {
-            return Err(CompileError::ImmediateValueOutOfRange(
-                expr.span().clone(),
-                value,
-            ));
-        }
+        let emit_value = if value < 0 {
+            if value < i16::MIN as i32 || value > i16::MAX as i32 {
+                return Err(CompileError::ImmediateValueOutOfRange(
+                    expr.span().clone(),
+                    value,
+                ));
+            }
+            value as i16 as u16
+        } else {
+            if value > u16::MAX as i32 {
+                return Err(CompileError::ImmediateValueOutOfRange(
+                    expr.span().clone(),
+                    value,
+                ));
+            }
+            value as u16
+        };
 
-        for b in (value as u16).to_le_bytes() {
-            out.push(b);
-        }
-
-        Ok(())
-    }
-
-    fn emit_immediate_signed_word(
-        &self,
-        out: &mut Vec<u8>,
-        expr: &ast::Expression,
-    ) -> Result<(), CompileError> {
-        let value = self.evaluate_expression(expr)?;
-
-        if value < i16::MIN as i32 || value >= i16::MAX as i32 {
-            return Err(CompileError::ImmediateValueOutOfRange(
-                expr.span().clone(),
-                value,
-            ));
-        }
-
-        for b in (value as i16 as u16).to_le_bytes() {
+        for b in emit_value.to_le_bytes() {
             out.push(b);
         }
 
@@ -702,10 +758,27 @@ impl Compiler {
         &self,
         out: &mut Vec<u8>,
         reg: u8,
+        offset: u16,
+        size: u16,
         expr: &ast::Expression,
+        has_segment: bool,
     ) -> Result<(), CompileError> {
         self.emit_mrrm(out, 0b00, reg, 0b110);
-        self.emit_immediate_word(out, expr)?;
+
+        let value = self.evaluate_expression(expr)?;
+        let value = if !has_segment {
+            println!("abs");
+            value - offset as i32 - size as i32
+        } else {
+            println!("rel");
+            value + size as i32
+        };
+
+        self.emit_immediate_word(
+            out,
+            &ast::Expression::Value(expr.span().clone(), ast::Value::Constant(value)),
+        )?;
+
         Ok(())
     }
 
@@ -718,14 +791,19 @@ impl Compiler {
     ) -> Result<(), CompileError> {
         if let Some(expr) = expr {
             let value = self.evaluate_expression(expr)?;
+
             if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
                 self.emit_mrrm(out, 0b01, reg, indirect_encoding.encoding());
-                out.push(value as i8 as u8);
+                self.emit_immediate_byte(
+                    out,
+                    &ast::Expression::Value(expr.span().clone(), ast::Value::Constant(value)),
+                )?;
             } else {
                 self.emit_mrrm(out, 0b10, reg, indirect_encoding.encoding());
-                for b in (value as i16 as u16).to_le_bytes() {
-                    out.push(b);
-                }
+                self.emit_immediate_word(
+                    out,
+                    &ast::Expression::Value(expr.span().clone(), ast::Value::Constant(value)),
+                )?;
             }
             Ok(())
         } else {
@@ -966,9 +1044,7 @@ impl Compiler {
 
                 C_IMM_WORD => total_size += 2,
 
-                C_IMM_BYTE_SIGN => total_size += 1,
-
-                C_IMM_WORD_SIGN => total_size += 2,
+                C_IMM_SIGN_BYTE => total_size += 1,
 
                 C_DISP_BYTE => total_size += 1,
 
@@ -980,7 +1056,7 @@ impl Compiler {
             }
         }
 
-        // print!("{} == {}", template, total_size);
+        // println!("{} == {}", template, total_size);
 
         Ok(total_size)
     }
@@ -1096,6 +1172,8 @@ impl Compiler {
                 let value = self.evaluate_expression(expr)?;
                 if value == 1 {
                     T_IMM | T_ONE
+                } else if value < 0 {
+                    T_IMM | T_SIGNEX
                 } else {
                     T_IMM
                 }
@@ -1179,21 +1257,62 @@ impl Compiler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostics::Diagnostics;
     use crate::Parser;
 
     macro_rules! compile_test {
         ($source:literal, $binary:literal) => {{
+            use std::path::Path;
             let source = include_str!($source);
+            let expected = include_bytes!($binary);
+
+            // let path = std::fs::canonicalize($source.to_owned())
+            //     .unwrap()
+            //     .into_os_string()
+            //     .into_string()
+            //     .unwrap();
+            let path = Path::new(env!("PWD"))
+                .join(file!())
+                .parent()
+                .unwrap()
+                .join($source)
+                .canonicalize()
+                .unwrap()
+                .into_os_string()
+                .into_string()
+                .unwrap();
+
+            // let path = "mem".to_string();
+
+            let mut diag = Diagnostics::new(source, path);
 
             let mut compiler = Compiler::default();
             let mut parser = Parser::new(source);
-            while let Some(line) = parser.parse_line().unwrap() {
-                compiler.push_line(line);
-            }
-            let actual = compiler.compile().unwrap();
 
-            let expected = include_bytes!($binary);
-            assert_eq!(expected, actual.as_slice());
+            loop {
+                match parser.parse_line() {
+                    Ok(Some(line)) => compiler.push_line(line),
+                    Ok(None) => break,
+                    Err(err) => {
+                        diag.error(&err, err.span().clone());
+                        diag.print(&mut std::io::stderr())
+                            .expect("Could not write to stderr.");
+                        panic!()
+                    }
+                }
+            }
+
+            match compiler.compile() {
+                Ok(actual) => {
+                    assert_eq!(expected, actual.as_slice());
+                }
+                Err(err) => {
+                    diag.error(&err, err.span().clone());
+                    diag.print(&mut std::io::stderr())
+                        .expect("Could not write to stderr.");
+                    panic!()
+                }
+            }
         }};
     }
 
@@ -1201,5 +1320,9 @@ mod tests {
     fn compile() {
         compile_test!("../tests/calljmp.asm", "../tests/calljmp.bin");
         compile_test!("../tests/ea.asm", "../tests/ea.bin");
+        compile_test!("../tests/each.asm", "../tests/each.bin");
+        compile_test!("../tests/group1.asm", "../tests/group1.bin");
+        compile_test!("../tests/imul.asm", "../tests/imul.bin");
+        compile_test!("../tests/incdec.asm", "../tests/incdec.bin");
     }
 }

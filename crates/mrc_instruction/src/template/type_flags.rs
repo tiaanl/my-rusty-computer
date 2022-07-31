@@ -58,7 +58,7 @@ pub const T_SEG_OFF: TypeFlags = class::gen_bit(6); // Segment and offset, e.g. 
 pub const T_MEM: TypeFlags = T_MEM_DIR | T_MEM_IND;
 
 // Sub Classes (T_IMM)
-pub const T_SIGNED: TypeFlags = sub_class::gen_bit(0);
+pub const T_SIGNEX: TypeFlags = sub_class::gen_bit(0);
 pub const T_ONE: TypeFlags = sub_class::gen_bit(1);
 
 // Sub Classes (T_REG)
@@ -103,7 +103,7 @@ pub fn format_type_flags(flags: TypeFlags) -> String {
     // Sub Class
 
     if flags.contains(T_IMM) {
-        do_flag!(T_SIGNED, "T_SIGNED");
+        do_flag!(T_SIGNEX, "T_SIGNEX");
         do_flag!(T_ONE, "T_ONE");
     }
 

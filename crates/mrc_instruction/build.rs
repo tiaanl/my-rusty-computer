@@ -180,9 +180,8 @@ fn byte_to_code(byte: &str) -> Vec<Code> {
         "mod 1 1 1 r/m" => vec![C_MOD_RM, 7],
         "imm8" | "port" | "type" => vec![C_IMM_BYTE],
         "imm16" => vec![C_IMM_WORD],
-        "addr" => vec![C_IMM_WORD],       // todo,
-        "simm8" => vec![C_IMM_BYTE_SIGN], // todo,
-        "simm16" => vec![C_IMM_WORD_SIGN],
+        "addr" => vec![C_IMM_WORD],
+        "simm8" => vec![C_IMM_SIGN_BYTE],
         "disp" => vec![C_DISP_BYTE],
         "disp16" => vec![C_DISP_WORD],
         "seg_off" => vec![C_SEG_OFF],
@@ -221,6 +220,8 @@ fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
         "loop" => (T_IMM | T_BITS_8, T_NONE),
         "mul" => (T_REG | T_MEM, T_NONE),
         "div" => (T_REG | T_MEM, T_NONE),
+        "imul" => (T_REG | T_MEM, T_NONE),
+        "idiv" => (T_REG | T_MEM, T_NONE),
 
         _ => match s {
             "Register/Memory to/from Register" => (T_REG, T_REG | T_MEM),
@@ -394,7 +395,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                         &mut lines,
                         instruction.mnemonic.as_str(),
                         set_size(dst, T_BITS_16),
-                        set_size(src, T_BITS_16) | T_SIGNED,
+                        set_size(src, T_BITS_8) | T_SIGNEX,
                         bytes_to_codes(bytes),
                     );
                 } else if encoding.bytes[0].ends_with(" v w") {
@@ -411,7 +412,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
 
                     let mut bytes = encoding.bytes.clone();
                     bytes[0] = bytes[0].replace(" v w", " 0 1");
-                    let bytes = data_to(bytes, "simm16");
+                    let bytes = data_to(bytes, "simm8");
                     push_line(
                         &mut lines,
                         instruction.mnemonic.as_str(),
@@ -461,9 +462,9 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     bytes[0] = bytes[0].replace(" w", " 0");
 
                     let bytes = if T_MEM_DIR.contains(dst) || T_MEM_DIR.contains(src) {
-                        addr_to(bytes, "imm16")
+                        addr_to(bytes, "disp16")
                     } else {
-                        data_to(bytes, "imm16")
+                        data_to(bytes, "imm8")
                     };
 
                     push_line(
@@ -487,7 +488,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     bytes[0] = bytes[0].replace(" w", " 1");
 
                     let bytes = if T_MEM_DIR.contains(dst) || T_MEM_DIR.contains(src) {
-                        addr_to(bytes, "imm16")
+                        addr_to(bytes, "disp16")
                     } else {
                         data_to(bytes, "imm16")
                     };
@@ -614,23 +615,11 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
 
                     let mut bytes = encoding.bytes.clone();
                     bytes[0] = bytes[0].replace(" z", " 0");
-                    push_line(
-                        &mut lines,
-                        instruction.mnemonic.as_str(),
-                        dst,
-                        src,
-                        bytes_to_codes(bytes),
-                    );
+                    push_line(&mut lines, "REP", dst, src, bytes_to_codes(bytes));
 
                     let mut bytes = encoding.bytes.clone();
                     bytes[0] = bytes[0].replace(" z", " 1");
-                    push_line(
-                        &mut lines,
-                        format!("{}Z", instruction.mnemonic).as_str(),
-                        dst,
-                        src,
-                        bytes_to_codes(bytes),
-                    );
+                    push_line(&mut lines, "REPNE", dst, src, bytes_to_codes(bytes));
                 } else if encoding.bytes[0].ends_with(" x x x") {
                     // skipping ESC
                 } else {
@@ -802,6 +791,8 @@ const BELOW: &str = "];
 ";
 
 fn main() {
+    println!("cargo:rerun-if-changed=src/template/templates.rs");
+
     let data_sheet = get_data_sheet();
     let mut file = std::fs::File::create("src/template/templates.rs").unwrap();
 

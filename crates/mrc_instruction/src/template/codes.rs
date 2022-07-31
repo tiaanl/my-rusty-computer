@@ -9,11 +9,10 @@ pub const C_MOD_RM: Code = 0x03;
 pub const C_MOD_REG_RM: Code = 0x04;
 pub const C_IMM_BYTE: Code = 0x05;
 pub const C_IMM_WORD: Code = 0x06;
-pub const C_IMM_BYTE_SIGN: Code = 0x07;
-pub const C_IMM_WORD_SIGN: Code = 0x08;
-pub const C_DISP_BYTE: Code = 0x09;
-pub const C_DISP_WORD: Code = 0x0A;
-pub const C_SEG_OFF: Code = 0x0B;
+pub const C_IMM_SIGN_BYTE: Code = 0x07;
+pub const C_DISP_BYTE: Code = 0x08;
+pub const C_DISP_WORD: Code = 0x09;
+pub const C_SEG_OFF: Code = 0x0A;
 
 #[allow(unused)]
 pub fn codes_to_string(codes: &[Code]) -> String {
@@ -55,12 +54,8 @@ pub fn codes_to_string(codes: &[Code]) -> String {
                 parts.push("C_IMM_WORD".to_owned());
             }
 
-            C_IMM_BYTE_SIGN => {
-                parts.push("C_IMM_BYTE_SIGN".to_owned());
-            }
-
-            C_IMM_WORD_SIGN => {
-                parts.push("C_IMM_WORD_SIGN".to_owned());
+            C_IMM_SIGN_BYTE => {
+                parts.push("C_IMM_SIGN_BYTE".to_owned());
             }
 
             C_DISP_BYTE => {

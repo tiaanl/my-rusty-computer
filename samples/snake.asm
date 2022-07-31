@@ -695,6 +695,8 @@ move_snake_1:
         MUL CX
         ADD BX,AX
         MOV AX,[BX]
+        nop
+        nop
         MOV CX,[BX + 2]
         MOV [BX + 4],AX
         MOV [BX + 6],CX
@@ -709,16 +711,16 @@ move_snake_1:
         CMP BYTE [snake_vector],4
         JE move_snake_right
 move_snake_up:
-        SUB WORD [snake + 2],5
+nop; SUB WORD [snake + 2],5
         JMP move_snake_vector_end
 move_snake_down:
-        ADD WORD [snake + 2],5
+nop;        ADD WORD [snake + 2],5
         JMP move_snake_vector_end
 move_snake_left:
-        SUB WORD [snake],5
+nop;        SUB WORD [snake],5
         JMP move_snake_vector_end
 move_snake_right:
-        ADD WORD [snake],5
+nop;        ADD WORD [snake],5
         JMP move_snake_vector_end
 move_snake_vector_end:
 move_snake_end:
@@ -871,22 +873,23 @@ detect_collisions:                                   ; detect collisions beetwen
         CMP AX,[snake + 2]                           ; compare food y with head y
         JNE detect_collisions_1
 ; add points and increase snake
-        ADD WORD [score],10                          ; add 10 points :)
+nop
+;        ADD WORD [score],10                          ; add 10 points :)
         CALL increase_snake
         CALL reset_food
 detect_collisions_1:
 ; detect collision with border and decrase lives
-        CMP WORD [snake],0                           ; coll. with left border
+nop;        CMP WORD [snake],0                           ; coll. with left border
         JE detect_collisions_dead
-        CMP WORD [snake],320 - 5                     ; coll. with right border
+nop;        CMP WORD [snake],320 - 5                     ; coll. with right border
         JE detect_collisions_dead
-        CMP WORD [snake + 2],15                      ; coll. with top border
+nop;        CMP WORD [snake + 2],15                      ; coll. with top border
         JE detect_collisions_dead
-        CMP WORD [snake + 2],200 - 5                 ; coll. with bottom border
+nop;        CMP WORD [snake + 2],200 - 5                 ; coll. with bottom border
         JE detect_collisions_dead
 ; detect head collision with body
         MOV BX,snake
-        ADD BX,8                                     ; jump to next x&y
+nop;        ADD BX,8                                     ; jump to next x&y
         MOV AX,[snake]
         MOV DX,[snake + 2]
         MOV CX,[snake_len]
@@ -897,7 +900,7 @@ detect_collisions_head_with_body:
         CMP DX,[BX + 2]
         JE detect_collisions_dead
 detect_collisions_head_with_body_next:
-        ADD BX,4
+nop;        ADD BX,4
         LOOP detect_collisions_head_with_body
 ; if everything is ok the jump to the end
         JMP detect_collisions_end
@@ -945,7 +948,7 @@ game_loop:
         MOV CX,320 / 5
 draw_frame_top:
         CALL draw_sprite
-        ADD WORD [SX],5
+nop;        ADD WORD [SX],5
         LOOP draw_frame_top
 ; draw bottom frame
         MOV WORD [SX],0
@@ -953,7 +956,7 @@ draw_frame_top:
         MOV CX,320 / 5
 draw_frame_bottom:
         CALL draw_sprite
-        ADD WORD [SX],5
+nop;        ADD WORD [SX],5
         LOOP draw_frame_bottom
 ; draw left frame
         MOV WORD [SX],0
@@ -961,7 +964,7 @@ draw_frame_bottom:
         MOV CX,200 / 5
 draw_frame_left:
         CALL draw_sprite
-        ADD WORD [SY],5
+nop;        ADD WORD [SY],5
         LOOP draw_frame_left
 ; draw_frame_right
         MOV WORD [SX],320 - 5
@@ -969,7 +972,7 @@ draw_frame_left:
         MOV CX,200 / 5
 draw_frame_right:
         CALL draw_sprite
-        ADD WORD [SY],5
+nop;        ADD WORD [SY],5
         LOOP draw_frame_right
 ; draw top bar
         MOV WORD [PX1],5

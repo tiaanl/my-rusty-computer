@@ -53,9 +53,8 @@ pub enum Operation {
     XOR,  // Exclusive or
 
     // String manipulation
-    // TODO: Should these be without size and have the size as another operand type?
     REP,   // Repeat
-    REPZ,  // Repeat if zero
+    REPNE, // Repeat if zero
     MOVSB, // Move byte
     MOVSW, // Move word
     CMPSB, // Compare byte
@@ -170,7 +169,7 @@ impl std::fmt::Display for Operation {
                 OR => "or",
                 XOR => "xor",
                 REP => "rep",
-                REPZ => "repz",
+                REPNE => "repz",
                 MOVSB => "movsb",
                 MOVSW => "movsw",
                 CMPSB => "cmpsb",
@@ -241,7 +240,6 @@ impl std::str::FromStr for Operation {
             "adc" => ADC,
             "add" => ADD,
             "and" => AND,
-            "daa" => DAA,
             "call" => CALL,
             "cbw" => CBW,
             "clc" => CLC,
@@ -252,6 +250,7 @@ impl std::str::FromStr for Operation {
             "cmpsb" => CMPSB,
             "cmpsw" => CMPSW,
             "cwd" => CWD,
+            "daa" => DAA,
             "das" => DAS,
             "dec" => DEC,
             "div" => DIV,
@@ -281,7 +280,7 @@ impl std::str::FromStr for Operation {
             "jnae" => JB,
             "jnb" => JNB,
             "jnbe" => JNBE,
-            "jnc" => JBE, // alias
+            "jnc" => JBE,
             "jne" => JNE,
             "jng" => JLE,
             "jnge" => JL,
@@ -324,6 +323,8 @@ impl std::str::FromStr for Operation {
             "rcl" => RCL,
             "rcr" => RCR,
             "rep" => REP,
+            "repne" => REPNE,
+            "repnz" => REPNE,
             "ret" => RET,
             "rol" => ROL,
             "ror" => ROR,
@@ -334,6 +335,7 @@ impl std::str::FromStr for Operation {
             "scasw" => SCASW,
             "shl" => SHL,
             "shr" => SHR,
+            "sbb" => SBB,
             "ssb" => SBB,
             "stc" => STC,
             "std" => STD,

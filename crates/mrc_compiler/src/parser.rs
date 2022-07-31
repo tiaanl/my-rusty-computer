@@ -14,6 +14,7 @@ pub enum ParserError {
     DataDefinitionWithoutData(ast::Span),
     SegmentOrAddressExpected(ast::Span),
     InvalidIndirectEncoding(ast::Span, ast::Register, Option<ast::Register>),
+    UnterminatedStringLiteral(ast::Span),
 }
 
 impl ParserError {
@@ -26,7 +27,8 @@ impl ParserError {
             | ParserError::InvalidPrefixOperator(span)
             | ParserError::DataDefinitionWithoutData(span)
             | ParserError::SegmentOrAddressExpected(span)
-            | ParserError::InvalidIndirectEncoding(span, ..) => span,
+            | ParserError::InvalidIndirectEncoding(span, ..)
+            | ParserError::UnterminatedStringLiteral(span) => span,
         }
     }
 }
@@ -70,6 +72,9 @@ impl Display for ParserError {
                     f,
                     " Valid combinations are: BX+SI, BX+DI, BP+SI, BP+DI, SI, DI, BX, BP."
                 )
+            }
+            ParserError::UnterminatedStringLiteral(_) => {
+                write!(f, "Unterminated string literal.")
             }
         }
     }
@@ -179,11 +184,6 @@ impl<'a> Parser<'a> {
                 if let Some(line) = self.parse_instruction_or_meta()? {
                     line
                 } else {
-                    // Can't have more than one label on a line.
-                    // if line.label.is_some() {
-                    //     return Err(self.instruction_expected());
-                    // }
-
                     // If we don't recognize the identifier, we assume it's a label.
                     ast::Line::Label(self.parse_label()?)
                 }
@@ -267,11 +267,16 @@ impl<'a> Parser<'a> {
         // Consume the operation.
         self.next_token();
 
-        let operands = self.parse_operands()?;
+        static PREFIXES: &[Operation] = &[Operation::REP, Operation::REPNE];
 
-        let end = self.last_token_end;
-
-        self.require_new_line()?;
+        let (operands, end) = if !PREFIXES.contains(&operation) {
+            let res = (self.parse_operands()?, self.last_token_end);
+            self.require_new_line()?;
+            res
+        } else {
+            let operands = ast::Operands::None(self.last_token_end..self.last_token_end);
+            (operands, self.last_token_end)
+        };
 
         Ok(ast::Line::Instruction(ast::Instruction {
             span: start..end,
@@ -576,9 +581,15 @@ impl<'a> Parser<'a> {
                     continue;
                 }
 
-                Token::Literal(_, LiteralKind::String(_)) => {
+                Token::Literal(_, LiteralKind::String(terminated)) => {
+                    if !terminated {
+                        return Err(ParserError::UnterminatedStringLiteral(self.token_range()));
+                    }
+
                     let source = self.token_source();
+                    let source = &source[1..source.len() - 1]; // Strip the quotes
                     self.next_token();
+
                     for b in source.as_bytes() {
                         data.push(*b);
                     }
@@ -929,6 +940,35 @@ mod tests {
                     span: 20..23,
                     operation: Operation::HLT,
                     operands: ast::Operands::None(23..23),
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn repeat_prefix() {
+        assert_parse!(
+            "rep movsb\nrepz cmpsw",
+            vec![
+                ast::Line::Instruction(ast::Instruction {
+                    span: 0..3,
+                    operation: Operation::REP,
+                    operands: ast::Operands::None(3..3),
+                }),
+                ast::Line::Instruction(ast::Instruction {
+                    span: 4..9,
+                    operation: Operation::MOVSB,
+                    operands: ast::Operands::None(9..9),
+                }),
+                ast::Line::Instruction(ast::Instruction {
+                    span: 10..14,
+                    operation: Operation::REPNE,
+                    operands: ast::Operands::None(14..14),
+                }),
+                ast::Line::Instruction(ast::Instruction {
+                    span: 15..20,
+                    operation: Operation::CMPSW,
+                    operands: ast::Operands::None(20..20),
                 }),
             ]
         );
