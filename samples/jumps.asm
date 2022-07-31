@@ -1,4 +1,7 @@
-jmp start
-times 1024 db 0
+    jmp start
+    times 512 db 0
+middle:
+    times 512 db 0
 start:
-nop
+    nop
+    jmp middle

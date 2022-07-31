@@ -462,7 +462,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     bytes[0] = bytes[0].replace(" w", " 0");
 
                     let bytes = if T_MEM_DIR.contains(dst) || T_MEM_DIR.contains(src) {
-                        addr_to(bytes, "disp16")
+                        addr_to(bytes, "imm16")
                     } else {
                         data_to(bytes, "imm8")
                     };
@@ -488,7 +488,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     bytes[0] = bytes[0].replace(" w", " 1");
 
                     let bytes = if T_MEM_DIR.contains(dst) || T_MEM_DIR.contains(src) {
-                        addr_to(bytes, "disp16")
+                        addr_to(bytes, "imm16")
                     } else {
                         data_to(bytes, "imm16")
                     };

@@ -116,7 +116,14 @@ impl Compiler {
                 ast::Line::Instruction(..) | ast::Line::Data(..)
             ) {
                 // println!("line: {}", output.line);
-                for b in self.encode_line(&output.line, output.times, offset, output.size)? {
+
+                let bytes = self.encode_line(&output.line, output.times, offset, output.size)?;
+
+                // Does the number of bytes we emitted and the size of the instruction we calculated
+                // earlier match?
+                assert_eq!(output.size as usize, bytes.len());
+
+                for b in bytes {
                     result.push(b);
                 }
             }
@@ -261,15 +268,15 @@ impl Compiler {
     }
 
     fn set_label_offset(&mut self, label: &ast::Label, offset: Option<u16>) {
-        println!(
-            "setting \"{}\" to {:?}",
-            label,
-            if let Some(offset) = offset {
-                format!("{:#04x}", offset)
-            } else {
-                "NONE".to_string()
-            }
-        );
+        // println!(
+        //     "setting \"{}\" to {:?}",
+        //     label,
+        //     if let Some(offset) = offset {
+        //         format!("{:#04x}", offset)
+        //     } else {
+        //         "NONE".to_string()
+        //     }
+        // );
 
         if let Some(li) = self.labels.get_mut(label.1.as_str()) {
             li.offset = offset;
@@ -322,8 +329,8 @@ impl Compiler {
     ) -> Result<Vec<u8>, CompileError> {
         let template = self.find_instruction_template(instruction)?;
 
-        println!("{instruction:?}");
-        println!("{template:}");
+        // println!("{instruction:?}");
+        // println!("encode: {template:}");
 
         let mut result = vec![];
 
@@ -389,18 +396,8 @@ impl Compiler {
                             self.emit_mrrm_register(&mut result, reg, src.encoding());
                         }
 
-                        ast::Operands::Destination(
-                            _,
-                            ast::Operand::Address(_, expr, _, seg_override),
-                        ) => {
-                            self.emit_mrrm_address(
-                                &mut result,
-                                reg,
-                                offset,
-                                size,
-                                expr,
-                                seg_override.is_some(),
-                            )?;
+                        ast::Operands::Destination(_, ast::Operand::Address(_, expr, _, _)) => {
+                            self.emit_mrrm_address(&mut result, reg, expr)?;
                         }
 
                         ast::Operands::Destination(
@@ -425,22 +422,15 @@ impl Compiler {
 
                         ast::Operands::DestinationAndSource(
                             _,
-                            ast::Operand::Address(_, expr, _, seg_override),
+                            ast::Operand::Address(_, expr, _, _),
                             _,
                         )
                         | ast::Operands::DestinationAndSource(
                             _,
                             _,
-                            ast::Operand::Address(_, expr, _, seg_override),
+                            ast::Operand::Address(_, expr, _, _),
                         ) => {
-                            self.emit_mrrm_address(
-                                &mut result,
-                                reg,
-                                offset,
-                                size,
-                                expr,
-                                seg_override.is_some(),
-                            )?;
+                            self.emit_mrrm_address(&mut result, reg, expr)?;
                         }
 
                         ast::Operands::DestinationAndSource(
@@ -484,42 +474,28 @@ impl Compiler {
 
                     ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Address(_, expr, _, seg_override),
+                        ast::Operand::Address(_, expr, _, _),
                         ast::Operand::Register(_, register),
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Register(_, register),
-                        ast::Operand::Address(_, expr, _, seg_override),
+                        ast::Operand::Address(_, expr, _, _),
                     ) => {
-                        self.emit_mrrm_address(
-                            &mut result,
-                            register.encoding(),
-                            offset,
-                            size,
-                            expr,
-                            seg_override.is_some(),
-                        )?;
+                        self.emit_mrrm_address(&mut result, register.encoding(), expr)?;
                     }
 
                     ast::Operands::DestinationAndSource(
                         _,
-                        ast::Operand::Address(_, expr, _, seg_override),
+                        ast::Operand::Address(_, expr, _, _),
                         ast::Operand::Segment(_, segment),
                     )
                     | ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Segment(_, segment),
-                        ast::Operand::Address(_, expr, _, seg_override),
+                        ast::Operand::Address(_, expr, _, _),
                     ) => {
-                        self.emit_mrrm_address(
-                            &mut result,
-                            segment.encoding(),
-                            offset,
-                            size,
-                            expr,
-                            seg_override.is_some(),
-                        )?;
+                        self.emit_mrrm_address(&mut result, segment.encoding(), expr)?;
                     }
 
                     ast::Operands::DestinationAndSource(
@@ -557,8 +533,11 @@ impl Compiler {
                 C_IMM_WORD => match &instruction.operands {
                     ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _)
                     | ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr))
-                    | ast::Operands::Destination(_, ast::Operand::Immediate(_, expr))
-                    | ast::Operands::DestinationAndSource(
+                    | ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+                        self.emit_immediate_word(&mut result, expr)?;
+                    }
+
+                    ast::Operands::DestinationAndSource(
                         _,
                         ast::Operand::Address(_, expr, _, _),
                         _,
@@ -568,7 +547,7 @@ impl Compiler {
                         _,
                         ast::Operand::Address(_, expr, _, _),
                     ) => {
-                        self.emit_immediate_word(&mut result, expr)?;
+                        self.emit_address(&mut result, expr)?;
                     }
 
                     _ => unreachable!("C_IMM_WORD {:?}", instruction),
@@ -750,6 +729,17 @@ impl Compiler {
         Ok(())
     }
 
+    fn emit_address(&self, out: &mut Vec<u8>, expr: &ast::Expression) -> Result<(), CompileError> {
+        let value = self.evaluate_expression(expr)?;
+
+        self.emit_immediate_word(
+            out,
+            &ast::Expression::Value(expr.span().clone(), ast::Value::Constant(value)),
+        )?;
+
+        Ok(())
+    }
+
     fn emit_mrrm_register(&self, out: &mut Vec<u8>, reg: u8, reg_mem: u8) {
         self.emit_mrrm(out, 0b11, reg, reg_mem);
     }
@@ -758,28 +748,10 @@ impl Compiler {
         &self,
         out: &mut Vec<u8>,
         reg: u8,
-        offset: u16,
-        size: u16,
         expr: &ast::Expression,
-        has_segment: bool,
     ) -> Result<(), CompileError> {
         self.emit_mrrm(out, 0b00, reg, 0b110);
-
-        let value = self.evaluate_expression(expr)?;
-        let value = if !has_segment {
-            println!("abs");
-            value - offset as i32 - size as i32
-        } else {
-            println!("rel");
-            value + size as i32
-        };
-
-        self.emit_immediate_word(
-            out,
-            &ast::Expression::Value(expr.span().clone(), ast::Value::Constant(value)),
-        )?;
-
-        Ok(())
+        self.emit_address(out, expr)
     }
 
     fn emit_mrrm_indirect(
@@ -996,6 +968,32 @@ impl Compiler {
         let template = self.find_instruction_template(instruction)?;
 
         let mut total_size = 0;
+
+        match &instruction.operands {
+            ast::Operands::Destination(
+                _,
+                ast::Operand::Address(_, _, _, Some(_))
+                | ast::Operand::Indirect(_, _, _, _, Some(_)),
+            ) => total_size += 1,
+
+            ast::Operands::DestinationAndSource(
+                _,
+                ast::Operand::Address(_, _, _, Some(_))
+                | ast::Operand::Indirect(_, _, _, _, Some(_)),
+                _,
+            ) => total_size += 1,
+
+            ast::Operands::DestinationAndSource(
+                _,
+                _,
+                ast::Operand::Address(_, _, _, Some(_))
+                | ast::Operand::Indirect(_, _, _, _, Some(_)),
+            ) => total_size += 1,
+
+            // No segment override if we don't have some kind of address.
+            _ => {}
+        }
+
         let mut i = template.codes.iter();
         while let Some(code) = i.next() {
             match *code {
@@ -1014,7 +1012,7 @@ impl Compiler {
                     match &instruction.operands {
                         ast::Operands::Destination(_, dst) => {
                             // Use a dummy source, because it is just an encoding.
-                            total_size += self.calculate_mrrm_size(
+                            total_size += self.calculate_mod_reg_size(
                                 dst,
                                 &ast::Operand::Register(
                                     0..0,
@@ -1024,7 +1022,7 @@ impl Compiler {
                         }
 
                         ast::Operands::DestinationAndSource(_, dst, src) => {
-                            total_size += self.calculate_mrrm_size(dst, src)?;
+                            total_size += self.calculate_mod_reg_size(dst, src)?;
                         }
 
                         _ => unreachable!("Invalid operands for mrrm {:?}", &instruction.operands),
@@ -1056,9 +1054,50 @@ impl Compiler {
             }
         }
 
-        // println!("{} == {}", template, total_size);
-
         Ok(total_size)
+    }
+
+    fn calculate_mod_reg_size(
+        &self,
+        dst: &ast::Operand,
+        src: &ast::Operand,
+    ) -> Result<u16, CompileError> {
+        Ok(match (dst, src) {
+            // Only the register part is included in the mrrm byte calculation.
+            (ast::Operand::Register(_, _), ast::Operand::Immediate(_, _)) => 1,
+
+            // Registers on both sides is just the mrrm byte.
+            (ast::Operand::Register(_, _), ast::Operand::Register(_, _)) => 1,
+
+            // If there is an address on either side, that is included.
+            (ast::Operand::Address(_, _, _, _), _) => 3,
+
+            // If there is an indirect on either side, that is included.
+            (ast::Operand::Indirect(_, _, expr, _, _), _) => {
+                1 + self.calculate_displacement_size(expr)?
+            }
+
+            _ => todo!("calculate_mod_reg_size {:?} {:?}", dst, src),
+        })
+    }
+
+    fn calculate_displacement_size(
+        &self,
+        expr: &Option<ast::Expression>,
+    ) -> Result<u16, CompileError> {
+        Ok(if let Some(expr) = expr {
+            let value = self.evaluate_expression(expr)?;
+            if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
+                // Byte displacement.
+                1
+            } else {
+                // Word displacement.
+                2
+            }
+        } else {
+            // No displacement.
+            0
+        })
     }
 
     fn calculate_mrrm_size(
@@ -1066,13 +1105,6 @@ impl Compiler {
         dst: &ast::Operand,
         src: &ast::Operand,
     ) -> Result<u16, CompileError> {
-        fn segment_size(seg: &Option<ast::Segment>) -> u16 {
-            match seg {
-                None | Some(ast::Segment::DS) => 0,
-                _ => 1,
-            }
-        }
-
         Ok(match (dst, src) {
             (
                 ast::Operand::Register(_, _),
@@ -1082,56 +1114,31 @@ impl Compiler {
 
             (
                 ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-                ast::Operand::Address(_, _, _, segment),
+                ast::Operand::Address(_, _, _, _),
             )
             | (
-                ast::Operand::Address(_, _, _, segment),
+                ast::Operand::Address(_, _, _, _),
                 ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-            ) => 3 + segment_size(segment),
+            ) => 3,
 
             (
                 ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-                ast::Operand::Indirect(_, _, expr, _, segment),
+                ast::Operand::Indirect(_, _, expr, _, _),
             )
             | (
-                ast::Operand::Indirect(_, _, expr, _, segment),
+                ast::Operand::Indirect(_, _, expr, _, _),
                 ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-            ) => self.indirect_mrrm_size(expr)? + segment_size(segment),
+            )
+            | (ast::Operand::Indirect(_, _, expr, _, _), ast::Operand::Immediate(_, _)) => {
+                1 + self.calculate_displacement_size(expr)?
+            }
 
-            (
-                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-                ast::Operand::Immediate(_, _),
-            ) => {
-                // mrrm + direct address (immediate gets calculated by another code.
+            (ast::Operand::Address(_, _, _, _), ast::Operand::Immediate(_, _)) => {
+                // mrrm + direct address.
                 3
-            }
-
-            (ast::Operand::Address(_, _, _, segment), ast::Operand::Immediate(_, _)) => {
-                // mrrm + direct address (immediate gets calculated by another code.
-                3 + segment_size(segment)
-            }
-
-            (ast::Operand::Indirect(_, _, expr, _, segment), ast::Operand::Immediate(_, _)) => {
-                self.indirect_mrrm_size(expr)? + segment_size(segment)
             }
 
             (d, s) => todo!("{:?}, {:?}", d, s),
-        })
-    }
-
-    fn indirect_mrrm_size(&self, expr: &Option<ast::Expression>) -> Result<u16, CompileError> {
-        Ok(if let Some(expr) = expr {
-            let value = self.evaluate_expression(expr)?;
-            if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-                // Byte displacement.
-                2
-            } else {
-                // Word displacement.
-                3
-            }
-        } else {
-            // No displacement.
-            1
         })
     }
 }
