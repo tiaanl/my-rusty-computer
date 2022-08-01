@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub fn find(operation: Operation, dst: TypeFlags, src: TypeFlags) -> Option<&'static Template> {
-    const PRINT: bool = false;
+    const PRINT: bool = true;
 
     if PRINT {
         println!(
@@ -38,7 +38,7 @@ pub fn find(operation: Operation, dst: TypeFlags, src: TypeFlags) -> Option<&'st
                         continue;
                     }
 
-                    if class::only($tf) != 0 && !temp.$tf.contains(size::only($tf)) {
+                    if size::only(temp.$tf) > 0 && size::only($tf) > size::only(temp.$tf) {
                         if PRINT {
                             println!("size does not match");
                         }
@@ -54,12 +54,10 @@ pub fn find(operation: Operation, dst: TypeFlags, src: TypeFlags) -> Option<&'st
 
         if PRINT {
             print!(
-                "  {:?} [{}] [{}] ==> [{}] [{}] ",
+                "  {:?} [{}] [{}] ",
                 temp.operation,
                 format_type_flags(temp.dst),
                 format_type_flags(temp.src),
-                format_type_flags(dst),
-                format_type_flags(src),
             );
         }
 

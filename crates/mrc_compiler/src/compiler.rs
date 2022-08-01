@@ -329,37 +329,14 @@ impl Compiler {
     ) -> Result<Vec<u8>, CompileError> {
         let template = self.find_instruction_template(instruction)?;
 
-        // println!("{instruction:?}");
-        // println!("encode: {template:}");
+        println!("{instruction:?}");
+        println!("encode: {template:}");
 
         let mut result = vec![];
 
         use out::template::codes::*;
 
-        match &instruction.operands {
-            ast::Operands::Destination(
-                _,
-                ast::Operand::Address(_, _, _, segment)
-                | ast::Operand::Indirect(_, _, _, _, segment),
-            ) => self.emit_segment_override(&mut result, segment),
-
-            ast::Operands::DestinationAndSource(
-                _,
-                ast::Operand::Address(_, _, _, segment)
-                | ast::Operand::Indirect(_, _, _, _, segment),
-                _,
-            ) => self.emit_segment_override(&mut result, segment),
-
-            ast::Operands::DestinationAndSource(
-                _,
-                _,
-                ast::Operand::Address(_, _, _, segment)
-                | ast::Operand::Indirect(_, _, _, _, segment),
-            ) => self.emit_segment_override(&mut result, segment),
-
-            // No segment override if we don't have some kind of address.
-            _ => {}
-        }
+        self.emit_segment_override(&mut result, &instruction.operands.segment_override());
 
         let mut it = template.codes.iter();
         while let Some(&code) = it.next() {
@@ -969,46 +946,25 @@ impl Compiler {
 
         let mut total_size = 0;
 
-        match &instruction.operands {
-            ast::Operands::Destination(
-                _,
-                ast::Operand::Address(_, _, _, Some(_))
-                | ast::Operand::Indirect(_, _, _, _, Some(_)),
-            ) => total_size += 1,
-
-            ast::Operands::DestinationAndSource(
-                _,
-                ast::Operand::Address(_, _, _, Some(_))
-                | ast::Operand::Indirect(_, _, _, _, Some(_)),
-                _,
-            ) => total_size += 1,
-
-            ast::Operands::DestinationAndSource(
-                _,
-                _,
-                ast::Operand::Address(_, _, _, Some(_))
-                | ast::Operand::Indirect(_, _, _, _, Some(_)),
-            ) => total_size += 1,
-
-            // No segment override if we don't have some kind of address.
-            _ => {}
+        if instruction.operands.segment_override().is_some() {
+            total_size += 1;
         }
 
-        let mut i = template.codes.iter();
-        while let Some(code) = i.next() {
+        let mut it = template.codes.iter();
+        while let Some(code) = it.next() {
             match *code {
                 C_BYTE => {
                     total_size += 1;
-                    let _ = i.next();
+                    let _ = it.next();
                 }
 
                 C_REG_BASE => {
                     total_size += 1;
-                    let _ = i.next();
+                    let _ = it.next();
                 }
 
                 C_MOD_RM => {
-                    let _encoding = i.next().unwrap();
+                    let _encoding = it.next().unwrap();
                     match &instruction.operands {
                         ast::Operands::Destination(_, dst) => {
                             // Use a dummy source, because it is just an encoding.
@@ -1148,18 +1104,45 @@ impl Compiler {
         &self,
         instruction: &ast::Instruction,
     ) -> Result<&out::template::Template, CompileError> {
-        use out::template::type_flags::*;
+        use out::template::type_flags::{format_type_flags, size, TypeFlags, T_MEM, T_NONE};
 
-        let operands = match &instruction.operands {
+        fn assume_size(operand: TypeFlags, other: TypeFlags) -> TypeFlags {
+            if operand & T_MEM != 0 && size::only(operand) == 0 && size::only(other) != 0 {
+                operand | size::only(other)
+            } else {
+                operand
+            }
+        }
+
+        let (dst, src) = match &instruction.operands {
             ast::Operands::None(_) => (T_NONE, T_NONE),
             ast::Operands::Destination(_, dst) => (self.operand_to_type_flags(dst)?, T_NONE),
-            ast::Operands::DestinationAndSource(_, dst, src) => (
-                self.operand_to_type_flags(dst)?,
-                self.operand_to_type_flags(src)?,
-            ),
+            ast::Operands::DestinationAndSource(_, dst, src) => {
+                let (dst, src) = (
+                    self.operand_to_type_flags(dst)?,
+                    self.operand_to_type_flags(src)?,
+                );
+
+                // When two operands are given and one referes to memory, then the size prefix can
+                // be omitted if the size can be determined from the other operand.
+                (assume_size(dst, src), assume_size(src, dst))
+            }
         };
 
-        match out::template::find(instruction.operation, operands.0, operands.1) {
+        println!(
+            "operands: [{}] [{}]",
+            format_type_flags(dst),
+            format_type_flags(src)
+        );
+
+        if dst != T_NONE || src != T_NONE {
+            if let (0, 0) = (size::only(dst), size::only(src)) {
+                // FIXME: Report proper error on the operand that needs a size.
+                panic!("Could not determine operation size")
+            }
+        }
+
+        match out::template::find(instruction.operation, dst, src) {
             Some(template) => Ok(template),
             None => Err(CompileError::InvalidOperands(
                 instruction.operands.span().clone(),
@@ -1178,11 +1161,22 @@ impl Compiler {
             ast::Operand::Immediate(_, expr) => {
                 let value = self.evaluate_expression(expr)?;
                 if value == 1 {
-                    T_IMM | T_ONE
-                } else if value < 0 {
-                    T_IMM | T_SIGNEX
+                    T_IMM | T_ONE | T_BITS_8
+                } else if value_is_byte(value) {
+                    if value_is_signed_byte(value) {
+                        T_IMM | T_SIGNED | T_BITS_8
+                    } else {
+                        T_IMM | T_BITS_8
+                    }
+                } else if value_is_word(value) {
+                    if value_is_signed_word(value) {
+                        T_IMM | T_SIGNED | T_BITS_16
+                    } else {
+                        T_IMM | T_BITS_16
+                    }
                 } else {
-                    T_IMM
+                    // FIXME: Report proper error.
+                    unreachable!("value out of range");
                 }
             }
 
@@ -1259,6 +1253,56 @@ impl Compiler {
             }
         }
     }
+}
+
+impl ast::Operands {
+    fn segment_override(&self) -> Option<ast::Segment> {
+        match self {
+            Self::Destination(_, dst) => dst.segment_override(),
+
+            Self::DestinationAndSource(_, dst, src) => {
+                let dst = dst.segment_override();
+                if dst.is_some() {
+                    dst
+                } else {
+                    let src = src.segment_override();
+                    if src.is_some() {
+                        src
+                    } else {
+                        None
+                    }
+                }
+            }
+
+            _ => None,
+        }
+    }
+}
+
+impl ast::Operand {
+    fn segment_override(&self) -> Option<ast::Segment> {
+        match self {
+            Self::Address(_, _, _, s) => s.clone(),
+            Self::Indirect(_, _, _, _, s) => s.clone(),
+            _ => None,
+        }
+    }
+}
+
+fn value_is_signed_byte(value: i32) -> bool {
+    value >= i8::MIN as i32 && value <= i8::MAX as i32
+}
+
+fn value_is_byte(value: i32) -> bool {
+    value >= u8::MIN as i32 && value <= u8::MAX as i32
+}
+
+fn value_is_signed_word(value: i32) -> bool {
+    value >= i16::MIN as i32 && value <= i16::MAX as i32
+}
+
+fn value_is_word(value: i32) -> bool {
+    value >= u16::MIN as i32 && value <= u16::MAX as i32
 }
 
 #[cfg(test)]

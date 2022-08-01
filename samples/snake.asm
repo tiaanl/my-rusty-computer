@@ -712,7 +712,7 @@ move_snake_up:
         SUB WORD [snake + 2],5
         JMP move_snake_vector_end
 move_snake_down:
-nop;        ADD WORD [snake + 2],5
+        ADD WORD [snake + 2],5
         JMP move_snake_vector_end
 move_snake_left:
 nop;        SUB WORD [snake],5

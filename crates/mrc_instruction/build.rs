@@ -395,7 +395,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                         &mut lines,
                         instruction.mnemonic.as_str(),
                         set_size(dst, T_BITS_16),
-                        set_size(src, T_BITS_8) | T_SIGNEX,
+                        set_size(src, T_BITS_8) | T_SIGNED,
                         bytes_to_codes(bytes),
                     );
                 } else if encoding.bytes[0].ends_with(" v w") {
