@@ -910,6 +910,7 @@ impl Compiler {
                     ..
                 }) = self.labels.get(label.1.as_str())
                 {
+                    println!("label: {label} = {label_offset}");
                     Ok(*label_offset as i32)
                 } else {
                     Err(CompileError::LabelNotFound(label.clone()))
@@ -1104,7 +1105,7 @@ impl Compiler {
         &self,
         instruction: &ast::Instruction,
     ) -> Result<&out::template::Template, CompileError> {
-        use out::template::type_flags::{format_type_flags, size, TypeFlags, T_MEM, T_NONE};
+        use out::template::type_flags::{size, TypeFlags, T_MEM, T_NONE};
 
         fn assume_size(operand: TypeFlags, other: TypeFlags) -> TypeFlags {
             if operand & T_MEM != 0 && size::only(operand) == 0 && size::only(other) != 0 {
@@ -1129,11 +1130,11 @@ impl Compiler {
             }
         };
 
-        println!(
-            "operands: [{}] [{}]",
-            format_type_flags(dst),
-            format_type_flags(src)
-        );
+        // println!(
+        //     "operands: [{}] [{}]",
+        //     format_type_flags(dst),
+        //     format_type_flags(src)
+        // );
 
         if dst != T_NONE || src != T_NONE {
             if let (0, 0) = (size::only(dst), size::only(src)) {
@@ -1141,6 +1142,8 @@ impl Compiler {
                 panic!("Could not determine operation size")
             }
         }
+
+        println!("Finding template for: {:?}", instruction);
 
         match out::template::find(instruction.operation, dst, src) {
             Some(template) => Ok(template),
@@ -1157,6 +1160,7 @@ impl Compiler {
         operand: &ast::Operand,
     ) -> Result<out::template::type_flags::TypeFlags, CompileError> {
         use out::template::type_flags::*;
+
         Ok(match operand {
             ast::Operand::Immediate(_, expr) => {
                 let value = self.evaluate_expression(expr)?;
@@ -1365,6 +1369,44 @@ mod tests {
                 }
             }
         }};
+    }
+
+    #[test]
+    fn value_classification() {
+        assert!(!value_is_byte(-1));
+        assert!(value_is_byte(0));
+        assert!(value_is_byte(255));
+        assert!(!value_is_byte(256));
+
+        assert!(!value_is_signed_byte(-129));
+        assert!(value_is_signed_byte(-128));
+        assert!(value_is_signed_byte(0));
+        assert!(value_is_signed_byte(127));
+        assert!(!value_is_signed_byte(128));
+
+        assert!(!value_is_word(-1));
+        assert!(value_is_word(0));
+        assert!(value_is_word(65535));
+        assert!(!value_is_word(65536));
+
+        assert!(!value_is_signed_word(-32769));
+        assert!(value_is_signed_word(-32768));
+        assert!(value_is_signed_word(0));
+        assert!(value_is_signed_word(32767));
+        assert!(!value_is_signed_word(32768));
+    }
+
+    #[test]
+    fn operand_to_type_flags() {
+        use out::template::type_flags::*;
+
+        let compiler = Compiler::default();
+        let op =
+            ast::Operand::Immediate(0..0, ast::Expression::Value(0..0, ast::Value::Constant(0)));
+        assert_eq!(
+            T_IMM | T_SIGNED | T_BITS_8,
+            compiler.operand_to_type_flags(&op).unwrap()
+        );
     }
 
     #[test]

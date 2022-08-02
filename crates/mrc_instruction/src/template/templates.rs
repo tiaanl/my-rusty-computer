@@ -158,7 +158,7 @@ pub(crate) const TEMPLATES: &[Template] = &[
     t!(LOCK, [C_BYTE, 0xF0]),
     t!(LODSB, [C_BYTE, 0xAC]),
     t!(LODSW, [C_BYTE, 0xAD]),
-    t!(LOOP, T_IMM|T_BITS_8, [C_BYTE, 0xE2, C_DISP_BYTE]),
+    t!(LOOP, T_IMM|T_SIGNED|T_BITS_8, [C_BYTE, 0xE2, C_DISP_BYTE]),
     t!(LOOPNZ, [C_BYTE, 0xE0, C_DISP_BYTE]),
     t!(LOOPZ, [C_BYTE, 0xE1, C_DISP_BYTE]),
     t!(MOV, T_REG|T_REG_AL_AX|T_BITS_8, T_MEM_DIR|T_BITS_8, [C_BYTE, 0xA0, C_IMM_WORD]),

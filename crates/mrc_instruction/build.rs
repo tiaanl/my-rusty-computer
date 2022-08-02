@@ -217,7 +217,7 @@ fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
 
     match mnemonic {
         "lds" => (T_REG | T_BITS_16, T_MEM),
-        "loop" => (T_IMM | T_BITS_8, T_NONE),
+        "loop" => (T_IMM | T_SIGNED | T_BITS_8, T_NONE),
         "mul" => (T_REG | T_MEM, T_NONE),
         "div" => (T_REG | T_MEM, T_NONE),
         "imul" => (T_REG | T_MEM, T_NONE),
