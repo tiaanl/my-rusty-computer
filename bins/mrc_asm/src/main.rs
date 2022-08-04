@@ -77,7 +77,7 @@ fn main() {
                 }
                 Ok(None) => break,
                 Err(err) => {
-                    diags.error(format!("{}", err), err.span().clone());
+                    diags.error(&err, err.span().clone());
                     break;
                 }
             }
@@ -87,10 +87,15 @@ fn main() {
     } else {
         loop {
             match parser.parse_line() {
-                Ok(Some(line)) => compiler.push_line(line),
+                Ok(Some(line)) => {
+                    if let Err(err) = compiler.push_line(line) {
+                        diags.error(&err, err.span().clone());
+                        break;
+                    }
+                }
                 Ok(None) => break,
                 Err(err) => {
-                    diags.error(format!("{}", err), err.span().clone());
+                    diags.error(&err, err.span().clone());
                     break;
                 }
             }
@@ -108,7 +113,7 @@ fn main() {
             Err(err) => {
                 // eprintln!("COMPILE ERROR: {}", err);
                 // print_source_pos(source, err.span(), Some(opts.source.as_str()));
-                diags.error(format!("{}", err), err.span().clone());
+                diags.error(&err, err.span().clone());
             }
         }
     }

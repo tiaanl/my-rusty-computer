@@ -1,7 +1,14 @@
     jmp start
-    times 512 db 0
+    times 1024 - 64 nop
+
 middle:
-    times 512 db 0
+    times 64 nop
+
 start:
     nop
     jmp middle
+    loop middle
+    loopne middle
+    loope middle
+    loopnz middle
+    loopz middle

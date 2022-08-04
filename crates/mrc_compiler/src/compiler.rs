@@ -72,7 +72,7 @@ impl std::fmt::Display for CompileError {
 }
 
 #[derive(Debug)]
-struct Output {
+pub struct Output {
     line: ast::Line,
     size: u16,
     times: u16,
@@ -80,7 +80,7 @@ struct Output {
 }
 
 #[derive(Debug)]
-struct LabelInfo {
+pub struct LabelInfo {
     offset: Option<u16>,
     original: ast::Label,
 }
@@ -121,7 +121,11 @@ impl Compiler {
 
                 // Does the number of bytes we emitted and the size of the instruction we calculated
                 // earlier match?
-                assert_eq!(output.size as usize, bytes.len());
+                assert_eq!(
+                    output.size as usize,
+                    bytes.len(),
+                    "Calculated size and assembled sizes does not match."
+                );
 
                 for b in bytes {
                     result.push(b);
@@ -549,7 +553,7 @@ impl Compiler {
                 C_DISP_BYTE => match &instruction.operands {
                     ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
                         // The value stored in the expression is the address of the instruction
-                        // we want to go to, so calculate the displacement.
+                        // we want to go to, so calculate a displacement.
                         let value = self.evaluate_expression(expr)?;
                         let value = value - (offset as i32 + size as i32);
 
@@ -933,7 +937,7 @@ impl Compiler {
 
             ast::Line::Data(_, data) => data.len() as u16,
 
-            _ => todo!(),
+            _ => unreachable!(),
         })
     }
 
@@ -1235,10 +1239,10 @@ impl Compiler {
 }
 
 impl Compiler {
-    pub fn push_line(&mut self, line: ast::Line) {
+    pub fn push_line(&mut self, line: ast::Line) -> Result<(), CompileError> {
         match line {
             ast::Line::Times(_, expr, line) => {
-                let times = self.evaluate_expression(&expr).unwrap() as u16;
+                let times = self.evaluate_expression(&expr)? as u16;
                 self.outputs.push(Output {
                     line: *line,
                     size: 0,
@@ -1256,6 +1260,8 @@ impl Compiler {
                 });
             }
         }
+
+        Ok(())
     }
 }
 

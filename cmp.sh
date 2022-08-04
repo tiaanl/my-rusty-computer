@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-SAMPLE=snake
+SAMPLE=jumps
 
 /home/tilo/code/nasm/nasm -o samples/${SAMPLE}.bin samples/${SAMPLE}.asm
 ndisasm samples/${SAMPLE}.bin > ${SAMPLE}.lst

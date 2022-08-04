@@ -1,0 +1,7 @@
+[package]
+name = "ds_reader"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+data_sheet = { path = "../../crates/data_sheet" }

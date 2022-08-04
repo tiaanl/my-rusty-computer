@@ -35,6 +35,7 @@ impl Encoding {
 #[derive(Debug, Default)]
 pub struct Instruction {
     pub mnemonic: String,
+    pub aliases: Vec<String>,
     pub description: String,
     pub encodings: Vec<Encoding>,
 }
@@ -82,7 +83,7 @@ fn is_encoding(s: &str) -> bool {
     first_split.is_some()
 }
 
-fn split_mnemonic_description(input: String) -> (String, String) {
+fn split_mnemonic_description(input: String) -> (String, Vec<String>, String) {
     let parts: Vec<String> = input
         .split('=')
         .map(|s| s.trim().to_owned())
@@ -97,15 +98,23 @@ fn split_mnemonic_description(input: String) -> (String, String) {
     };
     let description = description[0..description.len()].to_owned();
 
-    let mnemonic = mnemonic.split('/').take(1).collect::<Vec<&str>>()[0].to_owned();
+    let mnemonics = mnemonic
+        .split('/')
+        .map(|m| {
+            if m == "SSB" {
+                "SBB".to_owned()
+            } else if m == "BAA" {
+                "DAA".to_owned()
+            } else {
+                m.to_owned()
+            }
+        })
+        .collect::<Vec<String>>();
 
-    let mnemonic = match mnemonic.as_str() {
-        "SSB" => "SBB".to_owned(),
-        "BAA" => "DAA".to_owned(),
-        _ => mnemonic.to_owned(),
-    };
+    let mnemonic = mnemonics[0].clone();
+    let aliases = mnemonics[1..].to_owned();
 
-    (mnemonic, description)
+    (mnemonic, aliases, description)
 }
 
 fn parse_category_header(input: String) -> Option<String> {
@@ -116,7 +125,7 @@ fn parse_category_header(input: String) -> Option<String> {
     }
 }
 
-fn parse_instruction_header(input: String) -> Option<(String, String)> {
+fn parse_instruction_header(input: String) -> Option<(String, Vec<String>, String)> {
     if is_instruction_header(input.as_str()) {
         Some(split_mnemonic_description(input))
     } else {
@@ -131,9 +140,10 @@ fn parse_inline_instruction(input: String) -> Option<Instruction> {
 
     let mut parts: Vec<String> = input.split('|').map(|s| s.trim().to_owned()).collect();
 
-    let (mnemonic, description) = split_mnemonic_description(parts[0].clone());
+    let (mnemonic, aliases, description) = split_mnemonic_description(parts[0].clone());
     let mut instruction = Instruction {
         mnemonic,
+        aliases,
         description,
         ..Instruction::default()
     };
@@ -179,7 +189,7 @@ fn parse_instructions(lines: &mut Lines, category: &mut Category) {
             break;
         }
 
-        if let Some((mnemonic, description)) = parse_instruction_header(lines.current()) {
+        if let Some((mnemonic, _, description)) = parse_instruction_header(lines.current()) {
             lines.next();
 
             let mut instruction = Instruction {

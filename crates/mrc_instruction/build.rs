@@ -4,6 +4,7 @@ mod type_flags;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::io::Write;
+use std::process::Command;
 use type_flags::*;
 
 #[path = "src/template/codes.rs"]
@@ -70,14 +71,14 @@ fn push_line(
     src: TypeFlags,
     codes: Vec<Code>,
 ) {
-    if dst != T_NONE && class::only(dst) != T_SEG_OFF {
-        assert!(
-            class::only(dst) != 0 && size::only(dst) != 0,
-            "{} ({})",
-            dst,
-            format_type_flags(dst)
-        );
-    }
+    // if dst != T_NONE && class::only(dst) != T_SEG_OFF {
+    //     assert!(
+    //         class::only(dst) != 0 && size::only(dst) != 0,
+    //         "{} ({})",
+    //         dst,
+    //         format_type_flags(dst)
+    //     );
+    // }
 
     lines.push(Line {
         mnemonic: mnemonic.to_owned(),
@@ -217,7 +218,7 @@ fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
 
     match mnemonic {
         "lds" => (T_REG | T_BITS_16, T_MEM),
-        "loop" => (T_IMM | T_SIGNED | T_BITS_8, T_NONE),
+        "loop" | "loopnz" | "loopz" => (T_IMM, T_NONE),
         "mul" => (T_REG | T_MEM, T_NONE),
         "div" => (T_REG | T_MEM, T_NONE),
         "imul" => (T_REG | T_MEM, T_NONE),
@@ -277,9 +278,19 @@ fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
     }
 }
 
-fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Category]) {
-    let mut lines = vec![];
+#[inline(always)]
+fn write_line(writer: &mut impl Write, line: &str) {
+    writer.write_all(line.as_bytes()).unwrap();
+}
 
+#[inline(always)]
+fn write_lines(writer: &mut impl Write, lines: &[&str]) {
+    for line in lines {
+        write_line(writer, line);
+    }
+}
+
+fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Category]) {
     for category in categories.iter() {
         // println!("Category: {}", &category.name);
 
@@ -288,6 +299,14 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
             //     "    Instruction: {} - {}",
             //     &instruction.mnemonic, &instruction.description
             // );
+
+            let l = format!(
+                "#[rustfmt::skip]\npub(crate) const INSTRUCTIONS_{}: &[Template] = &[\n",
+                instruction.mnemonic
+            );
+            writer.write_all(l.as_bytes()).unwrap();
+
+            let mut lines = vec![];
 
             for encoding in instruction.encodings.iter() {
                 // println!("        {:?}", encoding);
@@ -624,7 +643,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     // skipping ESC
                 } else {
                     let (dst, src) = if instruction.description.starts_with("Jump on ") {
-                        (T_IMM | T_BITS_8, T_NONE)
+                        (T_IMM, T_NONE)
                     } else {
                         dst_and_src_from_string(
                             instruction.mnemonic.as_str(),
@@ -694,38 +713,157 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     }
                 }
             }
+
+            lines.sort();
+
+            for line in lines {
+                let s = if line.destination == T_NONE && line.source == T_NONE {
+                    format!(
+                        "    t!({}, [{}]),\n",
+                        line.mnemonic,
+                        codes_to_string(&line.codes)
+                    )
+                } else if line.source == T_NONE {
+                    format!(
+                        "    t!({}, {}, [{}]),\n",
+                        line.mnemonic,
+                        format_type_flags(line.destination),
+                        codes_to_string(&line.codes)
+                    )
+                } else {
+                    format!(
+                        "    t!({}, {}, {}, [{}]),\n",
+                        line.mnemonic,
+                        format_type_flags(line.destination),
+                        format_type_flags(line.source),
+                        codes_to_string(&line.codes)
+                    )
+                };
+
+                writer.write_all(s.as_bytes()).unwrap();
+            }
+
+            writer.write_all("];\n\n".as_bytes()).unwrap();
         }
     }
 
-    // lines.sort_by(|l, r| l.mnemonic.cmp(&r.mnemonic));
-    lines.sort();
+    writer
+        .write_all("pub const TEMPLATES: &[&[Template]] = &[\n".as_bytes())
+        .unwrap();
 
-    for line in lines {
-        let s = if line.destination == T_NONE && line.source == T_NONE {
-            format!(
-                "    t!({}, [{}]),\n",
-                line.mnemonic,
-                codes_to_string(&line.codes)
-            )
-        } else if line.source == T_NONE {
-            format!(
-                "    t!({}, {}, [{}]),\n",
-                line.mnemonic,
-                format_type_flags(line.destination),
-                codes_to_string(&line.codes)
-            )
-        } else {
-            format!(
-                "    t!({}, {}, {}, [{}]),\n",
-                line.mnemonic,
-                format_type_flags(line.destination),
-                format_type_flags(line.source),
-                codes_to_string(&line.codes)
-            )
-        };
-
-        writer.write_all(s.as_bytes()).unwrap();
+    for category in categories {
+        for instruction in &category.instructions {
+            writer
+                .write_all(format!("    INSTRUCTIONS_{},\n", instruction.mnemonic).as_bytes())
+                .unwrap();
+        }
     }
+
+    writer.write_all("];\n".as_bytes()).unwrap();
+}
+
+fn generate_operations(writer: &mut impl Write, categories: &[data_sheet::Category]) {
+    writer
+        .write_all(
+            "#[derive(Clone, Copy, Debug, PartialEq, Eq)]\npub enum Operation {\n".as_bytes(),
+        )
+        .unwrap();
+
+    let mut first_category = true;
+    for category in categories {
+        if category.instructions.is_empty() {
+            continue;
+        }
+
+        if first_category {
+            first_category = false;
+        } else {
+            writer.write_all("\n".as_bytes()).unwrap();
+        }
+
+        write_line(writer, format!("    // {}\n", category.name).as_str());
+
+        for instruction in &category.instructions {
+            write_line(
+                writer,
+                format!(
+                    "    {}, // {}\n",
+                    &instruction.mnemonic, &instruction.description
+                )
+                .as_str(),
+            );
+        }
+    }
+
+    write_lines(writer, &[]);
+
+    write_line(writer, "}\n\nconst MNEMONICS_STR: &[&str] = &[\n");
+
+    for category in categories.iter() {
+        for instruction in category.instructions.iter() {
+            write_line(
+                writer,
+                format!("    \"{}\",\n", instruction.mnemonic).as_str(),
+            );
+        }
+    }
+
+    write_line(writer, "];\n\n");
+
+    write_lines(
+        writer,
+        &[
+            "impl std::fmt::Display for Operation {\n",
+            "    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n",
+            "        write!(f, \"{}\", MNEMONICS_STR[*self as usize])\n",
+            "    }\n",
+            "}\n",
+            "\n",
+            "impl std::str::FromStr for Operation {\n",
+            "    type Err = ();\n",
+            "\n",
+            "    fn from_str(s: &str) -> Result<Self, Self::Err> {\n",
+            "        use Operation::*;\n",
+            "\n",
+            "        Ok(match s.to_string().to_lowercase().as_str() {\n",
+        ],
+    );
+
+    for category in categories.iter() {
+        for instruction in category.instructions.iter() {
+            write_line(
+                writer,
+                format!(
+                    "            \"{}\" => {},\n",
+                    instruction.mnemonic.to_lowercase(),
+                    instruction.mnemonic
+                )
+                .as_str(),
+            );
+
+            for alias in instruction.aliases.iter() {
+                write_line(
+                    writer,
+                    format!(
+                        "            \"{}\" => {},\n",
+                        alias.to_lowercase(),
+                        instruction.mnemonic
+                    )
+                    .as_str(),
+                );
+            }
+        }
+    }
+
+    write_lines(
+        writer,
+        &[
+            "            _ => return Err(()),\n",
+            "        })\n",
+            "    }\n",
+            "}\n",
+        ],
+    );
 }
 
 const ABOVE: &str = "//! This file is generated by [build.rs]. DO NOT MODIFY.
@@ -782,21 +920,27 @@ macro_rules! t {
         }
     }};
 }
-
-#[rustfmt::skip]
-pub(crate) const TEMPLATES: &[Template] = &[
 ";
 
-const BELOW: &str = "];
-";
+fn run_rustfmt(path: impl ToString) {
+    Command::new("rustfmt")
+        .arg(path.to_string())
+        .status()
+        .unwrap();
+}
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/template/templates.rs");
 
     let data_sheet = get_data_sheet();
-    let mut file = std::fs::File::create("src/template/templates.rs").unwrap();
 
+    let mut file = std::fs::File::create("src/template/templates.rs").unwrap();
     file.write_all(ABOVE.as_bytes()).unwrap();
     generate_templates(&mut file, data_sheet.as_slice());
-    file.write_all(BELOW.as_bytes()).unwrap();
+    run_rustfmt("src/template/templates.rs");
+
+    let mut file = std::fs::File::create("src/operation2.rs").unwrap();
+    generate_operations(&mut file, data_sheet.as_slice());
+    run_rustfmt("src/operation2.rs");
 }

@@ -5,6 +5,7 @@ mod address;
 mod instruction;
 mod operand;
 mod operation;
+mod operation2;
 mod register;
 
 pub mod data;

@@ -1,7 +1,10 @@
+mod flatten;
 pub(crate) mod parser;
 
 use crate::parser::{Encoding, Instruction};
 pub use parser::Category;
+
+pub use flatten::flatten;
 
 pub fn get_data_sheet() -> Vec<Category> {
     let data_sheet = include_str!("../data_sheet.txt");
@@ -16,6 +19,7 @@ pub fn get_data_sheet() -> Vec<Category> {
     {
         Some(category) => category.instructions.push(Instruction {
             mnemonic: "NOP".to_owned(),
+            aliases: vec![],
             description: "Cycle the CPU without permorning an action.".to_owned(),
             encodings: vec![Encoding {
                 operands: "".to_owned(),
@@ -23,6 +27,10 @@ pub fn get_data_sheet() -> Vec<Category> {
             }],
         }),
         None => unreachable!(),
+    }
+
+    for category in categories.iter_mut() {
+        category.instructions.sort_by_key(|i| i.mnemonic.clone());
     }
 
     categories
