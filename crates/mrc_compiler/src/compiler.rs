@@ -1109,9 +1109,9 @@ impl Compiler {
         &self,
         instruction: &ast::Instruction,
     ) -> Result<&out::template::Template, CompileError> {
-        use out::template::type_flags::{size, TypeFlags, T_MEM, T_NONE};
+        use out::template::op_flags::{size, OpFlags, T_MEM, T_NONE};
 
-        fn assume_size(operand: TypeFlags, other: TypeFlags) -> TypeFlags {
+        fn assume_size(operand: OpFlags, other: OpFlags) -> OpFlags {
             if operand & T_MEM != 0 && size::only(operand) == 0 && size::only(other) != 0 {
                 operand | size::only(other)
             } else {
@@ -1162,8 +1162,8 @@ impl Compiler {
     fn operand_to_type_flags(
         &self,
         operand: &ast::Operand,
-    ) -> Result<out::template::type_flags::TypeFlags, CompileError> {
-        use out::template::type_flags::*;
+    ) -> Result<out::template::op_flags::OpFlags, CompileError> {
+        use out::template::op_flags::*;
 
         Ok(match operand {
             ast::Operand::Immediate(_, expr) => {
@@ -1404,7 +1404,7 @@ mod tests {
 
     #[test]
     fn operand_to_type_flags() {
-        use out::template::type_flags::*;
+        use out::template::op_flags::*;
 
         let compiler = Compiler::default();
         let op =

@@ -1,10 +1,12 @@
-#[path = "../../mrc_instruction/src/template/type_flags.rs"]
-mod type_flags;
+#![allow(dead_code)]
+
+#[path = "../../mrc_instruction/src/template/op_flags.rs"]
+mod op_flags;
 
 use crate::Category;
-use type_flags::*;
+use op_flags::*;
 
-fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
+fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (OpFlags, OpFlags) {
     let mnemonic = mnemonic.to_lowercase();
     let mnemonic = mnemonic.as_str();
 
@@ -20,40 +22,40 @@ fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
             "Register/Memory to/from Register" => (T_REG, T_REG | T_MEM),
             "Immediate to Register/Memory" => (T_REG | T_MEM, T_IMM),
             "Immediate to Register" => (T_REG, T_IMM),
-            "Memory to Accumulator" => (T_REG | T_REG_AL_AX, T_MEM_DIR),
-            "Accumulator to Memory" => (T_MEM_DIR, T_REG | T_REG_AL_AX),
-            "Register/Memory to Segment Register" => (T_SEG | T_BITS_16, T_REG | T_MEM),
-            "Segment Register to Register/Memory" => (T_REG | T_MEM, T_SEG | T_BITS_16),
+            "Memory to Accumulator" => (T_REG_AL, T_MEM),
+            "Accumulator to Memory" => (T_MEM, T_REG | T_REG_AX),
+            "Register/Memory to Segment Register" => (T_REG | T_BITS_16, T_REG | T_MEM),
+            "Segment Register to Register/Memory" => (T_REG | T_MEM, T_REG | T_BITS_16),
             "Register/Memory" => (T_REG | T_MEM, T_NONE),
             "Register" => (T_REG, T_NONE),
-            "Segment Register" => (T_SEG | T_BITS_16, T_NONE),
+            "Segment Register" => (T_REG | T_BITS_16, T_NONE),
             "Register/Memory with Register" => (T_REG, T_REG | T_MEM),
-            "Register with Accumulator" => (T_REG | T_REG_AL_AX, T_REG),
+            "Register with Accumulator" => (T_REG_ACCUM, T_REG),
             "Fixed Port" => match mnemonic {
-                "in" => (T_REG | T_REG_AL_AX, T_IMM | T_BITS_8),
-                "out" => (T_IMM | T_BITS_8, T_REG | T_REG_AL_AX),
+                "in" => (T_REG | T_REG_ACCUM, T_IMM | T_BITS_8),
+                "out" => (T_IMM | T_BITS_8, T_REG | T_REG_ACCUM),
                 _ => unreachable!(),
             },
             "Variable Port" => match mnemonic {
-                "in" => (T_REG | T_REG_AL_AX, T_REG | T_REG_DL_DX | T_BITS_16),
-                "out" => (T_REG | T_REG_DL_DX | T_BITS_16, T_REG | T_REG_AL_AX),
+                "in" => (T_REG | T_REG_ACCUM, T_REG | T_REG | T_BITS_16),
+                "out" => (T_REG | T_REG | T_BITS_16, T_REG | T_REG_ACCUM),
                 _ => unreachable!(),
             },
             "" => (T_NONE, T_NONE),
             "Reg./Memory with Register to Either" => (T_REG, T_REG | T_MEM),
-            "Immediate to Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+            "Immediate to Accumulator" => (T_REG | T_REG_ACCUM, T_IMM),
             "Reg./Memory and Register to Either" => (T_REG, T_REG | T_MEM),
             "Immediate from Register/Memory" => (T_REG | T_MEM, T_IMM),
-            "Immediate from Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+            "Immediate from Accumulator" => (T_REG | T_REG_ACCUM, T_IMM),
             "Register/memory" => (T_REG | T_MEM, T_NONE),
             "Register/Memory and Register" => (T_REG, T_REG | T_MEM),
             "Immediate with Register/Memory" => (T_REG | T_MEM, T_IMM),
-            "Immediate with Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+            "Immediate with Accumulator" => (T_REG | T_REG_ACCUM, T_IMM),
             "Immediate Data and Register/Memory" => (T_REG | T_MEM, T_IMM),
-            "Immediate Data and Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+            "Immediate Data and Accumulator" => (T_REG | T_REG_ACCUM, T_IMM),
             "Direct Within Segment" => (T_IMM | T_BITS_16, T_NONE),
             "Indirect Within Segment" => (T_REG | T_MEM | T_BITS_16, T_NONE),
-            "Direct Intersegment" => (T_SEG_OFF, T_NONE),
+            "Direct Intersegment" => todo!(),
             "Indirect Intersegment" => (T_REG | T_MEM | T_BITS_16, T_NONE),
             // This is a short jump, which we don't handle right now, because we need the "short"
             // keyword, so for now only match on the near jump.
@@ -62,7 +64,7 @@ fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
             "Within Segment" => (T_NONE, T_NONE),
             "Within Seg Adding Immed to SP" => (T_IMM | T_BITS_16, T_NONE),
             "Intersegment" => (T_NONE, T_NONE),
-            "Intersegment Adding Immediate to SP" => (T_DISP | T_BITS_16, T_NONE),
+            "Intersegment Adding Immediate to SP" => todo!(),
             "Type Specified" => (T_IMM | T_BITS_8, T_NONE),
             "Type 3" => (T_NONE, T_NONE),
             _ => unreachable!("operands: {}", s),
@@ -92,8 +94,8 @@ fn collapse_codes(codes: &[String], replace: &str, find: &[&str]) -> Vec<String>
         .collect()
 }
 
-fn set_size(flags: TypeFlags, size: TypeFlags) -> TypeFlags {
-    if class::only(flags) != 0 {
+fn set_size(flags: OpFlags, size: OpFlags) -> OpFlags {
+    if op_type::only(flags) != 0 {
         // If there is already a size set, then we just leave it.
         if size::only(flags) != 0 {
             flags
@@ -112,8 +114,8 @@ fn bytes_to_codes(bytes: Vec<String>) -> Vec<String> {
 fn push_line(
     lines: &mut Vec<Line>,
     mnemonic: String,
-    destination: TypeFlags,
-    source: TypeFlags,
+    destination: OpFlags,
+    source: OpFlags,
     codes: Vec<String>,
 ) {
     lines.push(Line {
@@ -209,51 +211,51 @@ pub fn flatten(categories: &[Category]) -> Vec<Line> {
                         bytes_to_codes(bytes),
                     );
                 } else if encoding.bytes[0].ends_with(" s w") {
-                    let (dst, src) = dst_and_src_from_string(
-                        instruction.mnemonic.as_str(),
-                        encoding.operands.as_str(),
-                    );
-
-                    let mut bytes = clean_bytes.clone();
-                    bytes[0] = bytes[0].replace(" s w", " 0 0");
-                    push_line(
-                        &mut lines,
-                        instruction.mnemonic.clone(),
-                        set_size(dst, T_BITS_8),
-                        set_size(src, T_BITS_8),
-                        bytes_to_codes(bytes),
-                    );
-
-                    let mut bytes = clean_bytes.clone();
-                    bytes[0] = bytes[0].replace(" s w", " 0 1");
-                    push_line(
-                        &mut lines,
-                        instruction.mnemonic.clone(),
-                        set_size(dst, T_BITS_16),
-                        set_size(src, T_BITS_16),
-                        bytes_to_codes(bytes),
-                    );
-
-                    // let mut bytes = encoding.bytes.clone();
-                    // bytes[0] = bytes[0].replace(" s w", " 1 0");
-                    // let bytes = data_to(bytes, "imm8");
+                    // let (dst, src) = dst_and_src_from_string(
+                    //     instruction.mnemonic.as_str(),
+                    //     encoding.operands.as_str(),
+                    // );
+                    //
+                    // let mut bytes = clean_bytes.clone();
+                    // bytes[0] = bytes[0].replace(" s w", " 0 0");
                     // push_line(
                     //     &mut lines,
-                    //     instruction.mnemonic.as_str(),
+                    //     instruction.mnemonic.clone(),
                     //     set_size(dst, T_BITS_8),
                     //     set_size(src, T_BITS_8),
                     //     bytes_to_codes(bytes),
                     // );
-
-                    let mut bytes = clean_bytes.clone();
-                    bytes[0] = bytes[0].replace(" s w", " 1 1");
-                    push_line(
-                        &mut lines,
-                        instruction.mnemonic.clone(),
-                        set_size(dst, T_BITS_16),
-                        set_size(src, T_BITS_8) | T_SIGNED,
-                        bytes_to_codes(bytes),
-                    );
+                    //
+                    // let mut bytes = clean_bytes.clone();
+                    // bytes[0] = bytes[0].replace(" s w", " 0 1");
+                    // push_line(
+                    //     &mut lines,
+                    //     instruction.mnemonic.clone(),
+                    //     set_size(dst, T_BITS_16),
+                    //     set_size(src, T_BITS_16),
+                    //     bytes_to_codes(bytes),
+                    // );
+                    //
+                    // // let mut bytes = encoding.bytes.clone();
+                    // // bytes[0] = bytes[0].replace(" s w", " 1 0");
+                    // // let bytes = data_to(bytes, "imm8");
+                    // // push_line(
+                    // //     &mut lines,
+                    // //     instruction.mnemonic.as_str(),
+                    // //     set_size(dst, T_BITS_8),
+                    // //     set_size(src, T_BITS_8),
+                    // //     bytes_to_codes(bytes),
+                    // // );
+                    //
+                    // let mut bytes = clean_bytes.clone();
+                    // bytes[0] = bytes[0].replace(" s w", " 1 1");
+                    // push_line(
+                    //     &mut lines,
+                    //     instruction.mnemonic.clone(),
+                    //     set_size(dst, T_BITS_16),
+                    //     set_size(src, T_BITS_8) | T_SIGNED,
+                    //     bytes_to_codes(bytes),
+                    // );
                 } else if encoding.bytes[0].ends_with(" v w") {
                     let mut bytes = clean_bytes.clone();
                     bytes[0] = bytes[0].replace(" v w", " 0 0");
@@ -261,7 +263,7 @@ pub fn flatten(categories: &[Category]) -> Vec<Line> {
                         &mut lines,
                         instruction.mnemonic.clone(),
                         T_REG | T_MEM | T_BITS_8,
-                        T_IMM | T_ONE | T_BITS_8,
+                        T_UNITY,
                         bytes_to_codes(bytes),
                     );
 
@@ -271,7 +273,7 @@ pub fn flatten(categories: &[Category]) -> Vec<Line> {
                         &mut lines,
                         instruction.mnemonic.clone(),
                         T_REG | T_MEM | T_BITS_16,
-                        T_IMM | T_ONE | T_BITS_8,
+                        T_UNITY | T_BITS_8,
                         bytes_to_codes(bytes),
                     );
 
@@ -281,7 +283,7 @@ pub fn flatten(categories: &[Category]) -> Vec<Line> {
                         &mut lines,
                         instruction.mnemonic.clone(),
                         T_REG | T_MEM | T_BITS_8,
-                        T_REG | T_REG_CL_CX | T_BITS_8,
+                        T_REG_CL,
                         bytes_to_codes(bytes),
                     );
 
@@ -291,7 +293,7 @@ pub fn flatten(categories: &[Category]) -> Vec<Line> {
                         &mut lines,
                         instruction.mnemonic.clone(),
                         T_REG | T_MEM | T_BITS_16,
-                        T_REG | T_REG_CL_CX | T_BITS_8,
+                        T_REG_CX,
                         bytes_to_codes(bytes),
                     );
                 } else if encoding.bytes[0].ends_with(" w") {
@@ -476,7 +478,7 @@ pub fn flatten(categories: &[Category]) -> Vec<Line> {
                         )
                     };
 
-                    let mut bytes = clean_bytes.clone();
+                    let bytes = clean_bytes.clone();
 
                     let mnemonic = if encoding.bytes[0] == "1 1 0 0 1 1 0 0"
                         && instruction.mnemonic == "INT"

@@ -1,30 +1,31 @@
 #![allow(dead_code, unused)]
 
 use super::codes::*;
+use super::op_flags::*;
 use super::templates::{Template, TEMPLATES};
-use super::type_flags::*;
-use crate::{
-    Immediate, Instruction, Operand, OperandSet, OperandSize, Operation, RegisterEncoding, Segment,
-    SizedRegisterEncoding,
-};
+use crate::Operation;
 
-pub fn find(operation: Operation, dst: TypeFlags, src: TypeFlags) -> Option<&'static Template> {
-    const PRINT: bool = true;
+const PRINT: bool = true;
 
+fn find_in_templates<'a>(
+    templates: &'a [Template],
+    op: Operation,
+    dst: OpFlags,
+    src: OpFlags,
+) -> Option<&'a Template<'a>> {
     if PRINT {
         println!(
             "finding: {:?} [{}] [{}]",
-            operation,
+            op,
             format_type_flags(dst),
             format_type_flags(src)
         );
     }
-
-    for temp in TEMPLATES[operation as usize] {
+    for temp in templates {
         macro_rules! check_type_flags {
             ($tf:ident) => {{
                 if $tf != T_NONE {
-                    if !temp.$tf.contains(class::only($tf)) {
+                    if !temp.$tf.contains(op_type::only($tf)) {
                         if PRINT {
                             println!("class does not match");
                         }
@@ -48,7 +49,7 @@ pub fn find(operation: Operation, dst: TypeFlags, src: TypeFlags) -> Option<&'st
             }};
         }
 
-        if temp.operation != operation {
+        if temp.operation != op {
             continue;
         }
 
@@ -74,232 +75,89 @@ pub fn find(operation: Operation, dst: TypeFlags, src: TypeFlags) -> Option<&'st
     None
 }
 
-fn operand_to_type(operand: &Operand) -> TypeFlags {
-    match operand {
-        Operand::Register(SizedRegisterEncoding(RegisterEncoding::AlAx, operand_size)) => {
-            T_REG
-                | T_REG_AL_AX
-                | if let OperandSize::Byte = operand_size {
-                    T_BITS_8
-                } else {
-                    T_BITS_16
-                }
-        }
+#[inline]
+pub fn find(op: Operation, dst: OpFlags, src: OpFlags) -> Option<&'static Template<'static>> {
+    find_in_templates(TEMPLATES[op as usize], op, dst, src)
+}
 
-        Operand::Register(SizedRegisterEncoding(RegisterEncoding::DlDx, operand_size)) => {
-            T_REG
-                | T_REG_DL_DX
-                | if let OperandSize::Byte = operand_size {
-                    T_BITS_8
-                } else {
-                    T_BITS_16
-                }
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::template::templates::t;
 
-        Operand::Register(SizedRegisterEncoding(_, operand_size)) => {
-            T_REG
-                | if let OperandSize::Byte = operand_size {
-                    T_BITS_8
-                } else {
-                    T_BITS_16
-                }
-        }
+    #[test]
+    fn basic() {
+        use Operation::*;
 
-        Operand::Immediate(imm) => {
-            T_IMM
-                | if let Immediate::Byte(_) = imm {
-                    T_BITS_8
-                } else {
-                    T_BITS_16
-                }
-        }
+        #[rustfmt::skip]
+        let templates = &[
+            t(ADD, T_REG_GPR|T_BITS_8,  T_MEM,                        &[0x00]),
+            t(ADD, T_REG_GPR|T_BITS_8,  T_REG_GPR|T_BITS_8,           &[0x01]),
+            t(ADD, T_REG_GPR|T_BITS_16, T_MEM,                        &[0x02]),
+            t(ADD, T_REG_GPR|T_BITS_16, T_REG_GPR|T_BITS_16,          &[0x03]),
+            t(ADD, T_MEM,               T_REG_GPR|T_BITS_8,           &[0x04]),
+            t(ADD, T_REG_GPR|T_BITS_8,  T_REG_GPR|T_BITS_8,           &[0x05]),
+            t(ADD, T_MEM,               T_REG_GPR|T_BITS_16,          &[0x06]),
+            t(ADD, T_REG_GPR|T_BITS_16, T_REG_GPR|T_BITS_16,          &[0x07]),
+            t(ADD, T_RM_GPR|T_BITS_16,  T_IMM|T_BITS_8,               &[0x08]),
+            t(ADD, T_REG_AL,            T_IMM,                        &[0x09]),
+            t(ADD, T_REG_AX,            T_SIGNED_BYTE_WORD,           &[0x0A]),
+            t(ADD, T_REG_AX,            T_IMM,                        &[0x0B]),
+            t(ADD, T_RM_GPR|T_BITS_8,   T_IMM,                        &[0x0C]),
+            t(ADD, T_RM_GPR|T_BITS_16,  T_SIGNED_BYTE_WORD,           &[0x0D]),
+            t(ADD, T_RM_GPR|T_BITS_16,  T_IMM,                        &[0x0E]),
+            t(ADD, T_MEM,               T_IMM|T_BITS_8,               &[0x0F]),
+            t(ADD, T_MEM,               T_SIGNED_BYTE_WORD|T_BITS_16, &[0x10]),
+            t(ADD, T_MEM,               T_IMM|T_BITS_16,              &[0x11]),
+            t(ADD, T_RM_GPR|T_BITS_8,   T_IMM,                        &[0x12]),
+        ];
 
-        Operand::Direct(_, _, operand_size) | Operand::Indirect(_, _, _, operand_size) => {
-            T_MEM
-                | if let OperandSize::Byte = operand_size {
-                    T_BITS_8
-                } else {
-                    T_BITS_16
-                }
-        }
+        #[rustfmt::skip]
+        let tests: &[(Operation, OpFlags, OpFlags, &[Code])] = &[
+            (ADD, T_REG | T_REG_8, T_NONE, &[0x00]),  // mov bl, [0x1234]
+        ];
 
-        _ => todo!("{:?}", operand),
+        for test in tests {
+            let (operation, destination, source, codes) = *test;
+            let m = find(operation, destination, source);
+            assert!(
+                m.is_some(),
+                "No match for [{}, {}, {}]",
+                operation,
+                format_type_flags(destination),
+                format_type_flags(source)
+            );
+            if let Some(m) = m {
+                assert_eq!(
+                    operation,
+                    m.operation,
+                    "Incorrect operation for [{}, {}, {}]",
+                    operation,
+                    format_type_flags(destination),
+                    format_type_flags(source)
+                );
+
+                let max = codes.len();
+
+                assert!(
+                    m.codes.len() >= max,
+                    "Not enough codes for [{}, {}, {}]",
+                    operation,
+                    format_type_flags(destination),
+                    format_type_flags(source)
+                );
+
+                assert_eq!(
+                    codes[..max],
+                    m.codes[..max],
+                    "Incorrect codes for [{}, {}, {}] code:[{}] m.codes:[{}]",
+                    operation,
+                    format_type_flags(destination),
+                    format_type_flags(source),
+                    codes_to_string(codes),
+                    codes_to_string(m.codes),
+                );
+            }
+        }
     }
 }
-
-// pub fn find(insn: &Instruction) -> Option<&'static Template> {
-//     let (dst, src) = match &insn.operands {
-//         OperandSet::DestinationAndSource(dst, src) => (operand_to_type(dst), operand_to_type(src)),
-//         OperandSet::Destination(dst) => (operand_to_type(dst), T_NONE),
-//         OperandSet::None => (T_NONE, T_NONE),
-//     };
-//
-//     find_internal(insn.operation, dst, src)
-// }
-
-macro_rules! imm8 {
-    ($value:expr) => {{
-        Operand::Immediate(Immediate::Byte($value))
-    }};
-}
-
-macro_rules! imm16 {
-    ($value:expr) => {{
-        Operand::Immediate(Immediate::Word($value))
-    }};
-}
-
-macro_rules! reg_internal {
-    ($encoding:ident, $size:ident) => {{
-        Operand::Register(SizedRegisterEncoding(
-            RegisterEncoding::$encoding,
-            OperandSize::$size,
-        ))
-    }};
-}
-
-macro_rules! reg8 {
-    (al) => {{
-        reg_internal!(AlAx, Byte)
-    }};
-
-    (bl) => {{
-        reg_internal!(BlBx, Byte)
-    }};
-
-    (cl) => {{
-        reg_internal!(ClCx, Byte)
-    }};
-
-    (dl) => {{
-        reg_internal!(DlDx, Byte)
-    }};
-}
-
-macro_rules! reg16 {
-    (ax) => {{
-        reg_internal!(AlAx, Word)
-    }};
-
-    (bx) => {{
-        reg_internal!(BlBx, Word)
-    }};
-
-    (cx) => {{
-        reg_internal!(ClCx, Word)
-    }};
-
-    (dx) => {{
-        reg_internal!(DlDx, Word)
-    }};
-}
-
-macro_rules! segment_internal {
-    (es) => {{
-        Segment::ES
-    }};
-
-    (cs) => {{
-        Segment::CS
-    }};
-
-    (ss) => {{
-        Segment::SS
-    }};
-
-    (ds) => {{
-        Segment::DS
-    }};
-}
-
-macro_rules! direct8 {
-    ($segment:ident, $addr:literal) => {{
-        Operand::Direct(segment_internal!($segment), $addr, OperandSize::Byte)
-    }};
-}
-
-macro_rules! direct16 {
-    ($segment:ident, $addr:literal) => {{
-        Operand::Direct(segment_internal!($segment), $addr, OperandSize::Word)
-    }};
-}
-
-macro_rules! insn {
-    ($operation:ident) => {{
-        Instruction {
-            operation: Operation::$operation,
-            operands: OperandSet::None,
-            repeat: None,
-        }
-    }};
-
-    ($operation:ident, $dst:expr) => {{
-        Instruction {
-            operation: Operation::$operation,
-            operands: OperandSet::Destination($dst),
-            repeat: None,
-        }
-    }};
-
-    ($operation:ident, $dst:expr, $src:expr) => {{
-        Instruction {
-            operation: Operation::$operation,
-            operands: OperandSet::DestinationAndSource($dst, $src),
-            repeat: None,
-        }
-    }};
-}
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     #[test]
-//     fn basic() {
-//         #[rustfmt::skip]
-//         let tests: &[(Instruction, &[Code])] = &[
-//             (insn!(AAA), &[C_BYTE, 0x37]),
-//             (insn!(AAD), &[C_BYTE, 0xD5, C_BYTE, 0x0A]),
-//             (insn!(AAM), &[C_BYTE, 0xD4, C_BYTE, 0x0A]),
-//             (insn!(AAS), &[C_BYTE, 0x3F]),
-//             (insn!(ADC, reg8!(al), imm8!(0x10)), &[C_BYTE, 0x14]),           // acc8,imm8
-//             (insn!(ADC, reg16!(ax), imm16!(0x100)), &[C_BYTE, 0x15]),        // acc16,imm16
-//             (insn!(ADC, reg8!(cl), imm8!(0x10)), &[C_BYTE, 0x80]),           // reg8,imm8
-//             (insn!(ADC, reg16!(cx), imm16!(0x100)), &[C_BYTE, 0x81]),        // reg16,imm16
-//             (insn!(ADC, reg8!(cl), reg8!(dl)), &[C_BYTE, 0x12]),             // reg8,reg8
-//             (insn!(ADC, reg16!(cx), reg16!(dx)), &[C_BYTE, 0x13]),           // reg16,reg16
-//             (insn!(ADC, reg8!(cl), direct8!(ds, 0x100)), &[C_BYTE, 0x12]),   // reg8,mem8
-//             (insn!(ADC, reg16!(cx), direct16!(ds, 0x100)), &[C_BYTE, 0x13]), // reg16,mem16
-//         ];
-//
-//         for test in tests {
-//             let (instruction, codes) = test;
-//             let m = find(instruction);
-//             assert!(m.is_some(), "No match for [{}]", instruction);
-//             if let Some(m) = m {
-//                 assert_eq!(
-//                     instruction.operation, m.operation,
-//                     "Incorrect operation for [{}]",
-//                     instruction
-//                 );
-//
-//                 let max = codes.len();
-//
-//                 assert!(
-//                     m.codes.len() >= max,
-//                     "Not enough codes for [{}]",
-//                     instruction
-//                 );
-//
-//                 assert_eq!(
-//                     codes[..max],
-//                     m.codes[..max],
-//                     "Incorrect codes for [{}] code:[{}] m.codes:[{}]",
-//                     instruction,
-//                     codes_to_string(codes),
-//                     codes_to_string(m.codes),
-//                 );
-//             }
-//         }
-//     }
-// }

@@ -1,23 +1,25 @@
-#[path = "src/template/type_flags.rs"]
-mod type_flags;
+#![allow(dead_code)]
 
+#[path = "src/template/op_flags.rs"]
+mod op_flags;
+
+use op_flags::*;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 use std::io::Write;
 use std::process::Command;
-use type_flags::*;
 
 #[path = "src/template/codes.rs"]
 mod codes;
 use codes::*;
 
-use data_sheet::get_data_sheet;
+// use data_sheet::get_data_sheet;
 
 #[derive(Eq, PartialEq)]
 struct Line {
     mnemonic: String,
-    destination: TypeFlags,
-    source: TypeFlags,
+    destination: OpFlags,
+    source: OpFlags,
     codes: Vec<Code>,
 }
 
@@ -29,8 +31,8 @@ impl PartialOrd for Line {
 
 impl Ord for Line {
     fn cmp(&self, other: &Self) -> Ordering {
-        fn cmp_type_flags(left: TypeFlags, right: TypeFlags) -> Ordering {
-            match class::only(left).cmp(&class::only(right)) {
+        fn cmp_type_flags(left: OpFlags, right: OpFlags) -> Ordering {
+            match op_type::only(left).cmp(&op_type::only(right)) {
                 Ordering::Equal => sub_class::only(right).cmp(&sub_class::only(left)),
                 s => s,
             }
@@ -64,16 +66,10 @@ impl Debug for Line {
     }
 }
 
-fn push_line(
-    lines: &mut Vec<Line>,
-    mnemonic: &str,
-    dst: TypeFlags,
-    src: TypeFlags,
-    codes: Vec<Code>,
-) {
-    // if dst != T_NONE && class::only(dst) != T_SEG_OFF {
+fn push_line(lines: &mut Vec<Line>, mnemonic: &str, dst: OpFlags, src: OpFlags, codes: Vec<Code>) {
+    // if dst != T_NONE && op_type::only(dst) != T_SEG_OFF {
     //     assert!(
-    //         class::only(dst) != 0 && size::only(dst) != 0,
+    //         op_type::only(dst) != 0 && size::only(dst) != 0,
     //         "{} ({})",
     //         dst,
     //         format_type_flags(dst)
@@ -155,8 +151,8 @@ fn seg_off_to(v: Vec<String>, to: &str) -> Vec<String> {
         .collect()
 }
 
-fn set_size(flags: TypeFlags, size: TypeFlags) -> TypeFlags {
-    if class::only(flags) != 0 {
+fn set_size(flags: OpFlags, size: OpFlags) -> OpFlags {
+    if op_type::only(flags) != 0 {
         // If there is already a size set, then we just leave it.
         if size::only(flags) != 0 {
             flags
@@ -212,7 +208,7 @@ fn bytes_to_codes(bytes: Vec<String>) -> Vec<Code> {
     result
 }
 
-fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
+fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (OpFlags, OpFlags) {
     let mnemonic = mnemonic.to_lowercase();
     let mnemonic = mnemonic.as_str();
 
@@ -228,40 +224,40 @@ fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
             "Register/Memory to/from Register" => (T_REG, T_REG | T_MEM),
             "Immediate to Register/Memory" => (T_REG | T_MEM, T_IMM),
             "Immediate to Register" => (T_REG, T_IMM),
-            "Memory to Accumulator" => (T_REG | T_REG_AL_AX, T_MEM_DIR),
-            "Accumulator to Memory" => (T_MEM_DIR, T_REG | T_REG_AL_AX),
-            "Register/Memory to Segment Register" => (T_SEG | T_BITS_16, T_REG | T_MEM),
-            "Segment Register to Register/Memory" => (T_REG | T_MEM, T_SEG | T_BITS_16),
+            "Memory to Accumulator" => (T_REG_ACCUM, T_MEM),
+            "Accumulator to Memory" => (T_MEM, T_REG_ACCUM),
+            "Register/Memory to Segment Register" => (T_REG | T_BITS_16, T_REG | T_MEM),
+            "Segment Register to Register/Memory" => (T_REG | T_MEM, T_REG | T_BITS_16),
             "Register/Memory" => (T_REG | T_MEM, T_NONE),
             "Register" => (T_REG, T_NONE),
-            "Segment Register" => (T_SEG | T_BITS_16, T_NONE),
+            "Segment Register" => (T_REG | T_BITS_16, T_NONE),
             "Register/Memory with Register" => (T_REG, T_REG | T_MEM),
-            "Register with Accumulator" => (T_REG | T_REG_AL_AX, T_REG),
+            "Register with Accumulator" => (T_REG_ACCUM, T_REG),
             "Fixed Port" => match mnemonic {
-                "in" => (T_REG | T_REG_AL_AX, T_IMM | T_BITS_8),
-                "out" => (T_IMM | T_BITS_8, T_REG | T_REG_AL_AX),
+                "in" => (T_REG_ACCUM, T_IMM | T_BITS_8),
+                "out" => (T_IMM | T_BITS_8, T_REG_ACCUM),
                 _ => unreachable!(),
             },
             "Variable Port" => match mnemonic {
-                "in" => (T_REG | T_REG_AL_AX, T_REG | T_REG_DL_DX | T_BITS_16),
-                "out" => (T_REG | T_REG_DL_DX | T_BITS_16, T_REG | T_REG_AL_AX),
+                "in" => (T_REG_ACCUM, T_REG_DX),
+                "out" => (T_REG_DX, T_REG_ACCUM),
                 _ => unreachable!(),
             },
             "" => (T_NONE, T_NONE),
             "Reg./Memory with Register to Either" => (T_REG, T_REG | T_MEM),
-            "Immediate to Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+            "Immediate to Accumulator" => (T_REG_ACCUM, T_IMM),
             "Reg./Memory and Register to Either" => (T_REG, T_REG | T_MEM),
             "Immediate from Register/Memory" => (T_REG | T_MEM, T_IMM),
-            "Immediate from Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+            "Immediate from Accumulator" => (T_REG_ACCUM, T_IMM),
             "Register/memory" => (T_REG | T_MEM, T_NONE),
             "Register/Memory and Register" => (T_REG, T_REG | T_MEM),
             "Immediate with Register/Memory" => (T_REG | T_MEM, T_IMM),
-            "Immediate with Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+            "Immediate with Accumulator" => (T_REG_ACCUM, T_IMM),
             "Immediate Data and Register/Memory" => (T_REG | T_MEM, T_IMM),
-            "Immediate Data and Accumulator" => (T_REG | T_REG_AL_AX, T_IMM),
+            "Immediate Data and Accumulator" => (T_REG_ACCUM, T_IMM),
             "Direct Within Segment" => (T_IMM | T_BITS_16, T_NONE),
             "Indirect Within Segment" => (T_REG | T_MEM | T_BITS_16, T_NONE),
-            "Direct Intersegment" => (T_SEG_OFF, T_NONE),
+            "Direct Intersegment" => (T_MEM_OFF, T_NONE),
             "Indirect Intersegment" => (T_REG | T_MEM | T_BITS_16, T_NONE),
             // This is a short jump, which we don't handle right now, because we need the "short"
             // keyword, so for now only match on the near jump.
@@ -270,7 +266,7 @@ fn dst_and_src_from_string(mnemonic: &str, s: &str) -> (TypeFlags, TypeFlags) {
             "Within Segment" => (T_NONE, T_NONE),
             "Within Seg Adding Immed to SP" => (T_IMM | T_BITS_16, T_NONE),
             "Intersegment" => (T_NONE, T_NONE),
-            "Intersegment Adding Immediate to SP" => (T_DISP | T_BITS_16, T_NONE),
+            "Intersegment Adding Immediate to SP" => todo!(),
             "Type Specified" => (T_IMM | T_BITS_8, T_NONE),
             "Type 3" => (T_NONE, T_NONE),
             _ => unreachable!("operands: {}", s),
@@ -369,35 +365,13 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                         bytes_to_codes(bytes),
                     );
                 } else if encoding.bytes[0].ends_with(" s w") {
-                    let (dst, src) = dst_and_src_from_string(
-                        instruction.mnemonic.as_str(),
-                        encoding.operands.as_str(),
-                    );
-
-                    let mut bytes = encoding.bytes.clone();
-                    bytes[0] = bytes[0].replace(" s w", " 0 0");
-                    let bytes = data_to(bytes, "imm8");
-                    push_line(
-                        &mut lines,
-                        instruction.mnemonic.as_str(),
-                        set_size(dst, T_BITS_8),
-                        set_size(src, T_BITS_8),
-                        bytes_to_codes(bytes),
-                    );
-
-                    let mut bytes = encoding.bytes.clone();
-                    bytes[0] = bytes[0].replace(" s w", " 0 1");
-                    let bytes = data_to(bytes, "imm16");
-                    push_line(
-                        &mut lines,
-                        instruction.mnemonic.as_str(),
-                        set_size(dst, T_BITS_16),
-                        set_size(src, T_BITS_16),
-                        bytes_to_codes(bytes),
-                    );
-
+                    // let (dst, src) = dst_and_src_from_string(
+                    //     instruction.mnemonic.as_str(),
+                    //     encoding.operands.as_str(),
+                    // );
+                    //
                     // let mut bytes = encoding.bytes.clone();
-                    // bytes[0] = bytes[0].replace(" s w", " 1 0");
+                    // bytes[0] = bytes[0].replace(" s w", " 0 0");
                     // let bytes = data_to(bytes, "imm8");
                     // push_line(
                     //     &mut lines,
@@ -406,17 +380,39 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     //     set_size(src, T_BITS_8),
                     //     bytes_to_codes(bytes),
                     // );
-
-                    let mut bytes = encoding.bytes.clone();
-                    bytes[0] = bytes[0].replace(" s w", " 1 1");
-                    let bytes = data_to(bytes, "simm8");
-                    push_line(
-                        &mut lines,
-                        instruction.mnemonic.as_str(),
-                        set_size(dst, T_BITS_16),
-                        set_size(src, T_BITS_8) | T_SIGNED,
-                        bytes_to_codes(bytes),
-                    );
+                    //
+                    // let mut bytes = encoding.bytes.clone();
+                    // bytes[0] = bytes[0].replace(" s w", " 0 1");
+                    // let bytes = data_to(bytes, "imm16");
+                    // push_line(
+                    //     &mut lines,
+                    //     instruction.mnemonic.as_str(),
+                    //     set_size(dst, T_BITS_16),
+                    //     set_size(src, T_BITS_16),
+                    //     bytes_to_codes(bytes),
+                    // );
+                    //
+                    // // let mut bytes = encoding.bytes.clone();
+                    // // bytes[0] = bytes[0].replace(" s w", " 1 0");
+                    // // let bytes = data_to(bytes, "imm8");
+                    // // push_line(
+                    // //     &mut lines,
+                    // //     instruction.mnemonic.as_str(),
+                    // //     set_size(dst, T_BITS_8),
+                    // //     set_size(src, T_BITS_8),
+                    // //     bytes_to_codes(bytes),
+                    // // );
+                    //
+                    // let mut bytes = encoding.bytes.clone();
+                    // bytes[0] = bytes[0].replace(" s w", " 1 1");
+                    // let bytes = data_to(bytes, "simm8");
+                    // push_line(
+                    //     &mut lines,
+                    //     instruction.mnemonic.as_str(),
+                    //     set_size(dst, T_BITS_16),
+                    //     set_size(src, T_BITS_8) | T_SIGNED,
+                    //     bytes_to_codes(bytes),
+                    // );
                 } else if encoding.bytes[0].ends_with(" v w") {
                     let mut bytes = encoding.bytes.clone();
                     bytes[0] = bytes[0].replace(" v w", " 0 0");
@@ -425,7 +421,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                         &mut lines,
                         instruction.mnemonic.as_str(),
                         T_REG | T_MEM | T_BITS_8,
-                        T_IMM | T_ONE | T_BITS_8,
+                        T_UNITY | T_BITS_8,
                         bytes_to_codes(bytes),
                     );
 
@@ -436,7 +432,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                         &mut lines,
                         instruction.mnemonic.as_str(),
                         T_REG | T_MEM | T_BITS_16,
-                        T_IMM | T_ONE | T_BITS_8,
+                        T_UNITY | T_BITS_8,
                         bytes_to_codes(bytes),
                     );
 
@@ -447,7 +443,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                         &mut lines,
                         instruction.mnemonic.as_str(),
                         T_REG | T_MEM | T_BITS_8,
-                        T_REG | T_REG_CL_CX | T_BITS_8,
+                        T_REG_CL,
                         bytes_to_codes(bytes),
                     );
 
@@ -459,7 +455,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                         &mut lines,
                         instruction.mnemonic.as_str(),
                         T_REG | T_MEM | T_BITS_16,
-                        T_REG | T_REG_CL_CX | T_BITS_8,
+                        T_REG_CX,
                         bytes_to_codes(bytes),
                     );
                 } else if encoding.bytes[0].ends_with(" w") {
@@ -480,11 +476,11 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     let mut bytes = encoding.bytes.clone();
                     bytes[0] = bytes[0].replace(" w", " 0");
 
-                    let bytes = if T_MEM_DIR.contains(dst) || T_MEM_DIR.contains(src) {
-                        addr_to(bytes, "imm16")
-                    } else {
-                        data_to(bytes, "imm8")
-                    };
+                    // let bytes = if T_MEM_DIR.contains(dst) || T_MEM_DIR.contains(src) {
+                    //     addr_to(bytes, "imm16")
+                    // } else {
+                    //     data_to(bytes, "imm8")
+                    // };
 
                     push_line(
                         &mut lines,
@@ -506,11 +502,11 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     let mut bytes = encoding.bytes.clone();
                     bytes[0] = bytes[0].replace(" w", " 1");
 
-                    let bytes = if T_MEM_DIR.contains(dst) || T_MEM_DIR.contains(src) {
-                        addr_to(bytes, "imm16")
-                    } else {
-                        data_to(bytes, "imm16")
-                    };
+                    // let bytes = if T_MEM_DIR.contains(dst) || T_MEM_DIR.contains(src) {
+                    //     addr_to(bytes, "imm16")
+                    // } else {
+                    //     data_to(bytes, "imm16")
+                    // };
 
                     push_line(
                         &mut lines,
@@ -582,7 +578,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                         encoding.operands.as_str(),
                     );
                     if (instruction.mnemonic == "PUSH" || instruction.mnemonic == "POP")
-                        && dst.contains(T_SEG)
+                        && dst.contains(T_REG)
                     {
                         let mut bytes = encoding.bytes.clone();
                         bytes[0] = bytes[0].replace(" reg ", "0 0");
@@ -682,7 +678,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     };
 
                     let dst = if mnemonic == "MOV"
-                        && src.contains(T_SEG)
+                        && src.contains(T_REG)
                         && dst.contains(T_REG | T_MEM)
                     {
                         set_size(dst, T_BITS_16)
@@ -691,7 +687,7 @@ fn generate_templates(writer: &mut impl Write, categories: &[data_sheet::Categor
                     };
 
                     let src = if mnemonic == "MOV"
-                        && dst.contains(T_SEG)
+                        && dst.contains(T_REG)
                         && src.contains(T_REG | T_MEM)
                     {
                         set_size(src, T_BITS_16)
@@ -930,17 +926,17 @@ fn run_rustfmt(path: impl ToString) {
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=src/template/templates.rs");
-
-    let data_sheet = get_data_sheet();
-
-    let mut file = std::fs::File::create("src/template/templates.rs").unwrap();
-    file.write_all(ABOVE.as_bytes()).unwrap();
-    generate_templates(&mut file, data_sheet.as_slice());
-    run_rustfmt("src/template/templates.rs");
-
-    let mut file = std::fs::File::create("src/operation2.rs").unwrap();
-    generate_operations(&mut file, data_sheet.as_slice());
-    run_rustfmt("src/operation2.rs");
+    // println!("cargo:rerun-if-changed=build.rs");
+    // println!("cargo:rerun-if-changed=src/template/templates.rs");
+    //
+    // let data_sheet = get_data_sheet();
+    //
+    // let mut file = std::fs::File::create("src/template/templates.rs").unwrap();
+    // file.write_all(ABOVE.as_bytes()).unwrap();
+    // generate_templates(&mut file, data_sheet.as_slice());
+    // run_rustfmt("src/template/templates.rs");
+    //
+    // let mut file = std::fs::File::create("src/operation2.rs").unwrap();
+    // generate_operations(&mut file, data_sheet.as_slice());
+    // run_rustfmt("src/operation2.rs");
 }
