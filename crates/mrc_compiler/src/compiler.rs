@@ -1169,16 +1169,16 @@ impl Compiler {
             ast::Operand::Immediate(_, expr) => {
                 let value = self.evaluate_expression(expr)?;
                 if value == 1 {
-                    T_IMM | T_ONE | T_BITS_8
+                    T_IMM | T_UNITY | T_BITS_8
                 } else if value_is_byte(value) {
                     if value_is_signed_byte(value) {
-                        T_IMM | T_SIGNED | T_BITS_8
+                        T_SIGNED_BYTE_WORD | T_BITS_8
                     } else {
                         T_IMM | T_BITS_8
                     }
                 } else if value_is_word(value) {
                     if value_is_signed_word(value) {
-                        T_IMM | T_SIGNED | T_BITS_16
+                        T_SIGNED_BYTE_WORD | T_BITS_16
                     } else {
                         T_IMM | T_BITS_16
                     }
@@ -1192,9 +1192,9 @@ impl Compiler {
                 T_REG
                     | T_BITS_8
                     | match register {
-                        ast::ByteRegister::Al => T_REG_AL_AX,
-                        ast::ByteRegister::Cl => T_REG_CL_CX,
-                        ast::ByteRegister::Dl => T_REG_DL_DX,
+                        ast::ByteRegister::Al => T_REG_AL,
+                        ast::ByteRegister::Cl => T_REG_CL,
+                        ast::ByteRegister::Dl => T_REG_DL,
                         _ => 0,
                     }
             }
@@ -1203,15 +1203,15 @@ impl Compiler {
                 T_REG
                     | T_BITS_16
                     | match register {
-                        ast::WordRegister::Ax => T_REG_AL_AX,
-                        ast::WordRegister::Cx => T_REG_CL_CX,
-                        ast::WordRegister::Dx => T_REG_DL_DX,
+                        ast::WordRegister::Ax => T_REG_AX,
+                        ast::WordRegister::Cx => T_REG_CX,
+                        ast::WordRegister::Dx => T_REG_DX,
                         _ => 0,
                     }
             }
 
             ast::Operand::Address(_, _, data_size, _) => {
-                T_MEM_DIR
+                T_MEM
                     | match data_size {
                         None => 0,
                         Some(ast::DataSize::Byte) => T_BITS_8,
@@ -1220,7 +1220,7 @@ impl Compiler {
             }
 
             ast::Operand::Indirect(_, _, _, data_size, _) => {
-                T_MEM_IND
+                T_MEM
                     | match data_size {
                         None => 0,
                         Some(ast::DataSize::Byte) => T_BITS_8,
@@ -1229,10 +1229,10 @@ impl Compiler {
             }
 
             ast::Operand::Segment(_, segment) => match segment {
-                ast::Segment::ES => T_SEG | T_SEG_ES | T_BITS_16,
-                ast::Segment::CS => T_SEG | T_SEG_CS | T_BITS_16,
-                ast::Segment::SS => T_SEG | T_SEG_SS | T_BITS_16,
-                ast::Segment::DS => T_SEG | T_SEG_DS | T_BITS_16,
+                ast::Segment::ES => T_SEG_ES | T_BITS_16,
+                ast::Segment::CS => T_SEG_CS | T_BITS_16,
+                ast::Segment::SS => T_SEG_SS | T_BITS_16,
+                ast::Segment::DS => T_SEG_DS | T_BITS_16,
             },
         })
     }
@@ -1352,7 +1352,7 @@ mod tests {
 
             loop {
                 match parser.parse_line() {
-                    Ok(Some(line)) => compiler.push_line(line),
+                    Ok(Some(line)) => compiler.push_line(line).unwrap(),
                     Ok(None) => break,
                     Err(err) => {
                         diag.error(&err, err.span().clone());
@@ -1410,7 +1410,7 @@ mod tests {
         let op =
             ast::Operand::Immediate(0..0, ast::Expression::Value(0..0, ast::Value::Constant(0)));
         assert_eq!(
-            T_IMM | T_SIGNED | T_BITS_8,
+            T_SIGNED_BYTE_WORD | T_BITS_8,
             compiler.operand_to_type_flags(&op).unwrap()
         );
     }

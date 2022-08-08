@@ -11,8 +11,9 @@ pub struct Template<'a> {
     pub codes: &'a [Code],
 }
 
+#[cfg(test)]
 #[inline(always)]
-pub fn _t(op: Operation, dst: OpFlags, src: OpFlags, codes: &[Code]) -> Template<'_> {
+pub fn t(op: Operation, dst: OpFlags, src: OpFlags, codes: &[Code]) -> Template<'_> {
     Template {
         operation: op,
         dst,
