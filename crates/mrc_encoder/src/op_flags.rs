@@ -62,7 +62,7 @@ flag!(NEAR, size::bit(3));
 flag!(SHORT, size::bit(4)); // relative within -128..127
 
 flag!(UNITY, sub::bit(0) | IMMEDIATE); // value == 1
-flag!(SIGNED_BYTE_WORD, sub::bit(1) | IMMEDIATE); // value is in the range -128..127 mod 2^16
+flag!(SIGN_BYTE_WORD, sub::bit(1) | IMMEDIATE); // value is in the range -128..127 mod 2^16
 
 flag!(REG_CLASS_GPR, reg_class::bit(0));
 flag!(REG_CLASS_SEG, reg_class::bit(1));
@@ -70,6 +70,24 @@ flag!(REG_CLASS_SEG, reg_class::bit(1));
 flag!(REG_MEM_GPR, REG_CLASS_GPR | REG_MEM); // Integer operand
 flag!(REG_GPR, REG_CLASS_GPR | REG_MEM | REGISTER);
 flag!(REG_SEG, REG_CLASS_SEG | BITS_16 | REGISTER); // Any segment register
+
+// Segment Registers
+flag!(
+    SEG_ES,
+    sub::bit(0) | sub::bit(2) | REG_CLASS_SEG | BITS_16 | REGISTER
+);
+flag!(
+    SEG_CS,
+    sub::bit(1) | sub::bit(2) | REG_CLASS_SEG | BITS_16 | REGISTER
+);
+flag!(
+    SEG_SS,
+    sub::bit(0) | sub::bit(3) | REG_CLASS_SEG | BITS_16 | REGISTER
+);
+flag!(
+    SEG_DS,
+    sub::bit(1) | sub::bit(3) | REG_CLASS_SEG | BITS_16 | REGISTER
+);
 
 flag!(REG_ACCUM, sub::bit(1) | REG_CLASS_GPR | REG_MEM | REGISTER); // accumulator: AL, AX, EAX, RAX
 flag!(
@@ -114,4 +132,4 @@ flag!(
     sub::bit(5) | REG_CLASS_GPR | BITS_16 | REG_MEM | REGISTER
 ); // 16-bit non-acc GPR
 
-flag!(MEM_OFF, sub::bit(0) | MEMORY); // Simple [address] offset - absolute.
+flag!(MEM_OFFS, sub::bit(0) | MEMORY); // Simple [address] offset - absolute.

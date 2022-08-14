@@ -1,3 +1,5 @@
+#![allow(unused_variables, dead_code)]
+
 use crate::ast;
 use mrc_decoder::TryFromEncoding;
 use mrc_instruction as out;
@@ -18,6 +20,7 @@ pub enum CompileError {
     ConstantWithoutLabel(ast::Span),
     ImmediateValueOutOfRange(ast::Span, i32),
     UnresolvedReference(ast::Label),
+    DataSizeNotSpecified(ast::Span),
 }
 
 impl CompileError {
@@ -29,7 +32,8 @@ impl CompileError {
             | CompileError::ConstantValueContainsLabel(ast::Label(span, _))
             | CompileError::ConstantWithoutLabel(span)
             | CompileError::ImmediateValueOutOfRange(span, _)
-            | CompileError::UnresolvedReference(ast::Label(span, _)) => span,
+            | CompileError::UnresolvedReference(ast::Label(span, _))
+            | CompileError::DataSizeNotSpecified(span) => span,
         }
     }
 }
@@ -67,6 +71,10 @@ impl std::fmt::Display for CompileError {
             CompileError::UnresolvedReference(label) => {
                 write!(f, "Unresolved reference: {}", label.1)
             }
+
+            CompileError::DataSizeNotSpecified(_) => {
+                write!(f, "Data size not specified.")
+            }
         }
     }
 }
@@ -74,6 +82,7 @@ impl std::fmt::Display for CompileError {
 #[derive(Debug)]
 pub struct Output {
     line: ast::Line,
+    enc_ins: Option<mrc_encoder::Instruction>,
     size: u16,
     times: u16,
     unresolved_references: bool,
@@ -304,7 +313,16 @@ impl Compiler {
     ) -> Result<Vec<u8>, CompileError> {
         match line {
             ast::Line::Instruction(instruction) => {
-                self.encode_instruction(instruction, offset, size)
+                let mut result = vec![];
+                for _ in 0..times {
+                    let data = self.encode_instruction(instruction, offset, size)?;
+
+                    for b in &data {
+                        result.push(*b)
+                    }
+                }
+
+                Ok(result)
             }
 
             ast::Line::Data(_, data) => {
@@ -319,8 +337,7 @@ impl Compiler {
                 Ok(result)
             }
 
-            ast::Line::Label(..) => Ok(vec![]),
-
+            // ast::Line::Label(..) => Ok(vec![]),
             _ => todo!("{:?}", line),
         }
     }
@@ -331,293 +348,317 @@ impl Compiler {
         offset: u16,
         size: u16,
     ) -> Result<Vec<u8>, CompileError> {
-        let template = self.find_instruction_template(instruction)?;
+        let enc_instruction = self.instruction_to_encoder_instruction(instruction)?;
 
-        println!("{instruction:?}");
-        println!("encode: {template:}");
-
-        let mut result = vec![];
-
-        use out::template::codes::*;
-
-        self.emit_segment_override(&mut result, &instruction.operands.segment_override());
-
-        let mut it = template.codes.iter();
-        while let Some(&code) = it.next() {
-            match code {
-                C_BYTE => {
-                    let byte = *it.next().unwrap();
-                    result.push(byte);
-                }
-
-                C_REG_BASE => {
-                    let base = (*it.next().unwrap()) as u8;
-
-                    let reg = match &instruction.operands {
-                        ast::Operands::DestinationAndSource(
-                            _,
-                            ast::Operand::Register(_, register),
-                            _,
-                        ) => register.encoding(),
-
-                        ast::Operands::Destination(_, ast::Operand::Register(_, register)) => {
-                            register.encoding()
-                        }
-
-                        _ => unreachable!("C_REG_BASE {:?}", instruction),
-                    };
-
-                    result.push((base + reg) as Code);
-                }
-
-                C_MOD_RM => {
-                    let reg = *it.next().unwrap() as u8;
-                    match &instruction.operands {
-                        ast::Operands::Destination(_, ast::Operand::Register(_, src)) => {
-                            self.emit_mrrm_register(&mut result, reg, src.encoding());
-                        }
-
-                        ast::Operands::Destination(_, ast::Operand::Address(_, expr, _, _)) => {
-                            self.emit_mrrm_address(&mut result, reg, expr)?;
-                        }
-
-                        ast::Operands::Destination(
-                            _,
-                            ast::Operand::Indirect(_, encoding, expr, _, _),
-                        ) => {
-                            self.emit_mrrm_indirect(&mut result, reg, encoding, expr)?;
-                        }
-
-                        ast::Operands::DestinationAndSource(
-                            _,
-                            ast::Operand::Register(_, other),
-                            _,
-                        )
-                        | ast::Operands::DestinationAndSource(
-                            _,
-                            _,
-                            ast::Operand::Register(_, other),
-                        ) => {
-                            self.emit_mrrm_register(&mut result, reg, other.encoding());
-                        }
-
-                        ast::Operands::DestinationAndSource(
-                            _,
-                            ast::Operand::Address(_, expr, _, _),
-                            _,
-                        )
-                        | ast::Operands::DestinationAndSource(
-                            _,
-                            _,
-                            ast::Operand::Address(_, expr, _, _),
-                        ) => {
-                            self.emit_mrrm_address(&mut result, reg, expr)?;
-                        }
-
-                        ast::Operands::DestinationAndSource(
-                            _,
-                            ast::Operand::Indirect(_, encoding, expr, _, _),
-                            _,
-                        )
-                        | ast::Operands::DestinationAndSource(
-                            _,
-                            _,
-                            ast::Operand::Indirect(_, encoding, expr, _, _),
-                        ) => {
-                            self.emit_mrrm_indirect(&mut result, reg, encoding, expr)?;
-                        }
-
-                        _ => unreachable!("C_MOD_RM {:?}", instruction),
-                    }
-                }
-
-                C_MOD_REG_RM => match &instruction.operands {
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, dst),
-                        ast::Operand::Register(_, src),
-                    ) => {
-                        self.emit_mrrm_register(&mut result, dst.encoding(), src.encoding());
-                    }
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, reg),
-                        ast::Operand::Segment(_, seg),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Segment(_, seg),
-                        ast::Operand::Register(_, reg),
-                    ) => {
-                        self.emit_mrrm_register(&mut result, seg.encoding(), reg.encoding());
-                    }
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Address(_, expr, _, _),
-                        ast::Operand::Register(_, register),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, register),
-                        ast::Operand::Address(_, expr, _, _),
-                    ) => {
-                        self.emit_mrrm_address(&mut result, register.encoding(), expr)?;
-                    }
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Address(_, expr, _, _),
-                        ast::Operand::Segment(_, segment),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Segment(_, segment),
-                        ast::Operand::Address(_, expr, _, _),
-                    ) => {
-                        self.emit_mrrm_address(&mut result, segment.encoding(), expr)?;
-                    }
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Indirect(_, encoding, expr, _, _),
-                        ast::Operand::Register(_, register),
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Register(_, register),
-                        ast::Operand::Indirect(_, encoding, expr, _, _),
-                    ) => {
-                        self.emit_mrrm_indirect(&mut result, register.encoding(), encoding, expr)?;
-                    }
-
-                    _ => unreachable!("C_MOD_REG_RM {:?}", instruction),
-                },
-
-                C_IMM_BYTE => match &instruction.operands {
-                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
-                        self.emit_immediate_byte(&mut result, expr)?;
-                    }
-
-                    ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _) => {
-                        self.emit_immediate_byte(&mut result, expr)?;
-                    }
-
-                    ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
-                        self.emit_immediate_byte(&mut result, expr)?;
-                    }
-
-                    _ => unreachable!("C_IMM_BYTE {:?}", instruction),
-                },
-
-                C_IMM_WORD => match &instruction.operands {
-                    ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _)
-                    | ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr))
-                    | ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
-                        self.emit_immediate_word(&mut result, expr)?;
-                    }
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Address(_, expr, _, _),
-                        _,
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        _,
-                        ast::Operand::Address(_, expr, _, _),
-                    ) => {
-                        self.emit_address(&mut result, expr)?;
-                    }
-
-                    _ => unreachable!("C_IMM_WORD {:?}", instruction),
-                },
-
-                C_IMM_SIGN_BYTE => match &instruction.operands {
-                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
-                        self.emit_immediate_signed_byte(&mut result, expr)?;
-                    }
-
-                    ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _) => {
-                        self.emit_immediate_signed_byte(&mut result, expr)?;
-                    }
-
-                    ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
-                        self.emit_immediate_signed_byte(&mut result, expr)?;
-                    }
-
-                    _ => unreachable!("C_IMM_BYTE_SIGN {:?}", instruction),
-                },
-
-                C_DISP_BYTE => match &instruction.operands {
-                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
-                        // The value stored in the expression is the address of the instruction
-                        // we want to go to, so calculate a displacement.
-                        let value = self.evaluate_expression(expr)?;
-                        let value = value - (offset as i32 + size as i32);
-
-                        self.emit_immediate_signed_byte(
-                            &mut result,
-                            &ast::Expression::Value(
-                                expr.span().clone(),
-                                ast::Value::Constant(value),
-                            ),
-                        )?;
-                    }
-
-                    _ => unreachable!("C_DISP_BYTE {:?}", instruction),
-                },
-
-                C_DISP_WORD => match &instruction.operands {
-                    ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
-                        let value = self.evaluate_expression(expr)? - offset as i32 - size as i32;
-
-                        self.emit_immediate_word(
-                            &mut result,
-                            &ast::Expression::Value(
-                                expr.span().clone(),
-                                ast::Value::Constant(value),
-                            ),
-                        )?;
-                    }
-
-                    ast::Operands::DestinationAndSource(
-                        _,
-                        ast::Operand::Address(_, expr, _, seg_override),
-                        _,
-                    )
-                    | ast::Operands::DestinationAndSource(
-                        _,
-                        _,
-                        ast::Operand::Address(_, expr, _, seg_override),
-                    ) => {
-                        let value = self.evaluate_expression(expr)?;
-                        let value = if seg_override.is_none() {
-                            value - (offset as i32 + size as i32)
-                        } else {
-                            value - size as i32
-                        };
-
-                        self.emit_immediate_word(
-                            &mut result,
-                            &ast::Expression::Value(
-                                expr.span().clone(),
-                                ast::Value::Constant(value),
-                            ),
-                        )?;
-                    }
-
-                    _ => unreachable!("C_DISP_WORD {:?}", instruction),
-                },
-
-                C_SEG_OFF => todo!(),
-
-                _ => unreachable!(),
+        let template = match mrc_encoder::find_template(&enc_instruction) {
+            Ok(Some(t)) => t,
+            Ok(None) => {
+                return Err(CompileError::InvalidOperands(
+                    instruction.operands.span().clone(),
+                    instruction.clone(),
+                    vec![],
+                ))
             }
-        }
+            Err(_) => {
+                return Err(CompileError::InvalidOperands(
+                    instruction.operands.span().clone(),
+                    instruction.clone(),
+                    vec![],
+                ))
+            }
+        };
 
-        Ok(result)
+        template
+            .encode(&enc_instruction, offset, size)
+            .map_err(|e| CompileError::DataSizeNotSpecified(0..0))
+
+        // let template = self.find_instruction_template(instruction)?;
+        //
+        // println!("{instruction:?}");
+        // println!("encode: {template:}");
+        //
+        // let mut result = vec![];
+        //
+        // use out::template::codes::*;
+        //
+        // self.emit_segment_override(&mut result, &instruction.operands.segment_override());
+        //
+        // let mut it = template.codes.iter();
+        // while let Some(&code) = it.next() {
+        //     match code {
+        //         C_BYTE => {
+        //             let byte = *it.next().unwrap();
+        //             result.push(byte);
+        //         }
+        //
+        //         C_REG_BASE => {
+        //             let base = (*it.next().unwrap()) as u8;
+        //
+        //             let reg = match &instruction.operands {
+        //                 ast::Operands::DestinationAndSource(
+        //                     _,
+        //                     ast::Operand::Register(_, register),
+        //                     _,
+        //                 ) => register.encoding(),
+        //
+        //                 ast::Operands::Destination(_, ast::Operand::Register(_, register)) => {
+        //                     register.encoding()
+        //                 }
+        //
+        //                 _ => unreachable!("C_REG_BASE {:?}", instruction),
+        //             };
+        //
+        //             result.push((base + reg) as Code);
+        //         }
+        //
+        //         C_MOD_RM => {
+        //             let reg = *it.next().unwrap() as u8;
+        //             match &instruction.operands {
+        //                 ast::Operands::Destination(_, ast::Operand::Register(_, src)) => {
+        //                     self.emit_mrrm_register(&mut result, reg, src.encoding());
+        //                 }
+        //
+        //                 ast::Operands::Destination(_, ast::Operand::Address(_, expr, _, _)) => {
+        //                     self.emit_mrrm_address(&mut result, reg, expr)?;
+        //                 }
+        //
+        //                 ast::Operands::Destination(
+        //                     _,
+        //                     ast::Operand::Indirect(_, encoding, expr, _, _),
+        //                 ) => {
+        //                     self.emit_mrrm_indirect(&mut result, reg, encoding, expr)?;
+        //                 }
+        //
+        //                 ast::Operands::DestinationAndSource(
+        //                     _,
+        //                     ast::Operand::Register(_, other),
+        //                     _,
+        //                 )
+        //                 | ast::Operands::DestinationAndSource(
+        //                     _,
+        //                     _,
+        //                     ast::Operand::Register(_, other),
+        //                 ) => {
+        //                     self.emit_mrrm_register(&mut result, reg, other.encoding());
+        //                 }
+        //
+        //                 ast::Operands::DestinationAndSource(
+        //                     _,
+        //                     ast::Operand::Address(_, expr, _, _),
+        //                     _,
+        //                 )
+        //                 | ast::Operands::DestinationAndSource(
+        //                     _,
+        //                     _,
+        //                     ast::Operand::Address(_, expr, _, _),
+        //                 ) => {
+        //                     self.emit_mrrm_address(&mut result, reg, expr)?;
+        //                 }
+        //
+        //                 ast::Operands::DestinationAndSource(
+        //                     _,
+        //                     ast::Operand::Indirect(_, encoding, expr, _, _),
+        //                     _,
+        //                 )
+        //                 | ast::Operands::DestinationAndSource(
+        //                     _,
+        //                     _,
+        //                     ast::Operand::Indirect(_, encoding, expr, _, _),
+        //                 ) => {
+        //                     self.emit_mrrm_indirect(&mut result, reg, encoding, expr)?;
+        //                 }
+        //
+        //                 _ => unreachable!("C_MOD_RM {:?}", instruction),
+        //             }
+        //         }
+        //
+        //         C_MOD_REG_RM => match &instruction.operands {
+        //             ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Register(_, dst),
+        //                 ast::Operand::Register(_, src),
+        //             ) => {
+        //                 self.emit_mrrm_register(&mut result, dst.encoding(), src.encoding());
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Register(_, reg),
+        //                 ast::Operand::Segment(_, seg),
+        //             )
+        //             | ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Segment(_, seg),
+        //                 ast::Operand::Register(_, reg),
+        //             ) => {
+        //                 self.emit_mrrm_register(&mut result, seg.encoding(), reg.encoding());
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Address(_, expr, _, _),
+        //                 ast::Operand::Register(_, register),
+        //             )
+        //             | ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Register(_, register),
+        //                 ast::Operand::Address(_, expr, _, _),
+        //             ) => {
+        //                 self.emit_mrrm_address(&mut result, register.encoding(), expr)?;
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Address(_, expr, _, _),
+        //                 ast::Operand::Segment(_, segment),
+        //             )
+        //             | ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Segment(_, segment),
+        //                 ast::Operand::Address(_, expr, _, _),
+        //             ) => {
+        //                 self.emit_mrrm_address(&mut result, segment.encoding(), expr)?;
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Indirect(_, encoding, expr, _, _),
+        //                 ast::Operand::Register(_, register),
+        //             )
+        //             | ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Register(_, register),
+        //                 ast::Operand::Indirect(_, encoding, expr, _, _),
+        //             ) => {
+        //                 self.emit_mrrm_indirect(&mut result, register.encoding(), encoding, expr)?;
+        //             }
+        //
+        //             _ => unreachable!("C_MOD_REG_RM {:?}", instruction),
+        //         },
+        //
+        //         C_IMM_BYTE => match &instruction.operands {
+        //             ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+        //                 self.emit_immediate_byte(&mut result, expr)?;
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _) => {
+        //                 self.emit_immediate_byte(&mut result, expr)?;
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
+        //                 self.emit_immediate_byte(&mut result, expr)?;
+        //             }
+        //
+        //             _ => unreachable!("C_IMM_BYTE {:?}", instruction),
+        //         },
+        //
+        //         C_IMM_WORD => match &instruction.operands {
+        //             ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _)
+        //             | ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr))
+        //             | ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+        //                 self.emit_immediate_word(&mut result, expr)?;
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Address(_, expr, _, _),
+        //                 _,
+        //             )
+        //             | ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 _,
+        //                 ast::Operand::Address(_, expr, _, _),
+        //             ) => {
+        //                 self.emit_address(&mut result, expr)?;
+        //             }
+        //
+        //             _ => unreachable!("C_IMM_WORD {:?}", instruction),
+        //         },
+        //
+        //         C_IMM_SIGN_BYTE => match &instruction.operands {
+        //             ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+        //                 self.emit_immediate_signed_byte(&mut result, expr)?;
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(_, ast::Operand::Immediate(_, expr), _) => {
+        //                 self.emit_immediate_signed_byte(&mut result, expr)?;
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(_, _, ast::Operand::Immediate(_, expr)) => {
+        //                 self.emit_immediate_signed_byte(&mut result, expr)?;
+        //             }
+        //
+        //             _ => unreachable!("C_IMM_BYTE_SIGN {:?}", instruction),
+        //         },
+        //
+        //         C_DISP_BYTE => match &instruction.operands {
+        //             ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+        //                 // The value stored in the expression is the address of the instruction
+        //                 // we want to go to, so calculate a displacement.
+        //                 let value = self.evaluate_expression(expr)?;
+        //                 let value = value - (offset as i32 + size as i32);
+        //
+        //                 self.emit_immediate_signed_byte(
+        //                     &mut result,
+        //                     &ast::Expression::Value(
+        //                         expr.span().clone(),
+        //                         ast::Value::Constant(value),
+        //                     ),
+        //                 )?;
+        //             }
+        //
+        //             _ => unreachable!("C_DISP_BYTE {:?}", instruction),
+        //         },
+        //
+        //         C_DISP_WORD => match &instruction.operands {
+        //             ast::Operands::Destination(_, ast::Operand::Immediate(_, expr)) => {
+        //                 let value = self.evaluate_expression(expr)? - offset as i32 - size as i32;
+        //
+        //                 self.emit_immediate_word(
+        //                     &mut result,
+        //                     &ast::Expression::Value(
+        //                         expr.span().clone(),
+        //                         ast::Value::Constant(value),
+        //                     ),
+        //                 )?;
+        //             }
+        //
+        //             ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 ast::Operand::Address(_, expr, _, seg_override),
+        //                 _,
+        //             )
+        //             | ast::Operands::DestinationAndSource(
+        //                 _,
+        //                 _,
+        //                 ast::Operand::Address(_, expr, _, seg_override),
+        //             ) => {
+        //                 let value = self.evaluate_expression(expr)?;
+        //                 let value = if seg_override.is_none() {
+        //                     value - (offset as i32 + size as i32)
+        //                 } else {
+        //                     value - size as i32
+        //                 };
+        //
+        //                 self.emit_immediate_word(
+        //                     &mut result,
+        //                     &ast::Expression::Value(
+        //                         expr.span().clone(),
+        //                         ast::Value::Constant(value),
+        //                     ),
+        //                 )?;
+        //             }
+        //
+        //             _ => unreachable!("C_DISP_WORD {:?}", instruction),
+        //         },
+        //
+        //         C_SEG_OFF => todo!(),
+        //
+        //         _ => unreachable!(),
+        //     }
+        // }
+        //
+        // Ok(result)
     }
 
     fn emit_mrrm(&self, out: &mut Vec<u8>, mode: u8, reg: u8, reg_mem: u8) {
@@ -914,7 +955,6 @@ impl Compiler {
                     ..
                 }) = self.labels.get(label.1.as_str())
                 {
-                    println!("label: {label} = {label_offset}");
                     Ok(*label_offset as i32)
                 } else {
                     Err(CompileError::LabelNotFound(label.clone()))
@@ -941,81 +981,143 @@ impl Compiler {
         })
     }
 
+    fn operand_to_encoder_operand(
+        &self,
+        operand: &ast::Operand,
+    ) -> Result<mrc_encoder::Operand, CompileError> {
+        Ok(match operand {
+            ast::Operand::Immediate(_, expr) => {
+                let value = self.evaluate_expression(expr)?;
+                mrc_encoder::Operand::immediate(value as u16)
+            }
+            ast::Operand::Address(_, expr, _, segment) => {
+                let addr = self.evaluate_expression(expr)?;
+                mrc_encoder::Operand::direct_address(addr as u16, segment.map(|s| s.encoding()))
+            }
+            ast::Operand::Indirect(_, _, _, _, _) => todo!(),
+            ast::Operand::Register(_, reg) => mrc_encoder::Operand::register(reg.encoding()),
+            ast::Operand::Segment(_, _) => todo!(),
+        })
+    }
+
+    fn instruction_to_encoder_instruction(
+        &self,
+        instruction: &ast::Instruction,
+    ) -> Result<mrc_encoder::Instruction, CompileError> {
+        Ok(match &instruction.operands {
+            ast::Operands::None(_) => mrc_encoder::Instruction::new(
+                instruction.operation,
+                0,
+                mrc_encoder::Operand::default(),
+                mrc_encoder::Operand::default(),
+            ),
+            ast::Operands::Destination(_, dst) => mrc_encoder::Instruction::new(
+                instruction.operation,
+                1,
+                self.operand_to_encoder_operand(dst)?,
+                mrc_encoder::Operand::default(),
+            ),
+            ast::Operands::DestinationAndSource(_, dst, src) => mrc_encoder::Instruction::new(
+                instruction.operation,
+                2,
+                self.operand_to_encoder_operand(dst)?,
+                self.operand_to_encoder_operand(src)?,
+            ),
+        })
+    }
+
     fn calculate_instruction_size(
         &self,
         instruction: &ast::Instruction,
-    ) -> Result<u16, CompileError> {
-        use out::template::codes::*;
+    ) -> Result<u8, CompileError> {
+        let enc_instruction = self.instruction_to_encoder_instruction(instruction)?;
 
-        let template = self.find_instruction_template(instruction)?;
-
-        let mut total_size = 0;
-
-        if instruction.operands.segment_override().is_some() {
-            total_size += 1;
-        }
-
-        let mut it = template.codes.iter();
-        while let Some(code) = it.next() {
-            match *code {
-                C_BYTE => {
-                    total_size += 1;
-                    let _ = it.next();
-                }
-
-                C_REG_BASE => {
-                    total_size += 1;
-                    let _ = it.next();
-                }
-
-                C_MOD_RM => {
-                    let _encoding = it.next().unwrap();
-                    match &instruction.operands {
-                        ast::Operands::Destination(_, dst) => {
-                            // Use a dummy source, because it is just an encoding.
-                            total_size += self.calculate_mod_reg_size(
-                                dst,
-                                &ast::Operand::Register(
-                                    0..0,
-                                    ast::Register::Word(ast::WordRegister::Ax),
-                                ),
-                            )?;
-                        }
-
-                        ast::Operands::DestinationAndSource(_, dst, src) => {
-                            total_size += self.calculate_mod_reg_size(dst, src)?;
-                        }
-
-                        _ => unreachable!("Invalid operands for mrrm {:?}", &instruction.operands),
-                    }
-                }
-
-                C_MOD_REG_RM => {
-                    if let ast::Operands::DestinationAndSource(_, dst, src) = &instruction.operands
-                    {
-                        total_size += self.calculate_mrrm_size(dst, src)?;
-                    } else {
-                        unreachable!("Invalid operands for mrrm {:?}", &instruction.operands)
-                    };
-                }
-
-                C_IMM_BYTE => total_size += 1,
-
-                C_IMM_WORD => total_size += 2,
-
-                C_IMM_SIGN_BYTE => total_size += 1,
-
-                C_DISP_BYTE => total_size += 1,
-
-                C_DISP_WORD => total_size += 2,
-
-                C_SEG_OFF => total_size += 4,
-
-                _ => unreachable!(),
+        let template = match mrc_encoder::find_template(&enc_instruction) {
+            Ok(Some(t)) => t,
+            Ok(None) | Err(_) => {
+                return Err(CompileError::InvalidOperands(
+                    instruction.operands.span().clone(),
+                    instruction.clone(),
+                    vec![],
+                ));
             }
-        }
+        };
 
-        Ok(total_size)
+        let size_in_bytes = template.size_in_bytes(&enc_instruction);
+
+        return Ok(size_in_bytes);
+
+        // use out::template::codes::*;
+        //
+        // let template = self.find_instruction_template(instruction)?;
+        //
+        // let mut total_size = 0;
+        //
+        // if instruction.operands.segment_override().is_some() {
+        //     total_size += 1;
+        // }
+        //
+        // let mut it = template.codes.iter();
+        // while let Some(code) = it.next() {
+        //     match *code {
+        //         C_BYTE => {
+        //             total_size += 1;
+        //             let _ = it.next();
+        //         }
+        //
+        //         C_REG_BASE => {
+        //             total_size += 1;
+        //             let _ = it.next();
+        //         }
+        //
+        //         C_MOD_RM => {
+        //             let _encoding = it.next().unwrap();
+        //             match &instruction.operands {
+        //                 ast::Operands::Destination(_, dst) => {
+        //                     // Use a dummy source, because it is just an encoding.
+        //                     total_size += self.calculate_mod_reg_size(
+        //                         dst,
+        //                         &ast::Operand::Register(
+        //                             0..0,
+        //                             ast::Register::Word(ast::WordRegister::Ax),
+        //                         ),
+        //                     )?;
+        //                 }
+        //
+        //                 ast::Operands::DestinationAndSource(_, dst, src) => {
+        //                     total_size += self.calculate_mod_reg_size(dst, src)?;
+        //                 }
+        //
+        //                 _ => unreachable!("Invalid operands for mrrm {:?}", &instruction.operands),
+        //             }
+        //         }
+        //
+        //         C_MOD_REG_RM => {
+        //             if let ast::Operands::DestinationAndSource(_, dst, src) = &instruction.operands
+        //             {
+        //                 total_size += self.calculate_mrrm_size(dst, src)?;
+        //             } else {
+        //                 unreachable!("Invalid operands for mrrm {:?}", &instruction.operands)
+        //             };
+        //         }
+        //
+        //         C_IMM_BYTE => total_size += 1,
+        //
+        //         C_IMM_WORD => total_size += 2,
+        //
+        //         C_IMM_SIGN_BYTE => total_size += 1,
+        //
+        //         C_DISP_BYTE => total_size += 1,
+        //
+        //         C_DISP_WORD => total_size += 2,
+        //
+        //         C_SEG_OFF => total_size += 4,
+        //
+        //         _ => unreachable!(),
+        //     }
+        // }
+        //
+        // Ok(total_size)
     }
 
     fn calculate_mod_reg_size(
@@ -1245,6 +1347,7 @@ impl Compiler {
                 let times = self.evaluate_expression(&expr)? as u16;
                 self.outputs.push(Output {
                     line: *line,
+                    enc_ins: None,
                     size: 0,
                     times,
                     unresolved_references: false,
@@ -1254,6 +1357,7 @@ impl Compiler {
             _ => {
                 self.outputs.push(Output {
                     line,
+                    enc_ins: None,
                     size: 0,
                     times: 1,
                     unresolved_references: false,

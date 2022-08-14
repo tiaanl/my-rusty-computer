@@ -169,7 +169,8 @@ impl Register {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Segment {
     ES = 0,
     CS = 1,
