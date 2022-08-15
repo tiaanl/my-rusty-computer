@@ -166,30 +166,46 @@ fn encode(instruction: &ast::Instruction, offset: u16) -> Result<Vec<u8>, Encode
     Ok(result)
 }
 
+fn parse_dst(operands: &ast::Operands) -> Result<(OperandData, ast::Span), EncodeError> {
+    Ok(if let ast::Operands::Destination(_, dst) = &operands {
+        (OperandData::from(dst), dst.span().clone())
+    } else {
+        return Err(EncodeError::InvalidOperands(operands.span().clone()));
+    })
+}
+
+fn parse_dst_and_src(
+    operands: &ast::Operands,
+) -> Result<(OperandData, ast::Span, OperandData, ast::Span), EncodeError> {
+    Ok(
+        if let ast::Operands::DestinationAndSource(_, dst, src) = &operands {
+            (
+                OperandData::from(dst),
+                dst.span().clone(),
+                OperandData::from(src),
+                src.span().clone(),
+            )
+        } else {
+            return Err(EncodeError::InvalidOperands(operands.span().clone()));
+        },
+    )
+}
+
 fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    let (dst, src) = if let ast::Operands::DestinationAndSource(_, dst, src) = &instruction.operands
-    {
-        (OperandData::from(dst), OperandData::from(src))
-    } else {
-        return Err(EncodeError::Unknown);
-    };
+    let (dst, dst_span, src, src_span) = parse_dst_and_src(&insn.operands)?;
+    let oprs_span = insn.operands.span().clone();
 
-    if matches!(dst.size, OperandSize::Unspecified) && matches!(src.size, OperandSize::Unspecified)
-    {
-        return Err(EncodeError::OperandSizeNotSpecified(
-            instruction.operands.span().clone(),
-        ));
+    if dst.size.is_unspecified() && src.size.is_unspecified() {
+        return Err(EncodeError::OperandSizeNotSpecified(oprs_span));
     }
 
     if dst.size.is_specified() && src.size.is_specified() && dst.size != src.size {
-        return Err(EncodeError::OperandSizesDoNotMatch(
-            instruction.operands.span().clone(),
-        ));
+        return Err(EncodeError::OperandSizesDoNotMatch(oprs_span));
     }
 
     let size = if dst.size.is_specified() {
@@ -226,9 +242,7 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
                         emitter.emit(op_code);
 
                         if src.imm < 0 || src.imm >= 0x10000 {
-                            return Err(EncodeError::ImmediateOutOfRange(
-                                instruction.operands.span().clone(),
-                            ));
+                            return Err(EncodeError::ImmediateOutOfRange(src_span));
                         }
 
                         for byte in (src.imm as u16).to_le_bytes() {
@@ -255,9 +269,7 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
                         // reg8, imm
                         let rm = base >> 3;
                         if src.imm < 0 || src.imm >= 0x100 {
-                            return Err(EncodeError::ImmediateOutOfRange(
-                                instruction.operands.span().clone(),
-                            ));
+                            return Err(EncodeError::ImmediateOutOfRange(src_span));
                         }
                         store_instruction(0x80, &dst, rm, OperandSize::Byte, src.imm, emitter);
                     }
@@ -267,11 +279,7 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
             }
         }
 
-        _ => {
-            return Err(EncodeError::InvalidOperands(
-                instruction.operands.span().clone(),
-            ))
-        }
+        _ => return Err(EncodeError::InvalidOperands(oprs_span)),
     }
 
     Ok(())
@@ -279,35 +287,30 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
 
 fn encode_group_not_neg_mul_imul_div_idiv(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    let dst = if let ast::Operands::Destination(_, dst) = &instruction.operands {
-        OperandData::from(dst)
-    } else {
-        return Err(EncodeError::Unknown);
-    };
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+    let oprs_span = insn.operands.span().clone();
 
     if dst.size.is_unspecified() {
-        return Err(EncodeError::OperandSizeNotSpecified(
-            instruction.operands.span().clone(),
-        ));
+        return Err(EncodeError::OperandSizeNotSpecified(oprs_span));
     }
 
     if !matches!(dst.kind, OperandKind::Mem | OperandKind::Reg) {
-        return Err(EncodeError::InvalidOperands(
-            instruction.operands.span().clone(),
-        ));
+        return Err(EncodeError::InvalidOperands(oprs_span));
     }
 
     match dst.size {
         OperandSize::Byte => {
             store_instruction(0xF6, &dst, base, OperandSize::Unspecified, 0, emitter)
         }
+
         OperandSize::Word => {
             store_instruction(0xF7, &dst, base, OperandSize::Unspecified, 0, emitter)
         }
+
         _ => {}
     }
 
@@ -536,52 +539,48 @@ fn encode_group_in(
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    let (dst, dst_span, src, src_span) =
-        if let ast::Operands::DestinationAndSource(_, dst, src) = &instruction.operands {
-            (
-                OperandData::from(dst),
-                dst.span().clone(),
-                OperandData::from(src),
-                src.span().clone(),
-            )
-        } else {
-            return Err(EncodeError::Unknown);
-        };
+    let (dst, dst_span, src, src_span) = parse_dst_and_src(&instruction.operands)?;
 
-    if dst.size.is_unspecified() {
-        return Err(EncodeError::InvalidOperandSize(dst_span));
-    }
+    match (dst.kind, src.kind) {
+        (OperandKind::Reg, OperandKind::Reg)
+            if src.size == OperandSize::Word
+                && src.rm == 2
+                && dst.size.is_specified()
+                && dst.rm == 0 =>
+        {
+            match dst.size {
+                // al, dx
+                OperandSize::Byte => emitter.emit(0xEC),
 
-    if src.kind == OperandKind::Reg
-        && src.size == OperandSize::Word
-        && src.rm == 2
-        && dst.kind == OperandKind::Reg
-        && dst.rm == 0
-    {
-        match dst.size {
-            // al, dx
-            OperandSize::Byte => emitter.emit(0xEC),
+                // ax, dx
+                OperandSize::Word => emitter.emit(0xED),
 
-            // ax, dx
-            OperandSize::Word => emitter.emit(0xED),
-
-            OperandSize::Unspecified => unreachable!(),
+                OperandSize::Unspecified => unreachable!(),
+            }
         }
-    } else if src.kind == OperandKind::Imm && dst.kind == OperandKind::Reg && dst.rm == 0 {
-        match dst.size {
-            // al, imm
-            OperandSize::Byte => {
-                emitter.emit(0xE4);
-                emitter.emit(src.imm as u8);
-            }
 
-            // ax, imm
-            OperandSize::Word => {
-                emitter.emit(0xE5);
-                emitter.emit(src.imm as u8);
-            }
+        (OperandKind::Reg, OperandKind::Imm) if dst.size.is_specified() && dst.rm == 0 => {
+            match dst.size {
+                // al, imm
+                OperandSize::Byte => {
+                    emitter.emit(0xE4);
+                    emitter.emit(src.imm as u8);
+                }
 
-            _ => unreachable!(),
+                // ax, imm
+                OperandSize::Word => {
+                    emitter.emit(0xE5);
+                    emitter.emit(src.imm as u8);
+                }
+
+                OperandSize::Unspecified => unreachable!(),
+            }
+        }
+
+        _ => {
+            return Err(EncodeError::InvalidOperands(
+                instruction.operands.span().clone(),
+            ))
         }
     }
 
@@ -590,57 +589,49 @@ fn encode_group_in(
 
 fn encode_group_out(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    let (dst, dst_span, src, src_span) =
-        if let ast::Operands::DestinationAndSource(_, dst, src) = &instruction.operands {
-            (
-                OperandData::from(dst),
-                dst.span().clone(),
-                OperandData::from(src),
-                src.span().clone(),
-            )
-        } else {
-            return Err(EncodeError::Unknown);
-        };
+    let (dst, dst_span, src, src_span) = parse_dst_and_src(&insn.operands)?;
 
-    if dst.kind == OperandKind::Reg
-        && dst.size == OperandSize::Word
-        && dst.rm == 2
-        && src.kind == OperandKind::Reg
-        && src.rm == 0
-    {
-        match src.size {
-            // dx, al
-            OperandSize::Byte => emitter.emit(0xEE),
+    match (dst.kind, src.kind) {
+        (OperandKind::Reg, OperandKind::Reg)
+            if dst.size == OperandSize::Word
+                && dst.rm == 2
+                && src.size.is_specified()
+                && src.rm == 0 =>
+        {
+            match src.size {
+                // dx, al
+                OperandSize::Byte => emitter.emit(0xEE),
 
-            // dx, ax
-            OperandSize::Word => emitter.emit(0xEF),
+                // dx, ax
+                OperandSize::Word => emitter.emit(0xEF),
 
-            _ => unreachable!(),
-        }
-    } else if dst.kind == OperandKind::Imm && src.kind == OperandKind::Reg && src.rm == 0 {
-        match src.size {
-            // imm, al
-            OperandSize::Byte => {
-                emitter.emit(0xE6);
-                emitter.emit(dst.imm as u8);
+                _ => unreachable!(),
             }
-
-            // imm, ax
-            OperandSize::Word => {
-                emitter.emit(0xE7);
-                emitter.emit(dst.imm as u8);
-            }
-
-            _ => unreachable!(),
         }
-    } else {
-        return Err(EncodeError::InvalidOperands(
-            instruction.operands.span().clone(),
-        ));
+
+        (OperandKind::Imm, OperandKind::Reg) if src.size.is_specified() && src.rm == 0 => {
+            match src.size {
+                // imm, al
+                OperandSize::Byte => {
+                    emitter.emit(0xE6);
+                    emitter.emit(dst.imm as u8);
+                }
+
+                // imm, ax
+                OperandSize::Word => {
+                    emitter.emit(0xE7);
+                    emitter.emit(dst.imm as u8);
+                }
+
+                _ => unreachable!(),
+            }
+        }
+
+        _ => return Err(EncodeError::InvalidOperands(insn.operands.span().clone())),
     }
 
     Ok(())
