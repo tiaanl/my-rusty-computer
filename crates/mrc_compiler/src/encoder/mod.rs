@@ -526,11 +526,28 @@ fn encode_group_scas(
 
 fn encode_group_xlat(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+
+    if dst.size != OperandSize::Word {
+        return Err(EncodeError::InvalidOperandSize(dst_span));
+    }
+
+    match dst.kind {
+        OperandKind::Mem if dst.mode == 0 && dst.rm == 7 => {
+            if dst.segment_prefix != 0 && dst.segment_prefix != 0x3E {
+                emitter.emit(dst.segment_prefix);
+            }
+            emitter.emit(0xD7);
+        }
+
+        _ => return Err(EncodeError::InvalidOperands(insn.operands.span().clone())),
+    }
+
+    Ok(())
 }
 
 fn encode_group_in(
@@ -680,7 +697,7 @@ struct OperandData {
     imm: i32,
     // unresolved: u8,
     displacement: i32,
-    displacement_size: u8,
+    displacement_size: OperandSize,
     // address: u8,
     // address_registers: u8,
     // segment: u8,
@@ -696,14 +713,14 @@ impl OperandData {
             ast::Operand::Immediate(_, expr) => {
                 if let ast::Expression::Value(span, ast::Value::Constant(imm)) = expr {
                     Self {
+                        size: OperandSize::Unspecified,
                         kind: OperandKind::Imm,
                         segment_prefix: 0,
                         imm: *imm,
                         displacement: 0,
-                        displacement_size: 0,
-                        size: OperandSize::Unspecified,
-                        rm: 0,
+                        displacement_size: OperandSize::Unspecified,
                         mode: 0,
+                        rm: 0,
                     }
                 } else {
                     panic!("Expression value is not a constant");
@@ -715,7 +732,7 @@ impl OperandData {
                 segment_prefix: 0,
                 imm: 0,
                 displacement: 0,
-                displacement_size: 0,
+                displacement_size: OperandSize::Unspecified,
                 size: match reg {
                     ast::Register::Byte(_) => OperandSize::Byte,
                     ast::Register::Word(_) => OperandSize::Word,
@@ -752,9 +769,53 @@ impl OperandData {
                     segment_prefix,
                     imm: 0,
                     displacement: address,
-                    displacement_size: 2,
+                    displacement_size: OperandSize::Word,
                     mode: 0b00,
                     rm: 0b110,
+                }
+            }
+
+            ast::Operand::Indirect(_, indirect_encoding, expr, data_size, seg) => {
+                let size = if let Some(data_size) = data_size {
+                    match data_size {
+                        ast::DataSize::Byte => OperandSize::Byte,
+                        ast::DataSize::Word => OperandSize::Word,
+                    }
+                } else {
+                    OperandSize::Unspecified
+                };
+
+                let segment_prefix = if let Some(sp) = seg {
+                    0x26 + (sp.encoding() << 3)
+                } else {
+                    0
+                };
+
+                let (mode, displacement, displacement_size) = match expr {
+                    Some(ast::Expression::Value(_, ast::Value::Constant(value))) => {
+                        if *value >= i8::MIN as i32 && *value <= i8::MAX as i32 {
+                            (0b01, *value, OperandSize::Byte)
+                        } else if *value >= i16::MIN as i32 && *value <= i16::MAX as i32 {
+                            (0b10, *value, OperandSize::Word)
+                        } else {
+                            panic!("immediate value out of range");
+                        }
+                    }
+
+                    Some(_) => panic!("Expression does not contain a constant value"),
+
+                    None => (0b00_u8, 0_i32, OperandSize::Unspecified),
+                };
+
+                Self {
+                    size,
+                    kind: OperandKind::Mem,
+                    segment_prefix,
+                    imm: 0,
+                    displacement,
+                    displacement_size,
+                    mode,
+                    rm: indirect_encoding.encoding(),
                 }
             }
 
@@ -780,12 +841,18 @@ fn store_instruction(
     emitter.emit(op_code);
     emitter.emit(modrm);
 
-    if rm.displacement_size == 1 {
-        emitter.emit(rm.displacement as i8 as u8);
-    } else if rm.displacement_size == 2 {
-        for byte in (rm.displacement as i16 as u16).to_le_bytes() {
-            emitter.emit(byte);
+    match rm.displacement_size {
+        OperandSize::Byte => {
+            emitter.emit(rm.displacement as i8 as u8);
         }
+
+        OperandSize::Word => {
+            for byte in (rm.displacement as i16 as u16).to_le_bytes() {
+                emitter.emit(byte);
+            }
+        }
+
+        _ => {}
     }
 
     match imm_size {
@@ -812,6 +879,14 @@ mod tests {
     }
 
     macro_rules! insn {
+        ($operation:expr $(,)?) => {{
+            ast::Instruction {
+                span: 0..0,
+                operation: $operation,
+                operands: ast::Operands::None(0..0),
+            }
+        }};
+
         ($operation:expr, $dst:expr $(,)?) => {{
             ast::Instruction {
                 span: 0..0,
@@ -894,6 +969,40 @@ mod tests {
         }};
     }
 
+    macro_rules! single_indirect_encoding {
+        (bx) => {{
+            ast::IndirectEncoding::Bx
+        }};
+    }
+
+    macro_rules! double_indirect_encoding {
+        (bx, si) => {{
+            ast::IndirectEncoding::BxSi
+        }};
+    }
+
+    macro_rules! indirect {
+        ($first_encoding:ident + $second_encoding:ident) => {{
+            ast::Operand::Indirect(
+                0..0,
+                double_indirect_encoding!($first_encoding, $second_encoding),
+                None,
+                None,
+                None,
+            )
+        }};
+
+        ($first_encoding:ident) => {{
+            ast::Operand::Indirect(
+                0..0,
+                single_indirect_encoding!($first_encoding),
+                None,
+                None,
+                None,
+            )
+        }};
+    }
+
     #[test]
     fn group_add_or_adc_sbb_and_sub_xor_cmp() {
         fn group_add_or_adc_sbb_and_sub_xor_cmp_inner(op: Operation, base: u8) {
@@ -972,6 +1081,46 @@ mod tests {
         group_not_neg_mul_imul_div_idiv_inner(Operation::IMUL, 0x05);
         group_not_neg_mul_imul_div_idiv_inner(Operation::DIV, 0x06);
         group_not_neg_mul_imul_div_idiv_inner(Operation::IDIV, 0x07);
+    }
+
+    #[test]
+    fn group_xlat() {
+        let insn = insn!(
+            Operation::XLAT,
+            ast::Operand::Indirect(
+                0..0,
+                ast::IndirectEncoding::Bx,
+                None,
+                Some(ast::DataSize::Word),
+                None
+            )
+        );
+        assert_eq!(vec![0xD7], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(
+            Operation::XLAT,
+            ast::Operand::Indirect(
+                0..0,
+                ast::IndirectEncoding::Bx,
+                None,
+                Some(ast::DataSize::Word),
+                Some(ast::Segment::CS),
+            )
+        );
+        assert_eq!(vec![0x2E, 0xD7], encode(&insn, 0x100).unwrap());
+
+        // DS does not get a segment override.
+        let insn = insn!(
+            Operation::XLAT,
+            ast::Operand::Indirect(
+                0..0,
+                ast::IndirectEncoding::Bx,
+                None,
+                Some(ast::DataSize::Word),
+                Some(ast::Segment::DS),
+            )
+        );
+        assert_eq!(vec![0xD7], encode(&insn, 0x100).unwrap());
     }
 
     #[test]
