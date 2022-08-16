@@ -442,7 +442,8 @@ fn encode_group_prefixes(
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    emitter.emit(base);
+    Ok(())
 }
 
 fn encode_group_int(
@@ -1123,6 +1124,18 @@ mod tests {
             let insn = insn!(*op);
             assert_eq!(vec![*op_code], encode(&insn, 0x100).unwrap());
         }
+    }
+
+    #[test]
+    fn group_prefixes() {
+        let insn = insn!(Operation::LOCK);
+        assert_eq!(vec![0xF0], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(Operation::REPNE);
+        assert_eq!(vec![0xF2], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(Operation::REP);
+        assert_eq!(vec![0xF3], encode(&insn, 0x100).unwrap());
     }
 
     #[test]
