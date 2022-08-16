@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use super::ast;
+use crate::ast::DataSize;
 
 trait ByteEmitter {
     fn emit(&mut self, byte: u8);
@@ -145,15 +146,6 @@ fn encode(instruction: &ast::Instruction, offset: u16) -> Result<Vec<u8>, Encode
 
         AAD => encode_group_aad(0x00, instruction, offset, &mut result),
 
-        // MOVS => encode_group_movs(0x00, instruction, offset, &mut result),
-
-        // CMPS => encode_group_cmps(0x00, instruction, offset, &mut result),
-
-        // STOS => encode_group_stos(0x00, instruction, offset, &mut result),
-
-        // LODS => encode_group_lods(0x00, instruction, offset, &mut result),
-
-        // SCAS => encode_group_scas(0x00, instruction, offset, &mut result),
         XLAT => encode_group_xlat(0x00, instruction, offset, &mut result),
 
         IN => encode_group_in(0x00, instruction, offset, &mut result),
@@ -440,7 +432,8 @@ fn encode_group_no_operands(
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    emitter.emit(base);
+    Ok(())
 }
 
 fn encode_group_prefixes(
@@ -454,11 +447,27 @@ fn encode_group_prefixes(
 
 fn encode_group_int(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+
+    match dst.kind {
+        OperandKind::Imm => {
+            emitter.emit(0xCD);
+
+            if dst.imm >= u8::MIN as i32 && dst.imm <= u8::MAX as i32 {
+                emitter.emit(dst.imm as u8);
+            } else {
+                return Err(EncodeError::ImmediateOutOfRange(dst_span));
+            }
+        }
+
+        _ => return Err(EncodeError::InvalidOperands(dst_span)),
+    }
+
+    Ok(())
 }
 
 fn encode_group_aam(
@@ -467,7 +476,9 @@ fn encode_group_aam(
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    emitter.emit(0xD4);
+    emitter.emit(0xA0);
+    Ok(())
 }
 
 fn encode_group_aad(
@@ -476,7 +487,9 @@ fn encode_group_aad(
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    emitter.emit(0xD5);
+    emitter.emit(0xA0);
+    Ok(())
 }
 
 fn encode_group_movs(
@@ -748,14 +761,7 @@ impl OperandData {
                     panic!("Expression value is not a constant");
                 };
 
-                let size = if let Some(data_size) = data_size {
-                    match data_size {
-                        ast::DataSize::Byte => OperandSize::Byte,
-                        ast::DataSize::Word => OperandSize::Word,
-                    }
-                } else {
-                    OperandSize::Unspecified
-                };
+                let size = Self::operand_size_from_data_size(data_size);
 
                 let segment_prefix = if let Some(sp) = seg {
                     0x26 + (sp.encoding() << 3)
@@ -776,17 +782,10 @@ impl OperandData {
             }
 
             ast::Operand::Indirect(_, indirect_encoding, expr, data_size, seg) => {
-                let size = if let Some(data_size) = data_size {
-                    match data_size {
-                        ast::DataSize::Byte => OperandSize::Byte,
-                        ast::DataSize::Word => OperandSize::Word,
-                    }
-                } else {
-                    OperandSize::Unspecified
-                };
+                let size = Self::operand_size_from_data_size(data_size);
 
-                let segment_prefix = if let Some(sp) = seg {
-                    0x26 + (sp.encoding() << 3)
+                let segment_prefix = if let Some(seg) = seg {
+                    0x26 + (seg.encoding() << 3)
                 } else {
                     0
                 };
@@ -821,6 +820,32 @@ impl OperandData {
 
             todo => todo!("{:?}", todo),
         }
+    }
+
+    fn operand_size_from_data_size(data_size: &Option<DataSize>) -> OperandSize {
+        if let Some(data_size) = data_size {
+            match data_size {
+                ast::DataSize::Byte => OperandSize::Byte,
+                ast::DataSize::Word => OperandSize::Word,
+            }
+        } else {
+            OperandSize::Unspecified
+        }
+    }
+}
+
+fn expr_to_u8(expr: &ast::Expression) -> Result<u8, EncodeError> {
+    match expr {
+        ast::Expression::Value(_, ast::Value::Constant(value)) => {
+            let value = *value;
+
+            if value >= u8::MIN as i32 && value <= u8::MAX as i32 {
+                Ok(value as u8)
+            } else {
+                Err(EncodeError::ImmediateOutOfRange(expr.span().clone()))
+            }
+        }
+        _ => panic!("Variable expression found! {:?}", expr),
     }
 }
 
@@ -975,34 +1000,6 @@ mod tests {
         }};
     }
 
-    macro_rules! double_indirect_encoding {
-        (bx, si) => {{
-            ast::IndirectEncoding::BxSi
-        }};
-    }
-
-    macro_rules! indirect {
-        ($first_encoding:ident + $second_encoding:ident) => {{
-            ast::Operand::Indirect(
-                0..0,
-                double_indirect_encoding!($first_encoding, $second_encoding),
-                None,
-                None,
-                None,
-            )
-        }};
-
-        ($first_encoding:ident) => {{
-            ast::Operand::Indirect(
-                0..0,
-                single_indirect_encoding!($first_encoding),
-                None,
-                None,
-                None,
-            )
-        }};
-    }
-
     #[test]
     fn group_add_or_adc_sbb_and_sub_xor_cmp() {
         fn group_add_or_adc_sbb_and_sub_xor_cmp_inner(op: Operation, base: u8) {
@@ -1081,6 +1078,69 @@ mod tests {
         group_not_neg_mul_imul_div_idiv_inner(Operation::IMUL, 0x05);
         group_not_neg_mul_imul_div_idiv_inner(Operation::DIV, 0x06);
         group_not_neg_mul_imul_div_idiv_inner(Operation::IDIV, 0x07);
+    }
+
+    #[test]
+    fn group_no_operands() {
+        let tests: &[(Operation, u8)] = &[
+            (Operation::DAA, 0x27),
+            (Operation::DAS, 0x2F),
+            (Operation::AAA, 0x37),
+            (Operation::AAS, 0x3F),
+            (Operation::NOP, 0x90),
+            (Operation::CBW, 0x98),
+            (Operation::CWD, 0x99),
+            (Operation::INT3, 0xCC),
+            (Operation::INTO, 0xCE),
+            (Operation::IRET, 0xCF),
+            (Operation::SALC, 0xD6),
+            (Operation::HLT, 0xF4),
+            (Operation::CMC, 0xF5),
+            (Operation::CLC, 0xF8),
+            (Operation::STC, 0xF9),
+            (Operation::CLI, 0xFA),
+            (Operation::STI, 0xFB),
+            (Operation::CLD, 0xFC),
+            (Operation::STD, 0xFD),
+            (Operation::PUSHF, 0x9C),
+            (Operation::POPF, 0x9D),
+            (Operation::SAHF, 0x9E),
+            (Operation::LAHF, 0x9F),
+            (Operation::MOVSB, 0xA4),
+            (Operation::CMPSB, 0xA6),
+            (Operation::STOSB, 0xAA),
+            (Operation::LODSB, 0xAC),
+            (Operation::SCASB, 0xAE),
+            // (Operation::XLATB, 0xD7),
+            (Operation::MOVSW, 0xA5),
+            (Operation::CMPSW, 0xA7),
+            (Operation::STOSW, 0xAB),
+            (Operation::LODSW, 0xAD),
+            (Operation::SCASW, 0xAF),
+        ];
+
+        for (op, op_code) in tests.iter() {
+            let insn = insn!(*op);
+            assert_eq!(vec![*op_code], encode(&insn, 0x100).unwrap());
+        }
+    }
+
+    #[test]
+    fn group_int() {
+        let insn = insn!(Operation::INT, imm!(0x21));
+        assert_eq!(vec![0xCD, 0x21], encode(&insn, 0x100).unwrap());
+    }
+
+    #[test]
+    fn group_aam() {
+        let insn = insn!(Operation::AAM);
+        assert_eq!(vec![0xD4, 0xA0], encode(&insn, 0x100).unwrap());
+    }
+
+    #[test]
+    fn group_aad() {
+        let insn = insn!(Operation::AAD);
+        assert_eq!(vec![0xD5, 0xA0], encode(&insn, 0x100).unwrap());
     }
 
     #[test]
