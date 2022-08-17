@@ -169,7 +169,7 @@ impl std::fmt::Display for Operation {
                 OR => "or",
                 XOR => "xor",
                 REP => "rep",
-                REPNE => "repz",
+                REPNE => "repne",
                 MOVSB => "movsb",
                 MOVSW => "movsw",
                 CMPSB => "cmpsb",

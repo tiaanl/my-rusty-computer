@@ -128,7 +128,7 @@ fn inc_dec(
 
         ast::Operands::Destination(
             _,
-            op @ ast::Operand::Address(
+            op @ ast::Operand::Direct(
                 span,
                 ast::Expression::Value(_, ast::Value::Constant(value)),
                 data_size,
@@ -188,7 +188,7 @@ fn inc_dec(
 impl Emitter {
     fn segment_prefix(&mut self, op: &ast::Operand) {
         let seg = match op {
-            ast::Operand::Address(_, _, _, Some(seg)) => {
+            ast::Operand::Direct(_, _, _, Some(seg)) => {
                 if *seg != ast::Segment::DS {
                     Some(*seg)
                 } else {
@@ -544,7 +544,7 @@ mod tests {
                 operation: Operation::INC,
                 operands: ast::Operands::Destination(
                     0..0,
-                    ast::Operand::Address(
+                    ast::Operand::Direct(
                         0..0,
                         ast::Expression::Value(0..0, ast::Value::Constant(12345)),
                         Some(ast::DataSize::Byte),
@@ -562,7 +562,7 @@ mod tests {
                 operation: Operation::INC,
                 operands: ast::Operands::Destination(
                     0..0,
-                    ast::Operand::Address(
+                    ast::Operand::Direct(
                         0..0,
                         ast::Expression::Value(0..0, ast::Value::Constant(12345)),
                         Some(ast::DataSize::Word),
@@ -699,7 +699,7 @@ mod tests {
                 operation: Operation::DEC,
                 operands: ast::Operands::Destination(
                     0..0,
-                    ast::Operand::Address(
+                    ast::Operand::Direct(
                         0..0,
                         ast::Expression::Value(0..0, ast::Value::Constant(12345)),
                         Some(ast::DataSize::Byte),
@@ -717,7 +717,7 @@ mod tests {
                 operation: Operation::DEC,
                 operands: ast::Operands::Destination(
                     0..0,
-                    ast::Operand::Address(
+                    ast::Operand::Direct(
                         0..0,
                         ast::Expression::Value(0..0, ast::Value::Constant(12345)),
                         Some(ast::DataSize::Word),

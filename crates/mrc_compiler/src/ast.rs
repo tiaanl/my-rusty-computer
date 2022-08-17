@@ -399,7 +399,7 @@ impl<'a> std::fmt::Display for Expression {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operand {
     Immediate(Span, Expression),
-    Address(Span, Expression, Option<DataSize>, Option<Segment>),
+    Direct(Span, Expression, Option<DataSize>, Option<Segment>),
     Indirect(
         Span,
         IndirectEncoding,
@@ -407,6 +407,7 @@ pub enum Operand {
         Option<DataSize>,
         Option<Segment>,
     ),
+    Far(Span, Expression, Expression),
     Register(Span, Register),
     Segment(Span, Segment),
 }
@@ -415,8 +416,9 @@ impl Operand {
     pub fn span(&self) -> &Span {
         match self {
             Self::Immediate(span, _)
-            | Self::Address(span, _, _, _)
+            | Self::Direct(span, _, _, _)
             | Self::Indirect(span, _, _, _, _)
+            | Self::Far(span, _, _)
             | Self::Register(span, _)
             | Self::Segment(span, _) => span,
         }
@@ -425,8 +427,9 @@ impl Operand {
     pub fn data_size(&self) -> Option<DataSize> {
         match self {
             Operand::Immediate(_, _) => None,
-            Operand::Address(_, _, data_size, _) => *data_size,
+            Operand::Direct(_, _, data_size, _) => *data_size,
             Operand::Indirect(_, _, _, data_size, _) => *data_size,
+            Operand::Far(_, _, _) => None,
             Operand::Register(_, register) => Some(register.data_size()),
             Operand::Segment(_, _) => Some(DataSize::Word),
         }
@@ -438,7 +441,7 @@ impl<'a> std::fmt::Display for Operand {
         match self {
             Operand::Immediate(_, expr) => expr.fmt(f),
 
-            Operand::Address(_, expr, data_size, segment) => {
+            Operand::Direct(_, expr, data_size, segment) => {
                 if let Some(data_size) = data_size {
                     write!(f, "{} ", data_size)?;
                 }
@@ -471,6 +474,10 @@ impl<'a> std::fmt::Display for Operand {
                 }
 
                 write!(f, "]")
+            }
+
+            Operand::Far(_, offset, segment) => {
+                write!(f, "{}:{}", segment, offset)
             }
 
             Operand::Register(_, register) => register.fmt(f),

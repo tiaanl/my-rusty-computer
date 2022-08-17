@@ -300,6 +300,7 @@ impl<'a> Parser<'a> {
                     start..self.last_token_end,
                     destination,
                 )),
+
                 Token::Punctuation(_, PunctuationKind::Comma) => {
                     self.next_token();
                     let source = self.parse_operand(None)?;
@@ -321,7 +322,8 @@ impl<'a> Parser<'a> {
         data_size: Option<ast::DataSize>,
     ) -> Result<ast::Operand, ParserError> {
         let start = self.token_start;
-        match self.token {
+
+        let result = match self.token {
             Token::Punctuation(_, PunctuationKind::OpenBracket) => {
                 self.parse_memory_operand(data_size)
             }
@@ -338,22 +340,41 @@ impl<'a> Parser<'a> {
                     self.next_token();
                     self.parse_operand(Some(data_size))
                 } else {
-                    let expression = self.parse_expression()?;
-                    Ok(ast::Operand::Immediate(
-                        start..self.last_token_end,
-                        expression,
-                    ))
+                    self.parse_immediate_or_far()
                 }
             }
 
-            _ => {
-                let start = self.token_start;
-                let expression = self.parse_expression()?;
-                Ok(ast::Operand::Immediate(
-                    start..self.last_token_end,
-                    expression,
-                ))
-            }
+            _ => self.parse_immediate_or_far(),
+        }?;
+
+        Ok(result)
+    }
+
+    fn parse_immediate_or_far(&mut self) -> Result<ast::Operand, ParserError> {
+        let start = self.token_start;
+
+        let expression = self.parse_expression()?;
+        if let Some(segment) = self.parse_far()? {
+            Ok(ast::Operand::Far(
+                start..self.last_token_end,
+                expression,
+                segment,
+            ))
+        } else {
+            Ok(ast::Operand::Immediate(
+                start..self.last_token_end,
+                expression,
+            ))
+        }
+    }
+
+    fn parse_far(&mut self) -> Result<Option<ast::Expression>, ParserError> {
+        if matches!(self.token, Token::Punctuation(_, PunctuationKind::Colon)) {
+            self.next_token();
+            let expr = self.parse_expression()?;
+            Ok(Some(expr))
+        } else {
+            Ok(None)
         }
     }
 
@@ -432,7 +453,7 @@ impl<'a> Parser<'a> {
                 segment_override,
             )
         } else {
-            ast::Operand::Address(
+            ast::Operand::Direct(
                 start..self.last_token_end,
                 expression.unwrap(),
                 data_size,
@@ -948,7 +969,7 @@ mod tests {
     #[test]
     fn repeat_prefix() {
         assert_parse!(
-            "rep movsb\nrepz cmpsw",
+            "rep movsb\nrepne cmpsw",
             vec![
                 ast::Line::Instruction(ast::Instruction {
                     span: 0..3,
@@ -961,14 +982,14 @@ mod tests {
                     operands: ast::Operands::None(9..9),
                 }),
                 ast::Line::Instruction(ast::Instruction {
-                    span: 10..14,
+                    span: 10..15,
                     operation: Operation::REPNE,
-                    operands: ast::Operands::None(14..14),
+                    operands: ast::Operands::None(15..15),
                 }),
                 ast::Line::Instruction(ast::Instruction {
-                    span: 15..20,
+                    span: 16..21,
                     operation: Operation::CMPSW,
-                    operands: ast::Operands::None(20..20),
+                    operands: ast::Operands::None(21..21),
                 }),
             ]
         );
@@ -1012,7 +1033,7 @@ mod tests {
             ParserError::Expected(
                 3..7,
                 "literal expected for data definition".to_owned(),
-                "".to_owned()
+                "identifier \"test\"".to_owned()
             )
         );
         assert_parse_err!(
@@ -1020,7 +1041,7 @@ mod tests {
             ParserError::Expected(
                 7..11,
                 "literal expected for data definition".to_owned(),
-                "".to_owned()
+                "identifier \"test\"".to_owned()
             )
         );
     }
@@ -1138,5 +1159,24 @@ mod tests {
                 )
             })]
         );
+    }
+
+    #[test]
+    fn far_operands() {
+        assert_parse!(
+            "JMP 0xF000:0xFFF0",
+            vec![ast::Line::Instruction(ast::Instruction {
+                span: 0..17,
+                operation: Operation::JMP,
+                operands: ast::Operands::Destination(
+                    4..17,
+                    ast::Operand::Far(
+                        4..17,
+                        ast::Expression::Value(4..10, ast::Value::Constant(0xF000)),
+                        ast::Expression::Value(11..17, ast::Value::Constant(0xFFF0)),
+                    )
+                )
+            })]
+        )
     }
 }

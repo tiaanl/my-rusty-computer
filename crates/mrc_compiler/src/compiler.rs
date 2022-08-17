@@ -869,7 +869,7 @@ impl Compiler {
                 out::Operand::Segment(out::Segment::try_from_encoding(segment.encoding()).unwrap())
             }
 
-            ast::Operand::Address(_, expr, data_size, segment) => {
+            ast::Operand::Direct(_, expr, data_size, segment) => {
                 let segment = if let Some(segment) = segment {
                     out::Segment::try_from_encoding(segment.encoding()).unwrap()
                 } else {
@@ -927,6 +927,10 @@ impl Compiler {
                 };
 
                 out::Operand::Indirect(segment, addressing_mode, displacement, operand_size)
+            }
+
+            ast::Operand::Far(_, offset, segment) => {
+                todo!()
             }
         })
     }
@@ -990,11 +994,12 @@ impl Compiler {
                 let value = self.evaluate_expression(expr)?;
                 mrc_encoder::Operand::immediate(value as u16)
             }
-            ast::Operand::Address(_, expr, _, segment) => {
+            ast::Operand::Direct(_, expr, _, segment) => {
                 let addr = self.evaluate_expression(expr)?;
                 mrc_encoder::Operand::direct_address(addr as u16, segment.map(|s| s.encoding()))
             }
             ast::Operand::Indirect(_, _, _, _, _) => todo!(),
+            ast::Operand::Far(_, _, _) => todo!(),
             ast::Operand::Register(_, reg) => mrc_encoder::Operand::register(reg.encoding()),
             ast::Operand::Segment(_, _) => todo!(),
         })
@@ -1133,7 +1138,7 @@ impl Compiler {
             (ast::Operand::Register(_, _), ast::Operand::Register(_, _)) => 1,
 
             // If there is an address on either side, that is included.
-            (ast::Operand::Address(_, _, _, _), _) => 3,
+            (ast::Operand::Direct(_, _, _, _), _) => 3,
 
             // If there is an indirect on either side, that is included.
             (ast::Operand::Indirect(_, _, expr, _, _), _) => {
@@ -1177,10 +1182,10 @@ impl Compiler {
 
             (
                 ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-                ast::Operand::Address(_, _, _, _),
+                ast::Operand::Direct(_, _, _, _),
             )
             | (
-                ast::Operand::Address(_, _, _, _),
+                ast::Operand::Direct(_, _, _, _),
                 ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
             ) => 3,
 
@@ -1196,7 +1201,7 @@ impl Compiler {
                 1 + self.calculate_displacement_size(expr)?
             }
 
-            (ast::Operand::Address(_, _, _, _), ast::Operand::Immediate(_, _)) => {
+            (ast::Operand::Direct(_, _, _, _), ast::Operand::Immediate(_, _)) => {
                 // mrrm + direct address.
                 3
             }
@@ -1312,7 +1317,7 @@ impl Compiler {
                     }
             }
 
-            ast::Operand::Address(_, _, data_size, _) => {
+            ast::Operand::Direct(_, _, data_size, _) => {
                 T_MEM
                     | match data_size {
                         None => 0,
@@ -1329,6 +1334,8 @@ impl Compiler {
                         Some(ast::DataSize::Word) => T_BITS_16,
                     }
             }
+
+            ast::Operand::Far(_, _, _) => todo!(),
 
             ast::Operand::Segment(_, segment) => match segment {
                 ast::Segment::ES => T_SEG_ES | T_BITS_16,
@@ -1396,7 +1403,7 @@ impl ast::Operands {
 impl ast::Operand {
     fn segment_override(&self) -> Option<ast::Segment> {
         match self {
-            Self::Address(_, _, _, s) => s.clone(),
+            Self::Direct(_, _, _, s) => s.clone(),
             Self::Indirect(_, _, _, _, s) => s.clone(),
             _ => None,
         }

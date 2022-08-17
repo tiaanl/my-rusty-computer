@@ -401,11 +401,48 @@ fn encode_group_call(
 
 fn encode_group_jmp(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+
+    match dst.kind {
+        OperandKind::Imm => {
+            if dst.imm < u16::MIN as i32 || dst.imm > u16::MAX as i32 {
+                return Err(EncodeError::ImmediateOutOfRange(dst_span));
+            }
+
+            match dst.jmp_kind {
+                Some(JumpKind::Short) => {
+                    todo!()
+                }
+
+                None | Some(JumpKind::Near) => {
+                    emitter.emit(0xE9);
+                    let rel = (dst.imm - (offset as i32 + 2)) as i16 as u16;
+                    for byte in rel.to_le_bytes() {
+                        emitter.emit(byte);
+                    }
+                }
+
+                Some(JumpKind::Far) => {
+                    todo!()
+                }
+            }
+        }
+
+        OperandKind::Mem | OperandKind::Reg => {
+            if let OperandSize::Word = dst.size {
+                store_instruction(0xFF, &dst, 0b100, OperandSize::Unspecified, 0, emitter);
+            }
+        }
+
+        // OperandKind::Far => {}
+        _ => return Err(EncodeError::InvalidOperands(insn.operands.span().clone())),
+    }
+
+    Ok(())
 }
 
 fn encode_group_jcc(
@@ -808,7 +845,7 @@ impl OperandData {
                 rm: reg.encoding(),
             },
 
-            ast::Operand::Address(span, expr, data_size, seg) => {
+            ast::Operand::Direct(span, expr, data_size, seg) => {
                 let address = if let ast::Expression::Value(_, ast::Value::Constant(value)) = expr {
                     *value
                 } else {
@@ -1041,7 +1078,7 @@ mod tests {
         }};
 
         ($addr:expr, $data_size:expr, $segment_override:expr) => {{
-            ast::Operand::Address(
+            ast::Operand::Direct(
                 0..0,
                 ast::Expression::Value(0..0, ast::Value::Constant($addr)),
                 $data_size,
@@ -1134,6 +1171,19 @@ mod tests {
         group_not_neg_mul_imul_div_idiv_inner(Operation::IMUL, 0x05);
         group_not_neg_mul_imul_div_idiv_inner(Operation::DIV, 0x06);
         group_not_neg_mul_imul_div_idiv_inner(Operation::IDIV, 0x07);
+    }
+
+    #[test]
+    fn group_jmp() {
+        let insn = insn!(Operation::JMP, imm!(0x110));
+        assert_eq!(vec![0xE9, 0x0E, 0x00], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JMP, imm!(0x70));
+        assert_eq!(vec![0xE9, 0x6E, 0xFF], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(Operation::JMP, reg!(bx));
+        assert_eq!(vec![0xFF, 0xE3], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JMP, direct!(0x2000));
+        assert_eq!(vec![0xFF, 0xE3], encode(&insn, 0x100).unwrap());
     }
 
     #[test]
