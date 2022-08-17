@@ -20,7 +20,7 @@ enum EncodeError {
     OperandSizesDoNotMatch(ast::Span),
     InvalidOperandSize(ast::Span),
     ImmediateOutOfRange(ast::Span),
-    Unknown,
+    RelativeJumpOutOfRange(ast::Span),
 }
 
 fn encode(instruction: &ast::Instruction, offset: u16) -> Result<Vec<u8>, EncodeError> {
@@ -410,20 +410,63 @@ fn encode_group_jmp(
 
 fn encode_group_jcc(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+
+    if dst.kind != OperandKind::Imm && (!matches!(dst.jmp_kind, Some(JumpKind::Short))) {
+        return Err(EncodeError::InvalidOperands(dst_span));
+    }
+
+    if dst.imm < u16::MIN as i32 || dst.imm >= u16::MAX as i32 {
+        return Err(EncodeError::RelativeJumpOutOfRange(dst_span));
+    }
+
+    let jmp_dst = dst.imm - (offset as i32 + 2);
+
+    if jmp_dst < i8::MIN as i32 || jmp_dst > i8::MAX as i32 {
+        return Err(EncodeError::RelativeJumpOutOfRange(dst_span));
+    }
+
+    emitter.emit(base);
+    emitter.emit(jmp_dst as i8 as u8);
+
+    Ok(())
 }
 
 fn encode_group_loopc(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+
+    match dst.kind {
+        OperandKind::Imm
+            if matches!(dst.jmp_kind, Some(JumpKind::Short)) || dst.jmp_kind.is_none() =>
+        {
+            emitter.emit(base);
+
+            let rel = dst.imm as i32 - (offset as i32 + 1);
+
+            if rel >= i8::MIN as i32 && rel <= i8::MAX as i32 {
+                emitter.emit(rel as i8 as u8);
+            // } else if jmp_dst >= i16::MIN as i32 && jmp_dst <= i16::MAX as i32 {
+            //     for byte in (jmp_dst as i16 as u16).to_le_bytes() {
+            //         emitter.emit(byte);
+            //     }
+            } else {
+                return Err(EncodeError::RelativeJumpOutOfRange(dst_span));
+            }
+        }
+
+        _ => return Err(EncodeError::InvalidOperands(insn.operands.span().clone())),
+    }
+
+    Ok(())
 }
 
 fn encode_group_no_operands(
@@ -703,6 +746,14 @@ impl OperandSize {
     }
 }
 
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum JumpKind {
+    Far,
+    Near,
+    Short,
+}
+
 #[derive(Debug)]
 struct OperandData {
     size: OperandSize,
@@ -716,7 +767,7 @@ struct OperandData {
     // address_registers: u8,
     // segment: u8,
     // offset: u8,
-    // jmp_type: u8,
+    jmp_kind: Option<JumpKind>,
     mode: u8,
     rm: u8,
 }
@@ -733,6 +784,7 @@ impl OperandData {
                         imm: *imm,
                         displacement: 0,
                         displacement_size: OperandSize::Unspecified,
+                        jmp_kind: None,
                         mode: 0,
                         rm: 0,
                     }
@@ -742,17 +794,18 @@ impl OperandData {
             }
 
             ast::Operand::Register(span, reg) => Self {
+                size: match reg {
+                    ast::Register::Byte(_) => OperandSize::Byte,
+                    ast::Register::Word(_) => OperandSize::Word,
+                },
                 kind: OperandKind::Reg,
                 segment_prefix: 0,
                 imm: 0,
                 displacement: 0,
                 displacement_size: OperandSize::Unspecified,
-                size: match reg {
-                    ast::Register::Byte(_) => OperandSize::Byte,
-                    ast::Register::Word(_) => OperandSize::Word,
-                },
-                rm: reg.encoding(),
+                jmp_kind: None,
                 mode: 0b11,
+                rm: reg.encoding(),
             },
 
             ast::Operand::Address(span, expr, data_size, seg) => {
@@ -777,6 +830,7 @@ impl OperandData {
                     imm: 0,
                     displacement: address,
                     displacement_size: OperandSize::Word,
+                    jmp_kind: None,
                     mode: 0b00,
                     rm: 0b110,
                 }
@@ -814,6 +868,7 @@ impl OperandData {
                     imm: 0,
                     displacement,
                     displacement_size,
+                    jmp_kind: None,
                     mode,
                     rm: indirect_encoding.encoding(),
                 }
@@ -1079,6 +1134,57 @@ mod tests {
         group_not_neg_mul_imul_div_idiv_inner(Operation::IMUL, 0x05);
         group_not_neg_mul_imul_div_idiv_inner(Operation::DIV, 0x06);
         group_not_neg_mul_imul_div_idiv_inner(Operation::IDIV, 0x07);
+    }
+
+    #[test]
+    fn group_jcc() {
+        let insn = insn!(Operation::JO, imm!(0x100));
+        assert_eq!(vec![0x70, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JNO, imm!(0x100));
+        assert_eq!(vec![0x71, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JB, imm!(0x100));
+        assert_eq!(vec![0x72, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JNB, imm!(0x100));
+        assert_eq!(vec![0x73, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JE, imm!(0x100));
+        assert_eq!(vec![0x74, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JNE, imm!(0x100));
+        assert_eq!(vec![0x75, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JBE, imm!(0x100));
+        assert_eq!(vec![0x76, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JNBE, imm!(0x100));
+        assert_eq!(vec![0x77, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JS, imm!(0x100));
+        assert_eq!(vec![0x78, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JNS, imm!(0x100));
+        assert_eq!(vec![0x79, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JP, imm!(0x100));
+        assert_eq!(vec![0x7A, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JNP, imm!(0x100));
+        assert_eq!(vec![0x7B, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JL, imm!(0x100));
+        assert_eq!(vec![0x7C, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JNL, imm!(0x100));
+        assert_eq!(vec![0x7D, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JLE, imm!(0x100));
+        assert_eq!(vec![0x7E, 0xFE], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::JNLE, imm!(0x100));
+        assert_eq!(vec![0x7F, 0xFE], encode(&insn, 0x100).unwrap());
+    }
+
+    #[test]
+    fn group_loopc() {
+        let insn = insn!(Operation::LOOPNZ, imm!(0x100));
+        assert_eq!(vec![0xE0, 0xFF], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(Operation::LOOPZ, imm!(0x100));
+        assert_eq!(vec![0xE1, 0xFF], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(Operation::LOOP, imm!(0x100));
+        assert_eq!(vec![0xE2, 0xFF], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(Operation::JCXZ, imm!(0x100));
+        assert_eq!(vec![0xE3, 0xFF], encode(&insn, 0x100).unwrap());
     }
 
     #[test]
