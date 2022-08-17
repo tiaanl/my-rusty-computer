@@ -14,7 +14,9 @@ impl ByteEmitter for Vec<u8> {
 }
 
 #[derive(Debug)]
-enum EncodeError {
+pub enum EncodeError {
+    NonConstantImmediateValue,
+
     InvalidOperands(ast::Span),
     OperandSizeNotSpecified(ast::Span),
     OperandSizesDoNotMatch(ast::Span),
@@ -23,7 +25,7 @@ enum EncodeError {
     RelativeJumpOutOfRange(ast::Span),
 }
 
-fn encode(instruction: &ast::Instruction, offset: u16) -> Result<Vec<u8>, EncodeError> {
+pub fn encode(instruction: &ast::Instruction, offset: u16) -> Result<Vec<u8>, EncodeError> {
     use mrc_instruction::Operation::*;
 
     let mut result = vec![];
@@ -54,12 +56,11 @@ fn encode(instruction: &ast::Instruction, offset: u16) -> Result<Vec<u8>, Encode
         INC => encode_group_inc_dec(0x00, instruction, offset, &mut result),
         DEC => encode_group_inc_dec(0x01, instruction, offset, &mut result),
 
-        PUSH => encode_group_push_pop(0x00, instruction, offset, &mut result),
-        POP => encode_group_push_pop(0x00, instruction, offset, &mut result),
+        PUSH => encode_group_push(0x00, instruction, offset, &mut result),
+        POP => encode_group_pop(0x00, instruction, offset, &mut result),
 
         RET => encode_group_ret_retn_retf(0xC2, instruction, offset, &mut result),
-        // RETN => encode_group_ret_retn_retf(0xC2, instruction, offset, &mut result),
-        // RETF => encode_group_ret_retn_retf(0x0CA, instruction, offset, &mut result),
+        // RETF => encode_group_ret_retn_retf(0xCA, instruction, offset, &mut result),
         //
         LEA => encode_group_lea(0x00, instruction, offset, &mut result),
 
@@ -160,7 +161,7 @@ fn encode(instruction: &ast::Instruction, offset: u16) -> Result<Vec<u8>, Encode
 
 fn parse_dst(operands: &ast::Operands) -> Result<(OperandData, ast::Span), EncodeError> {
     Ok(if let ast::Operands::Destination(_, dst) = &operands {
-        (OperandData::from(dst), dst.span().clone())
+        (OperandData::from(dst)?, dst.span().clone())
     } else {
         return Err(EncodeError::InvalidOperands(operands.span().clone()));
     })
@@ -172,9 +173,9 @@ fn parse_dst_and_src(
     Ok(
         if let ast::Operands::DestinationAndSource(_, dst, src) = &operands {
             (
-                OperandData::from(dst),
+                OperandData::from(dst)?,
                 dst.span().clone(),
-                OperandData::from(src),
+                OperandData::from(src)?,
                 src.span().clone(),
             )
         } else {
@@ -338,20 +339,110 @@ fn encode_group_xchg(
 
 fn encode_group_inc_dec(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+
+    if dst.size == OperandSize::Unspecified {
+        return Err(EncodeError::InvalidOperandSize(dst_span));
+    }
+
+    match dst.kind {
+        OperandKind::Reg if dst.size == OperandSize::Word => {
+            let op_code = 0x40 + dst.rm + base << 3;
+            emitter.emit(op_code);
+        }
+
+        OperandKind::Reg if dst.size == OperandSize::Byte => {
+            store_instruction(0xFE, &dst, base, OperandSize::Unspecified, 0, emitter);
+        }
+
+        OperandKind::Mem => match dst.size {
+            OperandSize::Byte => {
+                store_instruction(0xFE, &dst, base, OperandSize::Unspecified, 0, emitter);
+            }
+            OperandSize::Word => {
+                store_instruction(0xFF, &dst, base, OperandSize::Unspecified, 0, emitter)
+            }
+            _ => unreachable!(),
+        },
+
+        _ => return Err(EncodeError::InvalidOperands(insn.operands.span().clone())),
+    }
+
+    Ok(())
 }
 
-fn encode_group_push_pop(
+fn encode_group_push(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+
+    if dst.size != OperandSize::Word {
+        return Err(EncodeError::InvalidOperandSize(dst_span));
+    }
+
+    match dst.kind {
+        OperandKind::Mem => {
+            todo!()
+        }
+
+        OperandKind::Reg => {
+            let op_code = 0x50 + dst.rm;
+            emitter.emit(op_code);
+        }
+
+        OperandKind::Seg => {
+            let op_code = 6 + dst.rm << 3;
+            emitter.emit(op_code);
+        }
+
+        _ => {
+            return Err(EncodeError::InvalidOperandSize(dst_span));
+        }
+    }
+
+    Ok(())
+}
+
+fn encode_group_pop(
+    base: u8,
+    insn: &ast::Instruction,
+    offset: u16,
+    emitter: &mut impl ByteEmitter,
+) -> Result<(), EncodeError> {
+    let (dst, dst_span) = parse_dst(&insn.operands)?;
+
+    if dst.size != OperandSize::Word {
+        return Err(EncodeError::InvalidOperandSize(dst_span));
+    }
+
+    match dst.kind {
+        OperandKind::Mem => {
+            todo!()
+        }
+
+        OperandKind::Reg => {
+            let op_code = 0x58 + dst.rm;
+            emitter.emit(op_code);
+        }
+
+        OperandKind::Seg => {
+            let op_code = 7 + dst.rm << 3;
+            emitter.emit(op_code);
+        }
+
+        _ => {
+            return Err(EncodeError::InvalidOperandSize(dst_span));
+        }
+    }
+
+    Ok(())
 }
 
 fn encode_group_ret_retn_retf(
@@ -360,7 +451,8 @@ fn encode_group_ret_retn_retf(
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    emitter.emit(base);
+    Ok(())
 }
 
 fn encode_group_lea(
@@ -374,11 +466,27 @@ fn encode_group_lea(
 
 fn encode_group_les_lds(
     base: u8,
-    instruction: &ast::Instruction,
+    insn: &ast::Instruction,
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let (dst, dst_span, src, src_span) = parse_dst_and_src(&insn.operands)?;
+
+    if dst.size != OperandSize::Word {
+        return Err(EncodeError::InvalidOperandSize(dst_span));
+    }
+
+    if src.size != OperandSize::Word {
+        return Err(EncodeError::InvalidOperandSize(src_span));
+    }
+
+    if dst.kind != OperandKind::Reg || src.kind != OperandKind::Mem {
+        return Err(EncodeError::InvalidOperands(insn.operands.span().clone()));
+    }
+
+    store_instruction(base, &src, dst.rm, OperandSize::Unspecified, 0, emitter);
+
+    Ok(())
 }
 
 fn encode_group_rol_ror_rcl_rcr_shl_sal_shr_sar(
@@ -752,6 +860,7 @@ fn encode_group_out(
 enum OperandKind {
     Imm,
     Reg,
+    Seg,
     Mem,
 }
 
@@ -810,8 +919,8 @@ struct OperandData {
 }
 
 impl OperandData {
-    fn from(operand: &ast::Operand) -> Self {
-        match operand {
+    fn from(operand: &ast::Operand) -> Result<Self, EncodeError> {
+        Ok(match operand {
             ast::Operand::Immediate(_, expr) => {
                 if let ast::Expression::Value(span, ast::Value::Constant(imm)) = expr {
                     Self {
@@ -826,7 +935,7 @@ impl OperandData {
                         rm: 0,
                     }
                 } else {
-                    panic!("Expression value is not a constant");
+                    return Err(EncodeError::NonConstantImmediateValue);
                 }
             }
 
@@ -845,11 +954,23 @@ impl OperandData {
                 rm: reg.encoding(),
             },
 
+            ast::Operand::Segment(span, seg) => Self {
+                size: OperandSize::Word,
+                kind: OperandKind::Seg,
+                segment_prefix: 0,
+                imm: 0,
+                displacement: 0,
+                displacement_size: OperandSize::Unspecified,
+                jmp_kind: None,
+                mode: 0b11,
+                rm: seg.encoding(),
+            },
+
             ast::Operand::Direct(span, expr, data_size, seg) => {
                 let address = if let ast::Expression::Value(_, ast::Value::Constant(value)) = expr {
                     *value
                 } else {
-                    panic!("Expression value is not a constant");
+                    return Err(EncodeError::NonConstantImmediateValue);
                 };
 
                 let size = Self::operand_size_from_data_size(data_size);
@@ -873,7 +994,7 @@ impl OperandData {
                 }
             }
 
-            ast::Operand::Indirect(_, indirect_encoding, expr, data_size, seg) => {
+            ast::Operand::Indirect(span, indirect_encoding, expr, data_size, seg) => {
                 let size = Self::operand_size_from_data_size(data_size);
 
                 let segment_prefix = if let Some(seg) = seg {
@@ -889,11 +1010,11 @@ impl OperandData {
                         } else if *value >= i16::MIN as i32 && *value <= i16::MAX as i32 {
                             (0b10, *value, OperandSize::Word)
                         } else {
-                            panic!("immediate value out of range");
+                            return Err(EncodeError::ImmediateOutOfRange(span.clone()));
                         }
                     }
 
-                    Some(_) => panic!("Expression does not contain a constant value"),
+                    Some(_) => return Err(EncodeError::NonConstantImmediateValue),
 
                     None => (0b00_u8, 0_i32, OperandSize::Unspecified),
                 };
@@ -912,7 +1033,7 @@ impl OperandData {
             }
 
             todo => todo!("{:?}", todo),
-        }
+        })
     }
 
     fn operand_size_from_data_size(data_size: &Option<DataSize>) -> OperandSize {
