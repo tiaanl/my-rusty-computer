@@ -345,7 +345,7 @@ fn encode_group_inc_dec(
 ) -> Result<(), EncodeError> {
     let (dst, dst_span) = parse_dst(&insn.operands)?;
 
-    if dst.size == OperandSize::Unspecified {
+    if dst.size.is_unspecified() {
         return Err(EncodeError::InvalidOperandSize(dst_span));
     }
 
@@ -369,7 +369,7 @@ fn encode_group_inc_dec(
             _ => unreachable!(),
         },
 
-        _ => return Err(EncodeError::InvalidOperands(insn.operands.span().clone())),
+        _ => unreachable!(),
     }
 
     Ok(())
@@ -1292,6 +1292,36 @@ mod tests {
         group_not_neg_mul_imul_div_idiv_inner(Operation::IMUL, 0x05);
         group_not_neg_mul_imul_div_idiv_inner(Operation::DIV, 0x06);
         group_not_neg_mul_imul_div_idiv_inner(Operation::IDIV, 0x07);
+    }
+
+    #[test]
+    fn group_inc_dec() {
+        let insn = insn!(Operation::INC, reg!(bx));
+        assert_eq!(vec![0x18], encode(&insn, 0x100).unwrap());
+        let insn = insn!(Operation::INC, reg!(bl));
+        assert_eq!(vec![0xFE, 0xC3], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(
+            Operation::INC,
+            ast::Operand::Direct(
+                0..0,
+                ast::Expression::Value(0..0, ast::Value::Constant(0x2000)),
+                Some(ast::DataSize::Word),
+                None,
+            )
+        );
+        assert_eq!(vec![0xFF, 0x06, 0x00, 0x20], encode(&insn, 0x100).unwrap());
+
+        let insn = insn!(
+            Operation::INC,
+            ast::Operand::Direct(
+                0..0,
+                ast::Expression::Value(0..0, ast::Value::Constant(0x2000)),
+                Some(ast::DataSize::Byte),
+                None,
+            )
+        );
+        assert_eq!(vec![0xFE, 0x06, 0x00, 0x20], encode(&insn, 0x100).unwrap());
     }
 
     #[test]
