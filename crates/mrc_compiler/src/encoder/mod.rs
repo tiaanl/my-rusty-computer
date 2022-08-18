@@ -15,7 +15,7 @@ impl ByteEmitter for Vec<u8> {
 
 #[derive(Debug)]
 pub enum EncodeError {
-    NonConstantImmediateValue,
+    NonConstantImmediateValue(ast::Span),
 
     InvalidOperands(ast::Span),
     OperandSizeNotSpecified(ast::Span),
@@ -921,7 +921,7 @@ struct OperandData {
 impl OperandData {
     fn from(operand: &ast::Operand) -> Result<Self, EncodeError> {
         Ok(match operand {
-            ast::Operand::Immediate(_, expr) => {
+            ast::Operand::Immediate(span, expr) => {
                 if let ast::Expression::Value(span, ast::Value::Constant(imm)) = expr {
                     Self {
                         size: OperandSize::Unspecified,
@@ -935,7 +935,7 @@ impl OperandData {
                         rm: 0,
                     }
                 } else {
-                    return Err(EncodeError::NonConstantImmediateValue);
+                    return Err(EncodeError::NonConstantImmediateValue(span.clone()));
                 }
             }
 
@@ -970,7 +970,7 @@ impl OperandData {
                 let address = if let ast::Expression::Value(_, ast::Value::Constant(value)) = expr {
                     *value
                 } else {
-                    return Err(EncodeError::NonConstantImmediateValue);
+                    return Err(EncodeError::NonConstantImmediateValue(span.clone()));
                 };
 
                 let size = Self::operand_size_from_data_size(data_size);
@@ -1014,7 +1014,9 @@ impl OperandData {
                         }
                     }
 
-                    Some(_) => return Err(EncodeError::NonConstantImmediateValue),
+                    Some(expr) => {
+                        return Err(EncodeError::NonConstantImmediateValue(expr.span().clone()))
+                    }
 
                     None => (0b00_u8, 0_i32, OperandSize::Unspecified),
                 };

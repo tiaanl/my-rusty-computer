@@ -1,7 +1,7 @@
 #![allow(unused_variables, dead_code)]
 
 use crate::ast;
-use crate::encoder::encode;
+use crate::encoder::{encode, EncodeError};
 use mrc_decoder::TryFromEncoding;
 use mrc_instruction as out;
 use std::collections::{HashMap, LinkedList};
@@ -130,7 +130,7 @@ impl Compiler {
                 let bytes = self.encode_line(&output.line, output.times, offset, output.size)?;
 
                 // At this point, an instruction with 0 size is invalid.
-                assert_ne!(output.size, 0);
+                assert_ne!(output.size, 0, "Line size is zero: {:?}", &output.line);
 
                 // Does the number of bytes we emitted and the size of the instruction we calculated
                 // earlier match?
@@ -207,7 +207,7 @@ impl Compiler {
             for output in outputs {
                 macro_rules! line_size {
                     ($line:expr) => {{
-                        match self.calculate_line_size($line) {
+                        match self.calculate_line_size($line, offset) {
                             Ok(size) => {
                                 output.unresolved_references = false;
                                 size
@@ -234,7 +234,19 @@ impl Compiler {
                         drain_labels!();
                         let mut size = 0;
                         for _ in 0..output.times {
-                            size += line_size!(line);
+                            size += match self.calculate_line_size(line, offset) {
+                                Ok(size) => {
+                                    output.unresolved_references = false;
+                                    size
+                                }
+                                Err(CompileError::LabelNotFound(label)) => {
+                                    self.set_label_offset(&label, None);
+                                    unresolved_references += 1;
+                                    output.unresolved_references = true;
+                                    0
+                                }
+                                Err(err) => return Err(err),
+                            };
                         }
                         output.size = size;
                         offset += size;
@@ -666,10 +678,10 @@ impl Compiler {
 }
 
 impl Compiler {
-    fn calculate_line_size(&self, line: &ast::Line) -> Result<u16, CompileError> {
+    fn calculate_line_size(&self, line: &ast::Line, offset: u16) -> Result<u16, CompileError> {
         Ok(match line {
             ast::Line::Instruction(instruction) => {
-                let size_in_bytes = self.calculate_instruction_size(instruction)?;
+                let size_in_bytes = self.calculate_instruction_size(instruction, offset)?;
 
                 size_in_bytes as u16
             }
@@ -729,9 +741,20 @@ impl Compiler {
     fn calculate_instruction_size(
         &self,
         instruction: &ast::Instruction,
+        offset: u16,
     ) -> Result<u8, CompileError> {
-        let bytes = encode(instruction, 0x0).unwrap();
-        Ok(bytes.len() as u8)
+        match encode(instruction, offset) {
+            Ok(bytes) => Ok(bytes.len() as u8),
+            Err(err) => match err {
+                EncodeError::NonConstantImmediateValue(span) => {
+                    Err(CompileError::ConstantValueContainsLabel(ast::Label(
+                        span.clone(),
+                        "unknown".to_string(),
+                    )))
+                }
+                _ => todo!(),
+            },
+        }
     }
 
     fn calculate_mod_reg_size(
