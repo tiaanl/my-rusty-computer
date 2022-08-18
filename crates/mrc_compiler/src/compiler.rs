@@ -1,7 +1,8 @@
 #![allow(unused_variables, dead_code)]
 
 use crate::ast;
-use crate::encoder::{encode, EncodeError};
+use crate::encoder as enc;
+use crate::encoder::{encode, EncodeError, OperandData};
 use mrc_decoder::TryFromEncoding;
 use mrc_instruction as out;
 use std::collections::{HashMap, LinkedList};
@@ -205,26 +206,6 @@ impl Compiler {
             }
 
             for output in outputs {
-                macro_rules! line_size {
-                    ($line:expr) => {{
-                        match self.calculate_line_size($line, offset) {
-                            Ok(size) => {
-                                output.unresolved_references = false;
-                                size
-                            }
-                            Err(CompileError::LabelNotFound(label)) => {
-                                // If the label wasn't found, then we add the label without an
-                                // offset, stating that it is unresolved.
-                                self.set_label_offset(&label, None);
-                                unresolved_references += 1;
-                                output.unresolved_references = true;
-                                0
-                            }
-                            Err(err) => return Err(err),
-                        }
-                    }};
-                }
-
                 match &mut output.line {
                     ast::Line::Label(label) => {
                         labels.push_back(label.clone());
@@ -358,13 +339,157 @@ impl Compiler {
         }
     }
 
+    fn build_operand_data(&self, operand: &ast::Operand) -> Result<OperandData, CompileError> {
+        Ok(match operand {
+            ast::Operand::Immediate(span, expr) => {
+                let value = self.evaluate_expression(expr)?;
+                OperandData {
+                    span: span.clone(),
+                    size: enc::OperandSize::Unspecified,
+                    kind: enc::OperandKind::Imm,
+                    segment_prefix: 0,
+                    imm: value,
+                    displacement: 0,
+                    displacement_size: enc::OperandSize::Unspecified,
+                    jmp_kind: None,
+                    mode: 0,
+                    rm: 0,
+                }
+            }
+
+            ast::Operand::Register(span, reg) => OperandData {
+                span: span.clone(),
+                size: match reg {
+                    ast::Register::Byte(_) => enc::OperandSize::Byte,
+                    ast::Register::Word(_) => enc::OperandSize::Word,
+                },
+                kind: enc::OperandKind::Reg,
+                segment_prefix: 0,
+                imm: 0,
+                displacement: 0,
+                displacement_size: enc::OperandSize::Unspecified,
+                jmp_kind: None,
+                mode: 0b11,
+                rm: reg.encoding(),
+            },
+
+            ast::Operand::Segment(span, seg) => OperandData {
+                span: span.clone(),
+                size: enc::OperandSize::Word,
+                kind: enc::OperandKind::Seg,
+                segment_prefix: 0,
+                imm: 0,
+                displacement: 0,
+                displacement_size: enc::OperandSize::Unspecified,
+                jmp_kind: None,
+                mode: 0b11,
+                rm: seg.encoding(),
+            },
+
+            ast::Operand::Direct(span, expr, data_size, seg) => {
+                let address = self.evaluate_expression(expr)?;
+
+                let size = enc::operand_size_from_data_size(data_size);
+
+                let segment_prefix = if let Some(sp) = seg {
+                    0x26 + (sp.encoding() << 3)
+                } else {
+                    0
+                };
+
+                OperandData {
+                    span: span.clone(),
+                    size,
+                    kind: enc::OperandKind::Mem,
+                    segment_prefix,
+                    imm: 0,
+                    displacement: address,
+                    displacement_size: enc::OperandSize::Word,
+                    jmp_kind: None,
+                    mode: 0b00,
+                    rm: 0b110,
+                }
+            }
+
+            ast::Operand::Indirect(span, indirect_encoding, expr, data_size, seg) => {
+                let size = enc::operand_size_from_data_size(data_size);
+
+                let segment_prefix = if let Some(seg) = seg {
+                    0x26 + (seg.encoding() << 3)
+                } else {
+                    0
+                };
+
+                let (mode, displacement, displacement_size) = if let Some(expr) = expr {
+                    let value = self.evaluate_expression(expr)?;
+                    if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
+                        (0b01, value, enc::OperandSize::Byte)
+                    } else if value >= i16::MIN as i32 && value <= i16::MAX as i32 {
+                        (0b10, value, enc::OperandSize::Word)
+                    } else {
+                        return Err(CompileError::ImmediateValueOutOfRange(span.clone(), value));
+                    }
+                } else {
+                    (0b00_u8, 0_i32, enc::OperandSize::Unspecified)
+                };
+
+                OperandData {
+                    span: span.clone(),
+                    size,
+                    kind: enc::OperandKind::Mem,
+                    segment_prefix,
+                    imm: 0,
+                    displacement,
+                    displacement_size,
+                    jmp_kind: None,
+                    mode,
+                    rm: indirect_encoding.encoding(),
+                }
+            }
+
+            todo => todo!("{:?}", todo),
+        })
+    }
+
+    fn build_instruction_data(
+        &self,
+        instruction: &ast::Instruction,
+    ) -> Result<crate::encoder::InstructionData, CompileError> {
+        Ok(match &instruction.operands {
+            ast::Operands::None(span) => crate::encoder::InstructionData {
+                operation: instruction.operation,
+                num_opers: 0,
+                opers: [OperandData::empty(), OperandData::empty()],
+                opers_span: span.clone(),
+            },
+
+            ast::Operands::Destination(span, dst) => crate::encoder::InstructionData {
+                operation: instruction.operation,
+                num_opers: 1,
+                opers: [self.build_operand_data(dst)?, OperandData::empty()],
+                opers_span: span.clone(),
+            },
+
+            ast::Operands::DestinationAndSource(span, dst, src) => {
+                crate::encoder::InstructionData {
+                    operation: instruction.operation,
+                    num_opers: 1,
+                    opers: [self.build_operand_data(dst)?, self.build_operand_data(src)?],
+                    opers_span: span.clone(),
+                }
+            }
+        })
+    }
+
     fn encode_instruction(
         &self,
         instruction: &ast::Instruction,
         offset: u16,
         size: u16,
     ) -> Result<Vec<u8>, CompileError> {
-        let bytes = encode(instruction, offset).unwrap();
+        let instruction_data = self.build_instruction_data(instruction)?;
+        let mut bytes: Vec<u8> = vec![];
+        encode(&instruction_data, offset, &mut bytes).unwrap();
         Ok(bytes)
     }
 
@@ -743,9 +868,11 @@ impl Compiler {
         instruction: &ast::Instruction,
         offset: u16,
     ) -> Result<u8, CompileError> {
-        match encode(instruction, offset) {
-            Ok(bytes) => Ok(bytes.len() as u8),
-            Err(err) => match err {
+        let insn_data = self.build_instruction_data(instruction)?;
+        let mut size_in_bytes = 0_u8;
+
+        if let Err(err) = encode(&insn_data, offset, &mut size_in_bytes) {
+            return match err {
                 EncodeError::NonConstantImmediateValue(span) => {
                     Err(CompileError::ConstantValueContainsLabel(ast::Label(
                         span.clone(),
@@ -753,8 +880,10 @@ impl Compiler {
                     )))
                 }
                 _ => todo!(),
-            },
+            };
         }
+
+        Ok(size_in_bytes)
     }
 
     fn calculate_mod_reg_size(
