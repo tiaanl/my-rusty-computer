@@ -1,9 +1,6 @@
-#![allow(unused_variables, dead_code)]
-
 use crate::ast;
 use crate::encoder as enc;
-use crate::encoder::{encode, EncodeError, OperandData};
-use mrc_decoder::TryFromEncoding;
+use crate::encoder::{encode, value_is_signed_word, OperandData};
 use mrc_instruction as out;
 use std::collections::{HashMap, LinkedList};
 use std::fmt::Formatter;
@@ -84,7 +81,6 @@ impl std::fmt::Display for CompileError {
 #[derive(Debug)]
 pub struct Output {
     line: ast::Line,
-    enc_ins: Option<mrc_encoder::Instruction>,
     size: u16,
     times: u16,
     unresolved_references: bool,
@@ -128,7 +124,7 @@ impl Compiler {
             ) {
                 // println!("line: {}", output.line);
 
-                let bytes = self.encode_line(&output.line, output.times, offset, output.size)?;
+                let bytes = self.encode_line(&output.line, output.times, offset)?;
 
                 // At this point, an instruction with 0 size is invalid.
                 assert_ne!(output.size, 0, "Line size is zero: {:?}", &output.line);
@@ -306,13 +302,12 @@ impl Compiler {
         line: &ast::Line,
         times: u16,
         offset: u16,
-        size: u16,
     ) -> Result<Vec<u8>, CompileError> {
         match line {
             ast::Line::Instruction(instruction) => {
                 let mut result = vec![];
                 for _ in 0..times {
-                    let data = self.encode_instruction(instruction, offset, size)?;
+                    let data = self.encode_instruction(instruction, offset)?;
 
                     for b in &data {
                         result.push(*b)
@@ -343,108 +338,44 @@ impl Compiler {
         Ok(match operand {
             ast::Operand::Immediate(span, expr) => {
                 let value = self.evaluate_expression(expr)?;
-                OperandData {
-                    span: span.clone(),
-                    size: enc::OperandSize::Unspecified,
-                    kind: enc::OperandKind::Imm,
-                    segment_prefix: 0,
-                    imm: value,
-                    displacement: 0,
-                    displacement_size: enc::OperandSize::Unspecified,
-                    jmp_kind: None,
-                    mode: 0,
-                    rm: 0,
-                }
+                OperandData::immediate(span.clone(), value)
             }
 
-            ast::Operand::Register(span, reg) => OperandData {
-                span: span.clone(),
-                size: match reg {
+            ast::Operand::Register(span, reg) => OperandData::register(
+                span.clone(),
+                reg.encoding(),
+                match reg {
                     ast::Register::Byte(_) => enc::OperandSize::Byte,
                     ast::Register::Word(_) => enc::OperandSize::Word,
                 },
-                kind: enc::OperandKind::Reg,
-                segment_prefix: 0,
-                imm: 0,
-                displacement: 0,
-                displacement_size: enc::OperandSize::Unspecified,
-                jmp_kind: None,
-                mode: 0b11,
-                rm: reg.encoding(),
-            },
+            ),
 
-            ast::Operand::Segment(span, seg) => OperandData {
-                span: span.clone(),
-                size: enc::OperandSize::Word,
-                kind: enc::OperandKind::Seg,
-                segment_prefix: 0,
-                imm: 0,
-                displacement: 0,
-                displacement_size: enc::OperandSize::Unspecified,
-                jmp_kind: None,
-                mode: 0b11,
-                rm: seg.encoding(),
-            },
+            ast::Operand::Segment(span, seg) => OperandData::segment(span.clone(), seg),
 
-            ast::Operand::Direct(span, expr, data_size, seg) => {
-                let address = self.evaluate_expression(expr)?;
-
-                let size = enc::operand_size_from_data_size(data_size);
-
-                let segment_prefix = if let Some(sp) = seg {
-                    0x26 + (sp.encoding() << 3)
-                } else {
-                    0
-                };
-
-                OperandData {
-                    span: span.clone(),
-                    size,
-                    kind: enc::OperandKind::Mem,
-                    segment_prefix,
-                    imm: 0,
-                    displacement: address,
-                    displacement_size: enc::OperandSize::Word,
-                    jmp_kind: None,
-                    mode: 0b00,
-                    rm: 0b110,
-                }
-            }
+            ast::Operand::Direct(span, expr, data_size, seg) => OperandData::direct(
+                span.clone(),
+                self.evaluate_expression(expr)?,
+                data_size,
+                seg,
+            ),
 
             ast::Operand::Indirect(span, indirect_encoding, expr, data_size, seg) => {
-                let size = enc::operand_size_from_data_size(data_size);
-
-                let segment_prefix = if let Some(seg) = seg {
-                    0x26 + (seg.encoding() << 3)
+                let value = if let Some(expr) = expr {
+                    self.evaluate_expression(expr)?
                 } else {
                     0
                 };
-
-                let (mode, displacement, displacement_size) = if let Some(expr) = expr {
-                    let value = self.evaluate_expression(expr)?;
-                    if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-                        (0b01, value, enc::OperandSize::Byte)
-                    } else if value >= i16::MIN as i32 && value <= i16::MAX as i32 {
-                        (0b10, value, enc::OperandSize::Word)
-                    } else {
-                        return Err(CompileError::ImmediateValueOutOfRange(span.clone(), value));
-                    }
-                } else {
-                    (0b00_u8, 0_i32, enc::OperandSize::Unspecified)
-                };
-
-                OperandData {
-                    span: span.clone(),
-                    size,
-                    kind: enc::OperandKind::Mem,
-                    segment_prefix,
-                    imm: 0,
-                    displacement,
-                    displacement_size,
-                    jmp_kind: None,
-                    mode,
-                    rm: indirect_encoding.encoding(),
+                if !value_is_signed_word(value) {
+                    return Err(CompileError::ImmediateValueOutOfRange(span.clone(), value));
                 }
+
+                OperandData::indirect(
+                    span.clone(),
+                    indirect_encoding.encoding(),
+                    value as i16,
+                    data_size,
+                    seg,
+                )
             }
 
             todo => todo!("{:?}", todo),
@@ -456,27 +387,23 @@ impl Compiler {
         instruction: &ast::Instruction,
     ) -> Result<crate::encoder::InstructionData, CompileError> {
         Ok(match &instruction.operands {
-            ast::Operands::None(span) => crate::encoder::InstructionData {
-                operation: instruction.operation,
-                num_opers: 0,
-                opers: [OperandData::empty(), OperandData::empty()],
-                opers_span: span.clone(),
-            },
+            ast::Operands::None(span) => {
+                crate::encoder::InstructionData::none(span.clone(), instruction.operation)
+            }
 
-            ast::Operands::Destination(span, dst) => crate::encoder::InstructionData {
-                operation: instruction.operation,
-                num_opers: 1,
-                opers: [self.build_operand_data(dst)?, OperandData::empty()],
-                opers_span: span.clone(),
-            },
+            ast::Operands::Destination(span, dst) => crate::encoder::InstructionData::dst(
+                span.clone(),
+                instruction.operation,
+                self.build_operand_data(dst)?,
+            ),
 
             ast::Operands::DestinationAndSource(span, dst, src) => {
-                crate::encoder::InstructionData {
-                    operation: instruction.operation,
-                    num_opers: 1,
-                    opers: [self.build_operand_data(dst)?, self.build_operand_data(src)?],
-                    opers_span: span.clone(),
-                }
+                crate::encoder::InstructionData::dst_and_src(
+                    span.clone(),
+                    instruction.operation,
+                    self.build_operand_data(dst)?,
+                    self.build_operand_data(src)?,
+                )
             }
         })
     }
@@ -485,286 +412,11 @@ impl Compiler {
         &self,
         instruction: &ast::Instruction,
         offset: u16,
-        size: u16,
     ) -> Result<Vec<u8>, CompileError> {
         let instruction_data = self.build_instruction_data(instruction)?;
         let mut bytes: Vec<u8> = vec![];
         encode(&instruction_data, offset, &mut bytes).unwrap();
         Ok(bytes)
-    }
-
-    fn emit_mrrm(&self, out: &mut Vec<u8>, mode: u8, reg: u8, reg_mem: u8) {
-        let mrrm = (mode << 6) + (reg << 3) + reg_mem;
-        out.push(mrrm);
-    }
-
-    fn emit_segment_override(&self, out: &mut Vec<u8>, segment: &Option<ast::Segment>) {
-        // ES = 26 = 100110
-        // CS = 2E = 101110
-        // SS = 36 = 110110
-        // DS = 3E = 111110
-
-        match segment {
-            None => {}
-            Some(ast::Segment::ES) => out.push(0b100110),
-            Some(ast::Segment::SS) => out.push(0b110110),
-            Some(ast::Segment::CS) => out.push(0b101110),
-            Some(ast::Segment::DS) => out.push(0b111110),
-        }
-    }
-
-    fn emit_immediate_byte(
-        &self,
-        out: &mut Vec<u8>,
-        expr: &ast::Expression,
-    ) -> Result<(), CompileError> {
-        let value = self.evaluate_expression(expr)?;
-
-        let emit_value = if value < 0 {
-            if value < i8::MIN as i32 || value > i8::MAX as i32 {
-                return Err(CompileError::ImmediateValueOutOfRange(
-                    expr.span().clone(),
-                    value,
-                ));
-            }
-            value as i8 as u8
-        } else {
-            if value > u8::MAX as i32 {
-                return Err(CompileError::ImmediateValueOutOfRange(
-                    expr.span().clone(),
-                    value,
-                ));
-            }
-            value as u8
-        };
-
-        out.push(emit_value);
-
-        Ok(())
-    }
-
-    fn emit_immediate_signed_byte(
-        &self,
-        out: &mut Vec<u8>,
-        expr: &ast::Expression,
-    ) -> Result<(), CompileError> {
-        self.emit_immediate_byte(out, expr)
-    }
-
-    fn emit_immediate_word(
-        &self,
-        out: &mut Vec<u8>,
-        expr: &ast::Expression,
-    ) -> Result<(), CompileError> {
-        let value = self.evaluate_expression(expr)?;
-
-        let emit_value = if value < 0 {
-            if value < i16::MIN as i32 || value > i16::MAX as i32 {
-                return Err(CompileError::ImmediateValueOutOfRange(
-                    expr.span().clone(),
-                    value,
-                ));
-            }
-            value as i16 as u16
-        } else {
-            if value > u16::MAX as i32 {
-                return Err(CompileError::ImmediateValueOutOfRange(
-                    expr.span().clone(),
-                    value,
-                ));
-            }
-            value as u16
-        };
-
-        for b in emit_value.to_le_bytes() {
-            out.push(b);
-        }
-
-        Ok(())
-    }
-
-    fn emit_address(&self, out: &mut Vec<u8>, expr: &ast::Expression) -> Result<(), CompileError> {
-        let value = self.evaluate_expression(expr)?;
-
-        self.emit_immediate_word(
-            out,
-            &ast::Expression::Value(expr.span().clone(), ast::Value::Constant(value)),
-        )?;
-
-        Ok(())
-    }
-
-    fn emit_mrrm_register(&self, out: &mut Vec<u8>, reg: u8, reg_mem: u8) {
-        self.emit_mrrm(out, 0b11, reg, reg_mem);
-    }
-
-    fn emit_mrrm_address(
-        &self,
-        out: &mut Vec<u8>,
-        reg: u8,
-        expr: &ast::Expression,
-    ) -> Result<(), CompileError> {
-        self.emit_mrrm(out, 0b00, reg, 0b110);
-        self.emit_address(out, expr)
-    }
-
-    fn emit_mrrm_indirect(
-        &self,
-        out: &mut Vec<u8>,
-        reg: u8,
-        indirect_encoding: &ast::IndirectEncoding,
-        expr: &Option<ast::Expression>,
-    ) -> Result<(), CompileError> {
-        if let Some(expr) = expr {
-            let value = self.evaluate_expression(expr)?;
-
-            if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-                self.emit_mrrm(out, 0b01, reg, indirect_encoding.encoding());
-                self.emit_immediate_byte(
-                    out,
-                    &ast::Expression::Value(expr.span().clone(), ast::Value::Constant(value)),
-                )?;
-            } else {
-                self.emit_mrrm(out, 0b10, reg, indirect_encoding.encoding());
-                self.emit_immediate_word(
-                    out,
-                    &ast::Expression::Value(expr.span().clone(), ast::Value::Constant(value)),
-                )?;
-            }
-            Ok(())
-        } else {
-            self.emit_mrrm(out, 0b00, reg, indirect_encoding.encoding());
-            Ok(())
-        }
-    }
-
-    fn _compile_instruction(
-        &self,
-        instruction: &ast::Instruction,
-    ) -> Result<out::Instruction, CompileError> {
-        Ok(match &instruction.operands {
-            ast::Operands::None(_) => out::Instruction {
-                operation: instruction.operation,
-                operands: out::OperandSet::None,
-                repeat: None,
-            },
-
-            ast::Operands::Destination(_, dst) => out::Instruction {
-                operation: instruction.operation,
-                operands: out::OperandSet::Destination(self._compile_operand(dst, None)?),
-                repeat: None,
-            },
-
-            ast::Operands::DestinationAndSource(_, dst, src) => {
-                let size_hint = match (dst.data_size(), src.data_size()) {
-                    (Some(d), Some(s)) if d == s => Some(d),
-                    (Some(d), None) => Some(d),
-                    (None, Some(s)) => Some(s),
-                    _ => unreachable!(),
-                };
-
-                out::Instruction {
-                    operation: instruction.operation,
-                    operands: out::OperandSet::DestinationAndSource(
-                        self._compile_operand(dst, size_hint)?,
-                        self._compile_operand(src, size_hint)?,
-                    ),
-                    repeat: None,
-                }
-            }
-        })
-    }
-
-    fn _compile_operand(
-        &self,
-        operand: &ast::Operand,
-        size_hint: Option<ast::DataSize>,
-    ) -> Result<out::Operand, CompileError> {
-        Ok(match operand {
-            ast::Operand::Immediate(_, expr) => {
-                let value = self.evaluate_expression(expr)?;
-                out::Operand::Immediate(out::Immediate::Word(value as u16))
-            }
-
-            ast::Operand::Register(_, register) => {
-                out::Operand::Register(out::SizedRegisterEncoding(
-                    out::RegisterEncoding::try_from_encoding(register.encoding()).unwrap(),
-                    if matches!(register, ast::Register::Byte(_)) {
-                        out::OperandSize::Byte
-                    } else {
-                        out::OperandSize::Word
-                    },
-                ))
-            }
-
-            ast::Operand::Segment(_, segment) => {
-                out::Operand::Segment(out::Segment::try_from_encoding(segment.encoding()).unwrap())
-            }
-
-            ast::Operand::Direct(_, expr, data_size, segment) => {
-                let segment = if let Some(segment) = segment {
-                    out::Segment::try_from_encoding(segment.encoding()).unwrap()
-                } else {
-                    out::Segment::DS
-                };
-
-                let value = self.evaluate_expression(expr)?;
-
-                let data_size = match (data_size, &size_hint) {
-                    (Some(data_size), _) => data_size,
-                    (None, Some(size_hint)) => size_hint,
-                    (None, None) => panic!(),
-                };
-
-                let operand_size = if let ast::DataSize::Byte = data_size {
-                    out::OperandSize::Byte
-                } else {
-                    out::OperandSize::Word
-                };
-
-                out::Operand::Direct(segment, value as u16, operand_size)
-            }
-
-            ast::Operand::Indirect(_, indirect_encoding, expr, data_size, segment) => {
-                let segment = if let Some(segment) = segment {
-                    out::Segment::try_from_encoding(segment.encoding()).unwrap()
-                } else {
-                    out::Segment::DS
-                };
-
-                let addressing_mode =
-                    out::AddressingMode::try_from_encoding(indirect_encoding.encoding()).unwrap();
-
-                let displacement = if let Some(expr) = expr {
-                    let value = self.evaluate_expression(expr)?;
-                    if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-                        out::Displacement::Byte(value as i8)
-                    } else {
-                        out::Displacement::Word(value as i16)
-                    }
-                } else {
-                    out::Displacement::None
-                };
-
-                let data_size = match (data_size, &size_hint) {
-                    (Some(data_size), _) => data_size,
-                    (None, Some(size_hint)) => size_hint,
-                    (None, None) => panic!(),
-                };
-
-                let operand_size = if let ast::DataSize::Byte = data_size {
-                    out::OperandSize::Byte
-                } else {
-                    out::OperandSize::Word
-                };
-
-                out::Operand::Indirect(segment, addressing_mode, displacement, operand_size)
-            }
-
-            ast::Operand::Far(_, offset, segment) => {
-                todo!()
-            }
-        })
     }
 }
 
@@ -817,52 +469,6 @@ impl Compiler {
         })
     }
 
-    fn operand_to_encoder_operand(
-        &self,
-        operand: &ast::Operand,
-    ) -> Result<mrc_encoder::Operand, CompileError> {
-        Ok(match operand {
-            ast::Operand::Immediate(_, expr) => {
-                let value = self.evaluate_expression(expr)?;
-                mrc_encoder::Operand::immediate(value as u16)
-            }
-            ast::Operand::Direct(_, expr, _, segment) => {
-                let addr = self.evaluate_expression(expr)?;
-                mrc_encoder::Operand::direct_address(addr as u16, segment.map(|s| s.encoding()))
-            }
-            ast::Operand::Indirect(_, _, _, _, _) => todo!(),
-            ast::Operand::Far(_, _, _) => todo!(),
-            ast::Operand::Register(_, reg) => mrc_encoder::Operand::register(reg.encoding()),
-            ast::Operand::Segment(_, _) => todo!(),
-        })
-    }
-
-    fn instruction_to_encoder_instruction(
-        &self,
-        instruction: &ast::Instruction,
-    ) -> Result<mrc_encoder::Instruction, CompileError> {
-        Ok(match &instruction.operands {
-            ast::Operands::None(_) => mrc_encoder::Instruction::new(
-                instruction.operation,
-                0,
-                mrc_encoder::Operand::default(),
-                mrc_encoder::Operand::default(),
-            ),
-            ast::Operands::Destination(_, dst) => mrc_encoder::Instruction::new(
-                instruction.operation,
-                1,
-                self.operand_to_encoder_operand(dst)?,
-                mrc_encoder::Operand::default(),
-            ),
-            ast::Operands::DestinationAndSource(_, dst, src) => mrc_encoder::Instruction::new(
-                instruction.operation,
-                2,
-                self.operand_to_encoder_operand(dst)?,
-                self.operand_to_encoder_operand(src)?,
-            ),
-        })
-    }
-
     fn calculate_instruction_size(
         &self,
         instruction: &ast::Instruction,
@@ -871,240 +477,11 @@ impl Compiler {
         let insn_data = self.build_instruction_data(instruction)?;
         let mut size_in_bytes = 0_u8;
 
-        if let Err(err) = encode(&insn_data, offset, &mut size_in_bytes) {
-            return match err {
-                EncodeError::NonConstantImmediateValue(span) => {
-                    Err(CompileError::ConstantValueContainsLabel(ast::Label(
-                        span.clone(),
-                        "unknown".to_string(),
-                    )))
-                }
-                _ => todo!(),
-            };
+        if encode(&insn_data, offset, &mut size_in_bytes).is_err() {
+            todo!()
         }
 
         Ok(size_in_bytes)
-    }
-
-    fn calculate_mod_reg_size(
-        &self,
-        dst: &ast::Operand,
-        src: &ast::Operand,
-    ) -> Result<u16, CompileError> {
-        Ok(match (dst, src) {
-            // Only the register part is included in the mrrm byte calculation.
-            (ast::Operand::Register(_, _), ast::Operand::Immediate(_, _)) => 1,
-
-            // Registers on both sides is just the mrrm byte.
-            (ast::Operand::Register(_, _), ast::Operand::Register(_, _)) => 1,
-
-            // If there is an address on either side, that is included.
-            (ast::Operand::Direct(_, _, _, _), _) => 3,
-
-            // If there is an indirect on either side, that is included.
-            (ast::Operand::Indirect(_, _, expr, _, _), _) => {
-                1 + self.calculate_displacement_size(expr)?
-            }
-
-            _ => todo!("calculate_mod_reg_size {:?} {:?}", dst, src),
-        })
-    }
-
-    fn calculate_displacement_size(
-        &self,
-        expr: &Option<ast::Expression>,
-    ) -> Result<u16, CompileError> {
-        Ok(if let Some(expr) = expr {
-            let value = self.evaluate_expression(expr)?;
-            if value >= i8::MIN as i32 && value <= i8::MAX as i32 {
-                // Byte displacement.
-                1
-            } else {
-                // Word displacement.
-                2
-            }
-        } else {
-            // No displacement.
-            0
-        })
-    }
-
-    fn calculate_mrrm_size(
-        &self,
-        dst: &ast::Operand,
-        src: &ast::Operand,
-    ) -> Result<u16, CompileError> {
-        Ok(match (dst, src) {
-            (
-                ast::Operand::Register(_, _),
-                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-            )
-            | (ast::Operand::Segment(_, _), ast::Operand::Register(_, _)) => 1,
-
-            (
-                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-                ast::Operand::Direct(_, _, _, _),
-            )
-            | (
-                ast::Operand::Direct(_, _, _, _),
-                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-            ) => 3,
-
-            (
-                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-                ast::Operand::Indirect(_, _, expr, _, _),
-            )
-            | (
-                ast::Operand::Indirect(_, _, expr, _, _),
-                ast::Operand::Register(_, _) | ast::Operand::Segment(_, _),
-            )
-            | (ast::Operand::Indirect(_, _, expr, _, _), ast::Operand::Immediate(_, _)) => {
-                1 + self.calculate_displacement_size(expr)?
-            }
-
-            (ast::Operand::Direct(_, _, _, _), ast::Operand::Immediate(_, _)) => {
-                // mrrm + direct address.
-                3
-            }
-
-            (d, s) => todo!("{:?}, {:?}", d, s),
-        })
-    }
-}
-
-impl Compiler {
-    fn find_instruction_template(
-        &self,
-        instruction: &ast::Instruction,
-    ) -> Result<&out::template::Template, CompileError> {
-        use out::template::op_flags::{size, OpFlags, T_MEM, T_NONE};
-
-        fn assume_size(operand: OpFlags, other: OpFlags) -> OpFlags {
-            if operand & T_MEM != 0 && size::only(operand) == 0 && size::only(other) != 0 {
-                operand | size::only(other)
-            } else {
-                operand
-            }
-        }
-
-        let (dst, src) = match &instruction.operands {
-            ast::Operands::None(_) => (T_NONE, T_NONE),
-            ast::Operands::Destination(_, dst) => (self.operand_to_type_flags(dst)?, T_NONE),
-            ast::Operands::DestinationAndSource(_, dst, src) => {
-                let (dst, src) = (
-                    self.operand_to_type_flags(dst)?,
-                    self.operand_to_type_flags(src)?,
-                );
-
-                // When two operands are given and one referes to memory, then the size prefix can
-                // be omitted if the size can be determined from the other operand.
-                (assume_size(dst, src), assume_size(src, dst))
-            }
-        };
-
-        // println!(
-        //     "operands: [{}] [{}]",
-        //     format_type_flags(dst),
-        //     format_type_flags(src)
-        // );
-
-        if dst != T_NONE || src != T_NONE {
-            if let (0, 0) = (size::only(dst), size::only(src)) {
-                // FIXME: Report proper error on the operand that needs a size.
-                panic!("Could not determine operation size")
-            }
-        }
-
-        println!("Finding template for: {:?}", instruction);
-
-        match out::template::find(instruction.operation, dst, src) {
-            Some(template) => Ok(template),
-            None => Err(CompileError::InvalidOperands(
-                instruction.operands.span().clone(),
-                instruction.clone(),
-                vec![],
-            )),
-        }
-    }
-
-    fn operand_to_type_flags(
-        &self,
-        operand: &ast::Operand,
-    ) -> Result<out::template::op_flags::OpFlags, CompileError> {
-        use out::template::op_flags::*;
-
-        Ok(match operand {
-            ast::Operand::Immediate(_, expr) => {
-                let value = self.evaluate_expression(expr)?;
-                if value == 1 {
-                    T_IMM | T_UNITY | T_BITS_8
-                } else if value_is_byte(value) {
-                    if value_is_signed_byte(value) {
-                        T_SIGNED_BYTE_WORD | T_BITS_8
-                    } else {
-                        T_IMM | T_BITS_8
-                    }
-                } else if value_is_word(value) {
-                    if value_is_signed_word(value) {
-                        T_SIGNED_BYTE_WORD | T_BITS_16
-                    } else {
-                        T_IMM | T_BITS_16
-                    }
-                } else {
-                    // FIXME: Report proper error.
-                    unreachable!("value out of range");
-                }
-            }
-
-            ast::Operand::Register(_, ast::Register::Byte(register)) => {
-                T_REG
-                    | T_BITS_8
-                    | match register {
-                        ast::ByteRegister::Al => T_REG_AL,
-                        ast::ByteRegister::Cl => T_REG_CL,
-                        ast::ByteRegister::Dl => T_REG_DL,
-                        _ => 0,
-                    }
-            }
-
-            ast::Operand::Register(_, ast::Register::Word(register)) => {
-                T_REG
-                    | T_BITS_16
-                    | match register {
-                        ast::WordRegister::Ax => T_REG_AX,
-                        ast::WordRegister::Cx => T_REG_CX,
-                        ast::WordRegister::Dx => T_REG_DX,
-                        _ => 0,
-                    }
-            }
-
-            ast::Operand::Direct(_, _, data_size, _) => {
-                T_MEM
-                    | match data_size {
-                        None => 0,
-                        Some(ast::DataSize::Byte) => T_BITS_8,
-                        Some(ast::DataSize::Word) => T_BITS_16,
-                    }
-            }
-
-            ast::Operand::Indirect(_, _, _, data_size, _) => {
-                T_MEM
-                    | match data_size {
-                        None => 0,
-                        Some(ast::DataSize::Byte) => T_BITS_8,
-                        Some(ast::DataSize::Word) => T_BITS_16,
-                    }
-            }
-
-            ast::Operand::Far(_, _, _) => todo!(),
-
-            ast::Operand::Segment(_, segment) => match segment {
-                ast::Segment::ES => T_SEG_ES | T_BITS_16,
-                ast::Segment::CS => T_SEG_CS | T_BITS_16,
-                ast::Segment::SS => T_SEG_SS | T_BITS_16,
-                ast::Segment::DS => T_SEG_DS | T_BITS_16,
-            },
-        })
     }
 }
 
@@ -1115,7 +492,6 @@ impl Compiler {
                 let times = self.evaluate_expression(&expr)? as u16;
                 self.outputs.push(Output {
                     line: *line,
-                    enc_ins: None,
                     size: 0,
                     times,
                     unresolved_references: false,
@@ -1125,7 +501,6 @@ impl Compiler {
             _ => {
                 self.outputs.push(Output {
                     line,
-                    enc_ins: None,
                     size: 0,
                     times: 1,
                     unresolved_references: false,
@@ -1135,56 +510,6 @@ impl Compiler {
 
         Ok(())
     }
-}
-
-impl ast::Operands {
-    fn segment_override(&self) -> Option<ast::Segment> {
-        match self {
-            Self::Destination(_, dst) => dst.segment_override(),
-
-            Self::DestinationAndSource(_, dst, src) => {
-                let dst = dst.segment_override();
-                if dst.is_some() {
-                    dst
-                } else {
-                    let src = src.segment_override();
-                    if src.is_some() {
-                        src
-                    } else {
-                        None
-                    }
-                }
-            }
-
-            _ => None,
-        }
-    }
-}
-
-impl ast::Operand {
-    fn segment_override(&self) -> Option<ast::Segment> {
-        match self {
-            Self::Direct(_, _, _, s) => s.clone(),
-            Self::Indirect(_, _, _, _, s) => s.clone(),
-            _ => None,
-        }
-    }
-}
-
-fn value_is_signed_byte(value: i32) -> bool {
-    value >= i8::MIN as i32 && value <= i8::MAX as i32
-}
-
-fn value_is_byte(value: i32) -> bool {
-    value >= u8::MIN as i32 && value <= u8::MAX as i32
-}
-
-fn value_is_signed_word(value: i32) -> bool {
-    value >= i16::MIN as i32 && value <= i16::MAX as i32
-}
-
-fn value_is_word(value: i32) -> bool {
-    value >= u16::MIN as i32 && value <= u16::MAX as i32
 }
 
 #[cfg(test)]
@@ -1247,44 +572,6 @@ mod tests {
                 }
             }
         }};
-    }
-
-    #[test]
-    fn value_classification() {
-        assert!(!value_is_byte(-1));
-        assert!(value_is_byte(0));
-        assert!(value_is_byte(255));
-        assert!(!value_is_byte(256));
-
-        assert!(!value_is_signed_byte(-129));
-        assert!(value_is_signed_byte(-128));
-        assert!(value_is_signed_byte(0));
-        assert!(value_is_signed_byte(127));
-        assert!(!value_is_signed_byte(128));
-
-        assert!(!value_is_word(-1));
-        assert!(value_is_word(0));
-        assert!(value_is_word(65535));
-        assert!(!value_is_word(65536));
-
-        assert!(!value_is_signed_word(-32769));
-        assert!(value_is_signed_word(-32768));
-        assert!(value_is_signed_word(0));
-        assert!(value_is_signed_word(32767));
-        assert!(!value_is_signed_word(32768));
-    }
-
-    #[test]
-    fn operand_to_type_flags() {
-        use out::template::op_flags::*;
-
-        let compiler = Compiler::default();
-        let op =
-            ast::Operand::Immediate(0..0, ast::Expression::Value(0..0, ast::Value::Constant(0)));
-        assert_eq!(
-            T_SIGNED_BYTE_WORD | T_BITS_8,
-            compiler.operand_to_type_flags(&op).unwrap()
-        );
     }
 
     #[test]
