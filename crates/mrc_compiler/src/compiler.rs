@@ -477,8 +477,8 @@ impl Compiler {
         let insn_data = self.build_instruction_data(instruction)?;
         let mut size_in_bytes = 0_u8;
 
-        if encode(&insn_data, offset, &mut size_in_bytes).is_err() {
-            todo!()
+        if let Err(err) = encode(&insn_data, offset, &mut size_in_bytes) {
+            panic!("Encode error: {:?} {}", err, instruction);
         }
 
         Ok(size_in_bytes)
