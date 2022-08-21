@@ -5,6 +5,8 @@ use mrc_instruction as out;
 use std::collections::{HashMap, LinkedList};
 use std::fmt::Formatter;
 
+const START_OFFSET: u16 = 0x100;
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum CompileError {
@@ -116,7 +118,7 @@ impl Compiler {
 
         let mut result = vec![];
 
-        let mut offset = 0;
+        let mut offset = START_OFFSET;
         for output in &self.outputs {
             if matches!(
                 output.line,
@@ -148,7 +150,7 @@ impl Compiler {
     }
 
     fn _debug_print_outputs(&self) {
-        let mut offset = 0;
+        let mut offset = START_OFFSET;
         for output in &self.outputs {
             if matches!(&output.line, ast::Line::Label(..) | ast::Line::Constant(..)) {
                 continue;
