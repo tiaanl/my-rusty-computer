@@ -7,6 +7,9 @@ middle:
 start:
     nop
     jmp middle
+
+    jz middle
+
     loop middle
     loopne middle
     loope middle

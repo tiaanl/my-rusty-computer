@@ -112,7 +112,7 @@ impl Compiler {
             return Err(CompileError::UnresolvedReference(label));
         }
 
-        // self._debug_print_outputs();
+        self._debug_print_outputs();
 
         let mut result = vec![];
 
@@ -274,15 +274,11 @@ impl Compiler {
     }
 
     fn set_label_offset(&mut self, label: &ast::Label, offset: Option<u16>) {
-        // println!(
-        //     "setting \"{}\" to {:?}",
-        //     label,
-        //     if let Some(offset) = offset {
-        //         format!("{:#04x}", offset)
-        //     } else {
-        //         "NONE".to_string()
-        //     }
-        // );
+        // if let Some(offset) = offset {
+        //     println!("setting \"{}\" to {} ({:#04x})", label, offset, offset);
+        // } else {
+        //     println!("clearing label \"{}\"", label);
+        // }
 
         if let Some(li) = self.labels.get_mut(label.1.as_str()) {
             li.offset = offset;
@@ -350,7 +346,7 @@ impl Compiler {
                 },
             ),
 
-            ast::Operand::Segment(span, seg) => OperandData::segment(span.clone(), seg),
+            ast::Operand::Segment(span, seg) => OperandData::segment(span.clone(), seg.encoding()),
 
             ast::Operand::Direct(span, expr, data_size, seg) => OperandData::direct(
                 span.clone(),

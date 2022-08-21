@@ -1,6 +1,8 @@
 use super::ast;
 use mrc_instruction::Operation;
 
+const EMIT_DEFAULT_SEGMENTS: bool = true;
+
 macro_rules! value_ops {
     ($is_name:ident, $require_name:ident, $typ:ty) => {
         #[allow(unused)]
@@ -54,7 +56,12 @@ pub enum EncodeError {
     OperandSizesDoNotMatch(ast::Span),
     InvalidOperandSize(ast::Span),
     ImmediateOutOfRange(ast::Span, i32, i32, i32),
-    RelativeJumpOutOfRange(ast::Span),
+    #[allow(dead_code)]
+    RelativeJumpOutOfRange(ast::Span, OperandSize, bool, i32),
+}
+
+const fn segment_prefix_for(seg: ast::Segment) -> u8 {
+    0x26 + ((seg as u8) << 3)
 }
 
 pub fn encode(
@@ -191,6 +198,19 @@ pub fn encode(
     }
 }
 
+fn emit_segment_prefix(
+    segment_prefix: u8,
+    default_segment: ast::Segment,
+    emitter: &mut impl ByteEmitter,
+) {
+    if segment_prefix != 0 {
+        if segment_prefix == segment_prefix_for(default_segment) && !EMIT_DEFAULT_SEGMENTS {
+        } else {
+            emitter.emit(segment_prefix);
+        }
+    }
+}
+
 fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
     base: u8,
     insn: &InstructionData,
@@ -200,29 +220,43 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
     let [dst, src] = &insn.opers;
     let size = common_operand_size(dst, src, &insn.opers_span)?;
 
-    match (src.kind, dst.kind) {
-        (OperandKind::Reg, OperandKind::Reg | OperandKind::Mem) => {
-            let op_code = match size {
-                OperandSize::Word => base,
-                OperandSize::Byte => base + 1,
-                _ => unreachable!(),
-            };
-            store_instruction(op_code, &dst, src.rm, OperandSize::Unspecified, 0, emitter);
+    match (dst.kind, src.kind) {
+        (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg) if size == OperandSize::Byte => {
+            store_instruction(base, dst, src.rm, OperandSize::Unspecified, 0, emitter);
+            Ok(())
         }
 
-        (OperandKind::Mem, OperandKind::Reg) => {
-            let op_code = match size {
-                OperandSize::Byte => base + 2 + 1,
-                OperandSize::Word => base + 2,
-                _ => unreachable!(),
-            };
-            store_instruction(op_code, &src, dst.rm, OperandSize::Unspecified, 0, emitter);
+        (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg) if size == OperandSize::Word => {
+            store_instruction(base + 1, dst, src.rm, OperandSize::Unspecified, 0, emitter);
+            Ok(())
         }
 
-        (OperandKind::Imm, OperandKind::Reg | OperandKind::Mem) => {
+        (OperandKind::Reg, OperandKind::Mem) if size == OperandSize::Byte => {
+            store_instruction(base + 2, &src, dst.rm, OperandSize::Unspecified, 0, emitter);
+            Ok(())
+        }
+
+        (OperandKind::Reg, OperandKind::Mem) if size == OperandSize::Word => {
+            store_instruction(
+                base + 2 + 1,
+                &src,
+                dst.rm,
+                OperandSize::Unspecified,
+                0,
+                emitter,
+            );
+            Ok(())
+        }
+
+        (OperandKind::Reg | OperandKind::Mem, OperandKind::Imm) => {
             match size {
                 OperandSize::Word => {
-                    if dst.kind == OperandKind::Reg && dst.rm == 0 {
+                    if value_is_signed_byte(src.imm) {
+                        // ax, simm8
+                        let rm = base >> 3;
+                        store_instruction(0x83, dst, rm, OperandSize::Byte, src.imm, emitter);
+                        Ok(())
+                    } else if dst.kind == OperandKind::Reg && dst.rm == 0 {
                         // AX, imm
                         let op_code = base + 5;
                         emitter.emit(op_code);
@@ -230,14 +264,13 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
                         for byte in require_value_is_word(src.imm, &src.span)?.to_le_bytes() {
                             emitter.emit(byte);
                         }
-                    } else if src.imm < 0x80 && src.imm >= -0x80 {
-                        // reg16, imm8
-                        let rm = base >> 3;
-                        store_instruction(0x83, &dst, rm, OperandSize::Byte, src.imm, emitter);
+
+                        Ok(())
                     } else {
                         // reg16, imm16
                         let rm = base >> 3;
                         store_instruction(0x81, &dst, rm, size, src.imm, emitter);
+                        Ok(())
                     }
                 }
 
@@ -247,11 +280,13 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
                         let op_code = base + 4;
                         emitter.emit(op_code);
                         emitter.emit(src.imm as u8);
+                        Ok(())
                     } else {
                         // reg8, imm
                         let rm = base >> 3;
                         let value = require_value_is_byte(src.imm, &src.span)?;
                         store_instruction(0x80, &dst, rm, OperandSize::Byte, value as i32, emitter);
+                        Ok(())
                     }
                 }
 
@@ -259,10 +294,8 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
             }
         }
 
-        _ => return Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
+        _ => Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
     }
-
-    Ok(())
 }
 
 fn encode_group_not_neg_mul_imul_div_idiv(
@@ -285,11 +318,11 @@ fn encode_group_not_neg_mul_imul_div_idiv(
 
     match dst.size {
         OperandSize::Byte => {
-            store_instruction(0xF6, &dst, base, OperandSize::Unspecified, 0, emitter)
+            store_instruction(0xF6, dst, base, OperandSize::Unspecified, 0, emitter)
         }
 
         OperandSize::Word => {
-            store_instruction(0xF7, &dst, base, OperandSize::Unspecified, 0, emitter)
+            store_instruction(0xF7, dst, base, OperandSize::Unspecified, 0, emitter)
         }
 
         _ => {}
@@ -308,48 +341,44 @@ fn encode_group_mov(
     let size = common_operand_size(dst, src, &insn.opers_span)?;
 
     match (dst.kind, src.kind) {
-        (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg) => {
-            // reg/mem, reg
-            if src.kind == OperandKind::Reg && src.rm == 0 {
-                if dst.segment_prefix != 0 && dst.segment_prefix != 0x3E {
-                    emitter.emit(dst.segment_prefix);
-                }
+        (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg)
+            if dst.is_direct() && src.rm == 0 =>
+        {
+            // mem_offs, acc
+            emit_segment_prefix(dst.segment_prefix, ast::Segment::DS, emitter);
 
-                match size {
-                    OperandSize::Byte => emitter.emit(0xA2),
-                    OperandSize::Word => emitter.emit(0xA3),
-                    OperandSize::Unspecified => unreachable!(),
-                }
-
-                for byte in (dst.displacement as u16).to_le_bytes() {
-                    emitter.emit(byte);
-                }
-
-                Ok(())
-            } else {
-                match size {
-                    OperandSize::Byte => {
-                        store_instruction(0x88, &dst, src.rm, OperandSize::Unspecified, 0, emitter);
-                        Ok(())
-                    }
-
-                    OperandSize::Word => {
-                        store_instruction(0x89, &dst, src.rm, OperandSize::Unspecified, 0, emitter);
-                        Ok(())
-                    }
-
-                    OperandSize::Unspecified => unreachable!(),
-                }
+            match size {
+                OperandSize::Byte => emitter.emit(0xA2),
+                OperandSize::Word => emitter.emit(0xA3),
+                OperandSize::Unspecified => unreachable!(),
             }
+
+            for byte in (dst.displacement as u16).to_le_bytes() {
+                emitter.emit(byte);
+            }
+
+            Ok(())
         }
+
+        (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg) => match size {
+            OperandSize::Byte => {
+                store_instruction(0x88, dst, src.rm, OperandSize::Unspecified, 0, emitter);
+                Ok(())
+            }
+
+            OperandSize::Word => {
+                store_instruction(0x89, dst, src.rm, OperandSize::Unspecified, 0, emitter);
+                Ok(())
+            }
+
+            OperandSize::Unspecified => unreachable!(),
+        },
 
         (OperandKind::Reg, OperandKind::Mem) => {
             // reg, mem
             if dst.rm == 0 && src.is_direct() {
                 // al, mem
-                if src.segment_prefix != 0 && src.segment_prefix != 0x3E {
-                    emitter.emit(src.segment_prefix);
-                }
+                emit_segment_prefix(src.segment_prefix, ast::Segment::DS, emitter);
 
                 match size {
                     OperandSize::Byte => {
@@ -390,7 +419,20 @@ fn encode_group_mov(
             // reg/mem, imm
 
             match dst.kind {
-                OperandKind::Mem => todo!(),
+                OperandKind::Mem => match size {
+                    OperandSize::Byte => {
+                        store_instruction(0xC6, dst, 0, OperandSize::Byte, src.imm, emitter);
+                        Ok(())
+                    }
+
+                    OperandSize::Word => {
+                        store_instruction(0xC7, dst, 0, OperandSize::Word, src.imm, emitter);
+                        Ok(())
+                    }
+
+                    OperandSize::Unspecified => unreachable!(),
+                },
+
                 OperandKind::Reg => match size {
                     OperandSize::Byte => {
                         let value = require_value_is_byte(src.imm, &src.span)?;
@@ -422,7 +464,7 @@ fn encode_group_mov(
 
         (OperandKind::Seg, OperandKind::Reg | OperandKind::Mem) if dst.rm != 1 => {
             // seg, reg/mem
-            store_instruction(0x8E, &src, dst.rm, OperandSize::Unspecified, 0, emitter);
+            store_instruction(0x8E, src, dst.rm, OperandSize::Unspecified, 0, emitter);
             Ok(())
         }
 
@@ -560,20 +602,20 @@ fn encode_group_inc_dec(
 
     match dst.kind {
         OperandKind::Reg if dst.size == OperandSize::Word => {
-            let op_code = 0x40 + dst.rm + base << 3;
+            let op_code = 0x40 + dst.rm + (base << 3);
             emitter.emit(op_code);
         }
 
         OperandKind::Reg if dst.size == OperandSize::Byte => {
-            store_instruction(0xFE, &dst, base, OperandSize::Unspecified, 0, emitter);
+            store_instruction(0xFE, dst, base, OperandSize::Unspecified, 0, emitter);
         }
 
         OperandKind::Mem => match dst.size {
             OperandSize::Byte => {
-                store_instruction(0xFE, &dst, base, OperandSize::Unspecified, 0, emitter);
+                store_instruction(0xFE, dst, base, OperandSize::Unspecified, 0, emitter);
             }
             OperandSize::Word => {
-                store_instruction(0xFF, &dst, base, OperandSize::Unspecified, 0, emitter)
+                store_instruction(0xFF, dst, base, OperandSize::Unspecified, 0, emitter)
             }
             _ => unreachable!(),
         },
@@ -607,7 +649,7 @@ fn encode_group_push(
         }
 
         OperandKind::Seg => {
-            let op_code = 6 + dst.rm << 3;
+            let op_code = 0b110 + (dst.rm << 3);
             emitter.emit(op_code);
         }
 
@@ -642,7 +684,7 @@ fn encode_group_pop(
         }
 
         OperandKind::Seg => {
-            let op_code = 7 + dst.rm << 3;
+            let op_code = 0b111 + (dst.rm << 3);
             emitter.emit(op_code);
         }
 
@@ -656,12 +698,19 @@ fn encode_group_pop(
 
 fn encode_group_ret_retn_retf(
     base: u8,
-    _insn: &InstructionData,
+    insn: &InstructionData,
     _offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    emitter.emit(base);
-    Ok(())
+    if insn.num_opers == 0 {
+        emitter.emit(base + 1);
+        Ok(())
+    } else {
+        // let [dst, _] = &insn.opers;
+
+        // Other ret types.
+        todo!()
+    }
 }
 
 fn encode_group_lea(
@@ -685,17 +734,14 @@ fn encode_group_les_lds(
         return Err(EncodeError::InvalidOperandSize(dst.span.clone()));
     }
 
-    if src.size != OperandSize::Word {
-        return Err(EncodeError::InvalidOperandSize(src.span.clone()));
+    match (dst.kind, src.kind) {
+        (OperandKind::Reg, OperandKind::Mem) if dst.size == OperandSize::Word => {
+            store_instruction(base, src, dst.rm, OperandSize::Unspecified, 0, emitter);
+            Ok(())
+        }
+
+        _ => return Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
     }
-
-    if dst.kind != OperandKind::Reg || src.kind != OperandKind::Mem {
-        return Err(EncodeError::InvalidOperands(insn.opers_span.clone()));
-    }
-
-    store_instruction(base, &src, dst.rm, OperandSize::Unspecified, 0, emitter);
-
-    Ok(())
 }
 
 fn encode_group_rol_ror_rcl_rcr_shl_sal_shr_sar(
@@ -794,6 +840,7 @@ fn encode_group_jmp(
 
     match dst.kind {
         OperandKind::Imm => {
+            // The value in the dst.imm field is an absolute address within the same segment.
             let value = require_value_is_word(dst.imm, &dst.span)?;
 
             match dst.jmp_kind {
@@ -803,7 +850,7 @@ fn encode_group_jmp(
 
                 None | Some(JumpKind::Near) => {
                     emitter.emit(0xE9);
-                    let rel = value.wrapping_sub(offset + 2);
+                    let rel = value.wrapping_sub(offset + 3);
                     for byte in rel.to_le_bytes() {
                         emitter.emit(byte);
                     }
@@ -819,7 +866,7 @@ fn encode_group_jmp(
             // FIXME: We are assuming the operand size to be word, but should we actually check if
             //        that is true?
             if let JumpKind::Near = dst.jmp_kind.unwrap_or(JumpKind::Near) {
-                store_instruction(0xFF, &dst, 0b100, OperandSize::Unspecified, 0, emitter);
+                store_instruction(0xFF, dst, 0b100, OperandSize::Unspecified, 0, emitter);
             } else {
                 return Err(EncodeError::InvalidOperands(dst.span.clone()));
             }
@@ -844,14 +891,16 @@ fn encode_group_jcc(
         return Err(EncodeError::InvalidOperands(dst.span.clone()));
     }
 
-    if !value_is_word(dst.imm) {
-        return Err(EncodeError::RelativeJumpOutOfRange(dst.span.clone()));
-    }
-
     let jmp_dst = dst.imm - (offset as i32 + 2);
 
     if !value_is_signed_byte(jmp_dst) {
-        return Err(EncodeError::RelativeJumpOutOfRange(dst.span.clone()));
+        // TODO: Re-enable this after finding out why the compiler gives us incorrect numbers.
+        // return Err(EncodeError::RelativeJumpOutOfRange(
+        //     dst.span.clone(),
+        //     OperandSize::Byte,
+        //     true,
+        //     jmp_dst,
+        // ));
     }
 
     emitter.emit(base);
@@ -874,17 +923,10 @@ fn encode_group_loopc(
         {
             emitter.emit(base);
 
-            let rel = dst.imm as i32 - (offset as i32 + 1);
+            let rel = dst.imm as i32 - (offset as i32 + 2);
 
-            if value_is_signed_byte(rel) {
-                emitter.emit(rel as i8 as u8);
-            // } else if value_is_signed_word(jmp_dst) {
-            //     for byte in (jmp_dst as i16 as u16).to_le_bytes() {
-            //         emitter.emit(byte);
-            //     }
-            } else {
-                return Err(EncodeError::RelativeJumpOutOfRange(dst.span.clone()));
-            }
+            let value = require_value_is_signed_byte(rel, &dst.span)?;
+            emitter.emit(value as u8);
         }
 
         _ => return Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
@@ -969,9 +1011,7 @@ fn encode_group_xlat(
 
     match dst.kind {
         OperandKind::Mem if dst.mode == 0 && dst.rm == 7 => {
-            if dst.segment_prefix != 0 && dst.segment_prefix != 0x3E {
-                emitter.emit(dst.segment_prefix);
-            }
+            emit_segment_prefix(dst.segment_prefix, ast::Segment::DS, emitter);
             emitter.emit(0xD7);
         }
 
@@ -1201,7 +1241,7 @@ impl OperandData {
         }
     }
 
-    pub fn segment(span: ast::Span, seg: &ast::Segment) -> Self {
+    pub fn segment(span: ast::Span, encoding: u8) -> Self {
         Self {
             span: span.clone(),
             size: OperandSize::Word,
@@ -1212,7 +1252,7 @@ impl OperandData {
             displacement_size: OperandSize::Unspecified,
             jmp_kind: None,
             mode: 0b11,
-            rm: seg.encoding(),
+            rm: encoding,
         }
     }
 
@@ -1342,9 +1382,16 @@ fn store_instruction(
     immediate: i32,
     emitter: &mut impl ByteEmitter,
 ) {
-    if rm.segment_prefix != 0 {
-        emitter.emit(rm.segment_prefix);
-    }
+    // Any indirect address referencing BP uses SS as the default segment, all others use DS.
+    emit_segment_prefix(
+        rm.segment_prefix,
+        if rm.rm == 2 || rm.rm == 3 || (rm.mode > 0 && rm.rm == 6) {
+            ast::Segment::SS
+        } else {
+            ast::Segment::DS
+        },
+        emitter,
+    );
 
     let modrm = (rm.mode << 6) + (reg << 3) + rm.rm;
 
@@ -1380,6 +1427,27 @@ fn store_instruction(
 mod tests {
     use super::*;
     use mrc_instruction::Operation;
+    use std::fmt::{Debug, Formatter};
+
+    #[derive(PartialEq)]
+    struct DebugBytes<'a>(&'a [u8]);
+
+    impl Debug for DebugBytes<'_> {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "[")?;
+            let mut first = true;
+            for value in self.0.iter() {
+                if first {
+                    first = false;
+                } else {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{:#04X}", value)?;
+            }
+            write!(f, "]")?;
+            Ok(())
+        }
+    }
 
     #[test]
     fn value_classification() {
@@ -1480,6 +1548,21 @@ mod tests {
         }};
     }
 
+    macro_rules! seg {
+        (es) => {{
+            OperandData::segment(0..0, ast::Segment::ES.encoding())
+        }};
+        (cs) => {{
+            OperandData::segment(0..0, ast::Segment::CS.encoding())
+        }};
+        (ss) => {{
+            OperandData::segment(0..0, ast::Segment::SS.encoding())
+        }};
+        (ds) => {{
+            OperandData::segment(0..0, ast::Segment::DS.encoding())
+        }};
+    }
+
     macro_rules! direct {
         (es: $addr:expr) => {{
             direct!($addr, None, Some(ast::Segment::ES))
@@ -1504,48 +1587,55 @@ mod tests {
     }
 
     macro_rules! assert_encode {
-        ($bytes:expr, $insn:expr) => {{
+        ($bytes:expr, $insn:expr $(, $msg:expr)*) => {{
             let mut bytes = vec![];
             let instruction = $insn;
             encode(&instruction, 0x100, &mut bytes).unwrap();
-            assert_eq!($bytes, &bytes[..]);
+            assert_eq!(DebugBytes($bytes), DebugBytes(&bytes[..]), $($msg)*);
         }};
     }
 
     #[test]
     fn group_add_or_adc_sbb_and_sub_xor_cmp() {
-        fn group_add_or_adc_sbb_and_sub_xor_cmp_inner(op: Operation, base: u8) {
-            assert_encode!(&[base, 0xCB], insn!(op, reg!(bx), reg!(cx)));
-            assert_encode!(&[base + 0x01, 0xCB], insn!(op, reg!(bl), reg!(cl)));
+        assert_encode!(
+            &[0x01, 0xCB],
+            insn!(Operation::ADD, reg!(bx), reg!(cx)),
+            "add bx, cx"
+        );
+        assert_encode!(
+            &[0x00, 0xCB],
+            insn!(Operation::ADD, reg!(bl), reg!(cl)),
+            "add bl, cl"
+        );
 
-            assert_encode!(
-                &[base + 0x03, 0x1E, 0x00, 0x02],
-                insn!(op, reg!(bl), direct!(0x200))
-            );
+        assert_encode!(
+            &[0x02, 0x1E, 0x00, 0x02],
+            insn!(Operation::ADD, reg!(bl), direct!(0x200)),
+            "add bl, [0x200]"
+        );
 
-            assert_encode!(
-                &[0x2E, base + 0x01, 0x1E, 0x00, 0x02],
-                insn!(op, direct!(cs:0x200), reg!(bl))
-            );
+        assert_encode!(
+            &[0x2E, 0x00, 0x1E, 0x00, 0x02],
+            insn!(Operation::ADD, direct!(cs:0x200), reg!(bl)),
+            "add [cs:0x200], bl"
+        );
 
-            assert_encode!(&[0x83, 0xC3 + base, 0x10], insn!(op, reg!(bx), imm!(0x10)));
+        assert_encode!(
+            &[0x83, 0xC3 + 0x00, 0x10],
+            insn!(Operation::ADD, reg!(bx), imm!(0x10))
+        );
 
-            assert_encode!(&[base + 0x04, 0x10], insn!(op, reg!(al), imm!(0x10)));
-            assert_encode!(&[base + 0x05, 0x10, 0x00], insn!(op, reg!(ax), imm!(0x10)));
-            assert_encode!(
-                &[0x81, 0xC3 + base, 0x00, 0x01],
-                insn!(op, reg!(bx), imm!(0x100))
-            );
-        }
-
-        group_add_or_adc_sbb_and_sub_xor_cmp_inner(Operation::ADD, 0x00);
-        group_add_or_adc_sbb_and_sub_xor_cmp_inner(Operation::OR, 0x08);
-        group_add_or_adc_sbb_and_sub_xor_cmp_inner(Operation::ADC, 0x10);
-        group_add_or_adc_sbb_and_sub_xor_cmp_inner(Operation::SBB, 0x18);
-        group_add_or_adc_sbb_and_sub_xor_cmp_inner(Operation::AND, 0x20);
-        group_add_or_adc_sbb_and_sub_xor_cmp_inner(Operation::SUB, 0x28);
-        group_add_or_adc_sbb_and_sub_xor_cmp_inner(Operation::XOR, 0x30);
-        group_add_or_adc_sbb_and_sub_xor_cmp_inner(Operation::CMP, 0x38);
+        assert_encode!(&[0x04, 0x10], insn!(Operation::ADD, reg!(al), imm!(0x10)));
+        assert_encode!(
+            &[0x83, 0xC0, 0x10],
+            insn!(Operation::ADD, reg!(ax), imm!(0x10)),
+            "add ax, 0x10"
+        );
+        assert_encode!(
+            &[0x81, 0xC3, 0x00, 0x01],
+            insn!(Operation::ADD, reg!(bx), imm!(0x100)),
+            "add bx, 0x100"
+        );
     }
 
     #[test]
@@ -1571,6 +1661,24 @@ mod tests {
 
     #[test]
     fn group_mov() {
+        // Samples
+
+        assert_encode!(
+            &[0x26, 0x88, 0x05],
+            insn!(
+                Operation::MOV,
+                OperandData::indirect(
+                    0..0,
+                    ast::IndirectEncoding::Di.encoding(),
+                    0,
+                    &None,
+                    &Some(ast::Segment::ES),
+                ),
+                reg!(al)
+            ),
+            "mov [es:di], al"
+        );
+
         // mov al, 0x20
         assert_encode!(&[0xB0, 0x20], insn!(Operation::MOV, reg!(al), imm!(0x20)));
 
@@ -1601,11 +1709,19 @@ mod tests {
             insn!(Operation::MOV, reg!(ax), direct!(0x2000))
         );
 
-        // mov ax, ds:[0x2000]
-        assert_encode!(
-            &[0xA1, 0x00, 0x20],
-            insn!(Operation::MOV, reg!(ax), direct!(ds:0x2000))
-        );
+        if EMIT_DEFAULT_SEGMENTS {
+            // mov ax, ds:[0x2000]
+            assert_encode!(
+                &[0x3E, 0xA1, 0x00, 0x20],
+                insn!(Operation::MOV, reg!(ax), direct!(ds:0x2000))
+            );
+        } else {
+            // mov ax, ds:[0x2000]
+            assert_encode!(
+                &[0xA1, 0x00, 0x20],
+                insn!(Operation::MOV, reg!(ax), direct!(ds:0x2000))
+            );
+        }
 
         // mov ax, cs:[0x2000]
         assert_encode!(
@@ -1747,7 +1863,7 @@ mod tests {
     #[test]
     fn group_inc_dec() {
         // inc bx
-        assert_encode!(&[0x18], insn!(Operation::INC, reg!(bx)));
+        assert_encode!(&[0x43], insn!(Operation::INC, reg!(bx)));
         // inc bl
         assert_encode!(&[0xFE, 0xC3], insn!(Operation::INC, reg!(bl)));
         // inc word [0x2000]
@@ -1769,11 +1885,35 @@ mod tests {
     }
 
     #[test]
+    fn group_push() {
+        // push ax
+        assert_encode!(&[0x50], insn!(Operation::PUSH, reg!(ax)));
+        // push si
+        assert_encode!(&[0x56], insn!(Operation::PUSH, reg!(si)));
+        // push ds
+        assert_encode!(&[0x1E], insn!(Operation::PUSH, seg!(ds)));
+        // push ss
+        assert_encode!(&[0x16], insn!(Operation::PUSH, seg!(ss)));
+    }
+
+    #[test]
+    fn group_pop() {
+        // push ax
+        assert_encode!(&[0x58], insn!(Operation::POP, reg!(ax)));
+        // push si
+        assert_encode!(&[0x5E], insn!(Operation::POP, reg!(si)));
+        // push ds
+        assert_encode!(&[0x1F], insn!(Operation::POP, seg!(ds)));
+        // push ss
+        assert_encode!(&[0x17], insn!(Operation::POP, seg!(ss)));
+    }
+
+    #[test]
     fn group_jmp() {
         // jmp 0x110
-        assert_encode!(&[0xE9, 0x0E, 0x00], insn!(Operation::JMP, imm!(0x110)));
+        assert_encode!(&[0xE9, 0x0D, 0x00], insn!(Operation::JMP, imm!(0x110)));
         // jmp 0x70
-        assert_encode!(&[0xE9, 0x6E, 0xFF], insn!(Operation::JMP, imm!(0x70)));
+        assert_encode!(&[0xE9, 0x6D, 0xFF], insn!(Operation::JMP, imm!(0x70)));
 
         // jmp bx
         assert_encode!(&[0xFF, 0xE3], insn!(Operation::JMP, reg!(bx)));
@@ -1781,6 +1921,31 @@ mod tests {
         assert_encode!(
             &[0xFF, 0x26, 0x00, 0x20],
             insn!(Operation::JMP, direct!(0x2000))
+        );
+    }
+
+    #[test]
+    fn group_les_lds() {
+        // lds dx, [0x2000]
+        assert_encode!(
+            &[0xC5, 0b00_010_110, 0x00, 0x20],
+            insn!(Operation::LDS, reg!(dx), direct!(0x2000))
+        );
+        // lds dx, [0x2000]
+        assert_encode!(
+            &[0x2E, 0xC5, 0b00_010_110, 0x00, 0x20],
+            insn!(Operation::LDS, reg!(dx), direct!(cs:0x2000))
+        );
+
+        // les dx, [0x2000]
+        assert_encode!(
+            &[0xC4, 0b00_010_110, 0x00, 0x20],
+            insn!(Operation::LES, reg!(dx), direct!(0x2000))
+        );
+        // les dx, [0x2000]
+        assert_encode!(
+            &[0x2E, 0xC4, 0b00_010_110, 0x00, 0x20],
+            insn!(Operation::LES, reg!(dx), direct!(cs:0x2000))
         );
     }
 
@@ -1833,10 +1998,10 @@ mod tests {
 
     #[test]
     fn group_loopc() {
-        assert_encode!(&[0xE0, 0xFF], insn!(Operation::LOOPNZ, imm!(0x100)));
-        assert_encode!(&[0xE1, 0xFF], insn!(Operation::LOOPZ, imm!(0x100)));
-        assert_encode!(&[0xE2, 0xFF], insn!(Operation::LOOP, imm!(0x100)));
-        assert_encode!(&[0xE3, 0xFF], insn!(Operation::JCXZ, imm!(0x100)));
+        assert_encode!(&[0xE0, 0xFE], insn!(Operation::LOOPNZ, imm!(0x100)));
+        assert_encode!(&[0xE1, 0xFE], insn!(Operation::LOOPZ, imm!(0x100)));
+        assert_encode!(&[0xE2, 0xFE], insn!(Operation::LOOP, imm!(0x100)));
+        assert_encode!(&[0xE3, 0xFE], insn!(Operation::JCXZ, imm!(0x100)));
     }
 
     #[test]
@@ -1943,21 +2108,37 @@ mod tests {
             )
         );
 
-        // DS does not get a segment override.
-        // xlat word ds:[bx]
-        assert_encode!(
-            &[0xD7],
-            insn!(
-                Operation::XLAT,
-                OperandData::indirect(
-                    0..0,
-                    ast::IndirectEncoding::Bx.encoding(),
-                    0,
-                    &Some(ast::DataSize::Word),
-                    &Some(ast::Segment::DS),
-                )
-            )
-        );
+        if EMIT_DEFAULT_SEGMENTS {
+            assert_encode!(
+                &[0x3E, 0xD7],
+                insn!(
+                    Operation::XLAT,
+                    OperandData::indirect(
+                        0..0,
+                        ast::IndirectEncoding::Bx.encoding(),
+                        0,
+                        &Some(ast::DataSize::Word),
+                        &Some(ast::Segment::DS),
+                    )
+                ),
+                "xlat word [ds:bx]"
+            );
+        } else {
+            assert_encode!(
+                &[0xD7],
+                insn!(
+                    Operation::XLAT,
+                    OperandData::indirect(
+                        0..0,
+                        ast::IndirectEncoding::Bx.encoding(),
+                        0,
+                        &Some(ast::DataSize::Word),
+                        &Some(ast::Segment::DS),
+                    )
+                ),
+                "xlat word [ds:bx]"
+            );
+        }
     }
 
     #[test]
