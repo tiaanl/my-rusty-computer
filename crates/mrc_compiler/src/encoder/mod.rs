@@ -1,5 +1,9 @@
+mod gen;
+
 use super::ast;
+use gen::{emit_codes, Code, FIRST_OPER_DST, FIRST_OPER_SRC};
 use mrc_instruction::Operation;
+use std::fmt::{Display, Formatter};
 
 const EMIT_DEFAULT_SEGMENTS: bool = true;
 
@@ -58,6 +62,53 @@ pub enum EncodeError {
     ImmediateOutOfRange(ast::Span, i32, i32, i32),
     #[allow(dead_code)]
     RelativeJumpOutOfRange(ast::Span, OperandSize, bool, i32),
+}
+
+impl EncodeError {
+    pub fn span(&self) -> &ast::Span {
+        match self {
+            EncodeError::InvalidOperands(span)
+            | EncodeError::OperandSizeNotSpecified(span)
+            | EncodeError::OperandSizesDoNotMatch(span)
+            | EncodeError::InvalidOperandSize(span)
+            | EncodeError::ImmediateOutOfRange(span, _, _, _)
+            | EncodeError::RelativeJumpOutOfRange(span, _, _, _) => span,
+        }
+    }
+}
+
+impl Display for EncodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EncodeError::InvalidOperands(_) => write!(f, "Invalid operands."),
+
+            EncodeError::OperandSizeNotSpecified(_) => write!(f, "Operand size not specified."),
+
+            EncodeError::OperandSizesDoNotMatch(_) => write!(f, "Operand sizes does not match."),
+
+            EncodeError::InvalidOperandSize(_) => write!(f, "Invalid operand size."),
+
+            EncodeError::ImmediateOutOfRange(_, value, min, max) => write!(
+                f,
+                "Value out of range. ({} should be in range {}..{})",
+                value, min, max
+            ),
+
+            EncodeError::RelativeJumpOutOfRange(_, size, signed, value) => {
+                write!(
+                    f,
+                    "Relative jump out of range. ({} does not fit into {} {})",
+                    value,
+                    if *signed { "signed" } else { "unsigned" },
+                    match size {
+                        OperandSize::Unspecified => "value with unspecified size",
+                        OperandSize::Byte => "byte",
+                        OperandSize::Word => "word",
+                    }
+                )
+            }
+        }
+    }
 }
 
 const fn segment_prefix_for(seg: ast::Segment) -> u8 {
@@ -214,7 +265,7 @@ fn emit_segment_prefix(
 fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
     base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, src] = &insn.opers;
@@ -222,30 +273,19 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
 
     match (dst.kind, src.kind) {
         (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg) if size == OperandSize::Byte => {
-            store_instruction(base, dst, src.rm, OperandSize::Unspecified, 0, emitter);
-            Ok(())
+            emit_codes(emitter, insn, offset, &[Code::ModRegRM(0, base)])
         }
 
         (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg) if size == OperandSize::Word => {
-            store_instruction(base + 1, dst, src.rm, OperandSize::Unspecified, 0, emitter);
-            Ok(())
+            emit_codes(emitter, insn, offset, &[Code::ModRegRM(0, base + 1)])
         }
 
         (OperandKind::Reg, OperandKind::Mem) if size == OperandSize::Byte => {
-            store_instruction(base + 2, &src, dst.rm, OperandSize::Unspecified, 0, emitter);
-            Ok(())
+            emit_codes(emitter, insn, offset, &[Code::ModRegRM(1, base + 2)])
         }
 
         (OperandKind::Reg, OperandKind::Mem) if size == OperandSize::Word => {
-            store_instruction(
-                base + 2 + 1,
-                &src,
-                dst.rm,
-                OperandSize::Unspecified,
-                0,
-                emitter,
-            );
-            Ok(())
+            emit_codes(emitter, insn, offset, &[Code::ModRegRM(1, base + 2 + 1)])
         }
 
         (OperandKind::Reg | OperandKind::Mem, OperandKind::Imm) => {
@@ -253,40 +293,54 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
                 OperandSize::Word => {
                     if value_is_signed_byte(src.imm) {
                         // ax, simm8
-                        let rm = base >> 3;
-                        store_instruction(0x83, dst, rm, OperandSize::Byte, src.imm, emitter);
-                        Ok(())
+                        emit_codes(
+                            emitter,
+                            insn,
+                            offset,
+                            &[
+                                Code::ModRM(0, 0x83, base >> 3),
+                                Code::ImmByte(FIRST_OPER_SRC),
+                            ],
+                        )
                     } else if dst.kind == OperandKind::Reg && dst.rm == 0 {
                         // AX, imm
-                        let op_code = base + 5;
-                        emitter.emit(op_code);
-
-                        for byte in require_value_is_word(src.imm, &src.span)?.to_le_bytes() {
-                            emitter.emit(byte);
-                        }
-
-                        Ok(())
+                        emit_codes(
+                            emitter,
+                            insn,
+                            offset,
+                            &[Code::Byte(base + 5), Code::ImmWord(FIRST_OPER_SRC)],
+                        )
                     } else {
                         // reg16, imm16
-                        let rm = base >> 3;
-                        store_instruction(0x81, &dst, rm, size, src.imm, emitter);
-                        Ok(())
+                        emit_codes(
+                            emitter,
+                            insn,
+                            offset,
+                            &[
+                                Code::ModRM(FIRST_OPER_DST, 0x81, base >> 3),
+                                Code::ImmWord(FIRST_OPER_SRC),
+                            ],
+                        )
                     }
                 }
 
                 OperandSize::Byte => {
                     if dst.kind == OperandKind::Reg && dst.rm == 0 {
                         // AL, imm
-                        let op_code = base + 4;
-                        emitter.emit(op_code);
-                        emitter.emit(src.imm as u8);
-                        Ok(())
+                        emit_codes(
+                            emitter,
+                            insn,
+                            offset,
+                            &[Code::Byte(base + 4), Code::ImmByte(FIRST_OPER_SRC)],
+                        )
                     } else {
                         // reg8, imm
-                        let rm = base >> 3;
-                        let value = require_value_is_byte(src.imm, &src.span)?;
-                        store_instruction(0x80, &dst, rm, OperandSize::Byte, value as i32, emitter);
-                        Ok(())
+                        emit_codes(
+                            emitter,
+                            insn,
+                            offset,
+                            &[Code::ModRM(FIRST_OPER_DST, 0x80, base >> 3)],
+                        )
                     }
                 }
 
@@ -301,7 +355,7 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
 fn encode_group_not_neg_mul_imul_div_idiv(
     base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, _] = &insn.opers;
@@ -312,29 +366,29 @@ fn encode_group_not_neg_mul_imul_div_idiv(
         ));
     }
 
-    if !matches!(dst.kind, OperandKind::Mem | OperandKind::Reg) {
-        return Err(EncodeError::InvalidOperands(insn.opers_span.clone()));
+    match dst.kind {
+        OperandKind::Reg | OperandKind::Mem if dst.size == OperandSize::Byte => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRM(FIRST_OPER_DST, 0xF6, base)],
+        ),
+
+        OperandKind::Reg | OperandKind::Mem if dst.size == OperandSize::Word => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRM(FIRST_OPER_DST, 0xF7, base)],
+        ),
+
+        _ => Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
     }
-
-    match dst.size {
-        OperandSize::Byte => {
-            store_instruction(0xF6, dst, base, OperandSize::Unspecified, 0, emitter)
-        }
-
-        OperandSize::Word => {
-            store_instruction(0xF7, dst, base, OperandSize::Unspecified, 0, emitter)
-        }
-
-        _ => {}
-    }
-
-    Ok(())
 }
 
 fn encode_group_mov(
     _base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, src] = &insn.opers;
@@ -342,22 +396,29 @@ fn encode_group_mov(
 
     match (dst.kind, src.kind) {
         (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg)
-            if dst.is_direct() && src.rm == 0 =>
+            if size == OperandSize::Byte && dst.is_direct() && src.rm == 0 =>
         {
-            // mem_offs, acc
+            // mem_offs, al
             emit_segment_prefix(dst.segment_prefix, ast::Segment::DS, emitter);
+            emit_codes(
+                emitter,
+                insn,
+                offset,
+                &[Code::Byte(0xA2), Code::DispWord(FIRST_OPER_DST)],
+            )
+        }
 
-            match size {
-                OperandSize::Byte => emitter.emit(0xA2),
-                OperandSize::Word => emitter.emit(0xA3),
-                OperandSize::Unspecified => unreachable!(),
-            }
-
-            for byte in (dst.displacement as u16).to_le_bytes() {
-                emitter.emit(byte);
-            }
-
-            Ok(())
+        (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg)
+            if size == OperandSize::Word && dst.is_direct() && src.rm == 0 =>
+        {
+            // mem_offs, ax
+            emit_segment_prefix(dst.segment_prefix, ast::Segment::DS, emitter);
+            emit_codes(
+                emitter,
+                insn,
+                offset,
+                &[Code::Byte(0xA3), Code::DispWord(FIRST_OPER_DST)],
+            )
         }
 
         (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg) => match size {
@@ -541,7 +602,7 @@ fn encode_group_test(
 fn encode_group_xchg(
     _base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, src] = &insn.opers;
@@ -551,38 +612,44 @@ fn encode_group_xchg(
         (OperandKind::Reg, OperandKind::Reg)
             if size == OperandSize::Word && dst.rm == 0 || src.rm == 0 =>
         {
-            let op_code = 0x90 + dst.rm + src.rm;
-            emitter.emit(op_code);
-            Ok(())
+            emit_codes(emitter, insn, offset, &[Code::Byte(0x90 + dst.rm + src.rm)])
         }
 
-        (OperandKind::Reg, OperandKind::Reg) | (OperandKind::Reg, OperandKind::Mem) => match size {
-            OperandSize::Byte => {
-                store_instruction(0x86, src, dst.rm, OperandSize::Unspecified, 0, emitter);
-                Ok(())
-            }
+        (OperandKind::Reg, OperandKind::Reg) | (OperandKind::Reg, OperandKind::Mem)
+            if size == OperandSize::Byte =>
+        {
+            emit_codes(
+                emitter,
+                insn,
+                offset,
+                &[Code::ModRegRM(FIRST_OPER_SRC, 0x86)],
+            )
+        }
 
-            OperandSize::Word => {
-                store_instruction(0x87, src, dst.rm, OperandSize::Unspecified, 0, emitter);
-                Ok(())
-            }
+        (OperandKind::Reg, OperandKind::Reg) | (OperandKind::Reg, OperandKind::Mem)
+            if size == OperandSize::Word =>
+        {
+            emit_codes(
+                emitter,
+                insn,
+                offset,
+                &[Code::ModRegRM(FIRST_OPER_SRC, 0x87)],
+            )
+        }
 
-            OperandSize::Unspecified => unreachable!(),
-        },
+        (OperandKind::Mem, OperandKind::Reg) if size == OperandSize::Byte => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRegRM(FIRST_OPER_DST, 0x86)],
+        ),
 
-        (OperandKind::Mem, OperandKind::Reg) => match size {
-            OperandSize::Byte => {
-                store_instruction(0x86, dst, src.rm, OperandSize::Unspecified, 0, emitter);
-                Ok(())
-            }
-
-            OperandSize::Word => {
-                store_instruction(0x87, dst, src.rm, OperandSize::Unspecified, 0, emitter);
-                Ok(())
-            }
-
-            OperandSize::Unspecified => unreachable!(),
-        },
+        (OperandKind::Mem, OperandKind::Reg) if size == OperandSize::Word => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRegRM(FIRST_OPER_DST, 0x87)],
+        ),
 
         _ => Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
     }
@@ -591,7 +658,7 @@ fn encode_group_xchg(
 fn encode_group_inc_dec(
     base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, _] = &insn.opers;
@@ -601,70 +668,65 @@ fn encode_group_inc_dec(
     }
 
     match dst.kind {
-        OperandKind::Reg if dst.size == OperandSize::Word => {
-            let op_code = 0x40 + dst.rm + (base << 3);
-            emitter.emit(op_code);
-        }
+        OperandKind::Reg if dst.size == OperandSize::Byte => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRM(FIRST_OPER_DST, 0xFE, base)],
+        ),
 
-        OperandKind::Reg if dst.size == OperandSize::Byte => {
-            store_instruction(0xFE, dst, base, OperandSize::Unspecified, 0, emitter);
-        }
+        OperandKind::Reg if dst.size == OperandSize::Word => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::Byte(0x40 + dst.rm + (base << 3))],
+        ),
 
-        OperandKind::Mem => match dst.size {
-            OperandSize::Byte => {
-                store_instruction(0xFE, dst, base, OperandSize::Unspecified, 0, emitter);
-            }
-            OperandSize::Word => {
-                store_instruction(0xFF, dst, base, OperandSize::Unspecified, 0, emitter)
-            }
-            _ => unreachable!(),
-        },
+        OperandKind::Mem if dst.size == OperandSize::Byte => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRM(FIRST_OPER_DST, 0xFE, base)],
+        ),
 
-        _ => unreachable!(),
+        OperandKind::Mem if dst.size == OperandSize::Word => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRM(FIRST_OPER_DST, 0xFF, base)],
+        ),
+
+        _ => Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
     }
-
-    Ok(())
 }
 
 fn encode_group_push(
     _base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, _] = &insn.opers;
 
-    if dst.size != OperandSize::Word {
-        return Err(EncodeError::InvalidOperandSize(dst.span.clone()));
-    }
-
     match dst.kind {
-        OperandKind::Mem => {
+        OperandKind::Mem if dst.size == OperandSize::Word => {
             todo!()
         }
 
-        OperandKind::Reg => {
-            let op_code = 0x50 + dst.rm;
-            emitter.emit(op_code);
+        OperandKind::Reg if dst.size == OperandSize::Word => {
+            emit_codes(emitter, insn, offset, &[Code::Byte(0x50 + dst.rm)])
         }
 
-        OperandKind::Seg => {
-            let op_code = 0b110 + (dst.rm << 3);
-            emitter.emit(op_code);
-        }
+        OperandKind::Seg => emit_codes(emitter, insn, offset, &[Code::Byte(0b110 + (dst.rm << 3))]),
 
-        _ => {
-            return Err(EncodeError::InvalidOperandSize(dst.span.clone()));
-        }
+        _ => Err(EncodeError::InvalidOperands(dst.span.clone())),
     }
-
-    Ok(())
 }
 
 fn encode_group_pop(
     _base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, _] = &insn.opers;
@@ -674,37 +736,28 @@ fn encode_group_pop(
     }
 
     match dst.kind {
-        OperandKind::Mem => {
+        OperandKind::Mem if dst.size == OperandSize::Word => {
             todo!()
         }
 
-        OperandKind::Reg => {
-            let op_code = 0x58 + dst.rm;
-            emitter.emit(op_code);
+        OperandKind::Reg if dst.size == OperandSize::Word => {
+            emit_codes(emitter, insn, offset, &[Code::Byte(0x58 + dst.rm)])
         }
 
-        OperandKind::Seg => {
-            let op_code = 0b111 + (dst.rm << 3);
-            emitter.emit(op_code);
-        }
+        OperandKind::Seg => emit_codes(emitter, insn, offset, &[Code::Byte(0b111 + (dst.rm << 3))]),
 
-        _ => {
-            return Err(EncodeError::InvalidOperandSize(dst.span.clone()));
-        }
+        _ => Err(EncodeError::InvalidOperandSize(dst.span.clone())),
     }
-
-    Ok(())
 }
 
 fn encode_group_ret_retn_retf(
     base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     if insn.num_opers == 0 {
-        emitter.emit(base + 1);
-        Ok(())
+        emit_codes(emitter, insn, offset, &[Code::Byte(base + 1)])
     } else {
         // let [dst, _] = &insn.opers;
 
@@ -725,20 +778,18 @@ fn encode_group_lea(
 fn encode_group_les_lds(
     base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, src] = &insn.opers;
 
-    if dst.size != OperandSize::Word {
-        return Err(EncodeError::InvalidOperandSize(dst.span.clone()));
-    }
-
     match (dst.kind, src.kind) {
-        (OperandKind::Reg, OperandKind::Mem) if dst.size == OperandSize::Word => {
-            store_instruction(base, src, dst.rm, OperandSize::Unspecified, 0, emitter);
-            Ok(())
-        }
+        (OperandKind::Reg, OperandKind::Mem) if dst.size == OperandSize::Word => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRegRM(FIRST_OPER_SRC, base)],
+        ),
 
         _ => return Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
     }
@@ -921,12 +972,12 @@ fn encode_group_loopc(
         OperandKind::Imm
             if matches!(dst.jmp_kind, Some(JumpKind::Short)) || dst.jmp_kind.is_none() =>
         {
-            emitter.emit(base);
-
-            let rel = dst.imm as i32 - (offset as i32 + 2);
-
-            let value = require_value_is_signed_byte(rel, &dst.span)?;
-            emitter.emit(value as u8);
+            emit_codes(
+                emitter,
+                insn,
+                offset,
+                &[Code::Byte(base), Code::RelByte(0, 2)],
+            )?;
         }
 
         _ => return Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
@@ -937,39 +988,37 @@ fn encode_group_loopc(
 
 fn encode_group_no_operands(
     base: u8,
-    _insn: &InstructionData,
-    _offset: u16,
+    insn: &InstructionData,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    emitter.emit(base);
-    Ok(())
+    emit_codes(emitter, insn, offset, &[Code::Byte(base)])
 }
 
 fn encode_group_prefixes(
     base: u8,
-    _insn: &InstructionData,
-    _offset: u16,
+    insn: &InstructionData,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    emitter.emit(base);
-    Ok(())
+    emit_codes(emitter, insn, offset, &[Code::Byte(base)])
 }
 
 fn encode_group_int(
     _base: u8,
     insn: &InstructionData,
-    _offset: u16,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
     let [dst, _] = &insn.opers;
 
     match dst.kind {
-        OperandKind::Imm => {
-            let value = require_value_is_byte(dst.imm, &dst.span)?;
-            emitter.emit(0xCD);
-            emitter.emit(value);
-            Ok(())
-        }
+        OperandKind::Imm => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::Byte(0xCD), Code::ImmByte(FIRST_OPER_DST)],
+        ),
 
         _ => Err(EncodeError::InvalidOperands(dst.span.clone())),
     }
@@ -977,24 +1026,20 @@ fn encode_group_int(
 
 fn encode_group_aam(
     _base: u8,
-    _insn: &InstructionData,
-    _offset: u16,
+    insn: &InstructionData,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    emitter.emit(0xD4);
-    emitter.emit(0xA0);
-    Ok(())
+    emit_codes(emitter, insn, offset, &[Code::Byte(0xD4), Code::Byte(0xA0)])
 }
 
 fn encode_group_aad(
     _base: u8,
-    _insn: &InstructionData,
-    _offset: u16,
+    insn: &InstructionData,
+    offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    emitter.emit(0xD5);
-    emitter.emit(0xA0);
-    Ok(())
+    emit_codes(emitter, insn, offset, &[Code::Byte(0xD5), Code::Byte(0xA0)])
 }
 
 fn encode_group_xlat(

@@ -1,6 +1,6 @@
 use crate::ast;
 use crate::encoder as enc;
-use crate::encoder::{encode, value_is_signed_word, OperandData};
+use crate::encoder::{encode, value_is_signed_word, EncodeError, OperandData};
 use mrc_instruction as out;
 use std::collections::{HashMap, LinkedList};
 use std::fmt::Formatter;
@@ -22,6 +22,7 @@ pub enum CompileError {
     ImmediateValueOutOfRange(ast::Span, i32),
     UnresolvedReference(ast::Label),
     DataSizeNotSpecified(ast::Span),
+    EncodeError(EncodeError),
 }
 
 impl CompileError {
@@ -35,6 +36,7 @@ impl CompileError {
             | CompileError::ImmediateValueOutOfRange(span, _)
             | CompileError::UnresolvedReference(ast::Label(span, _))
             | CompileError::DataSizeNotSpecified(span) => span,
+            CompileError::EncodeError(err) => err.span(),
         }
     }
 }
@@ -75,6 +77,10 @@ impl std::fmt::Display for CompileError {
 
             CompileError::DataSizeNotSpecified(_) => {
                 write!(f, "Data size not specified.")
+            }
+
+            CompileError::EncodeError(err) => {
+                write!(f, "{}", err)
             }
         }
     }
@@ -413,8 +419,10 @@ impl Compiler {
     ) -> Result<Vec<u8>, CompileError> {
         let instruction_data = self.build_instruction_data(instruction)?;
         let mut bytes: Vec<u8> = vec![];
-        encode(&instruction_data, offset, &mut bytes).unwrap();
-        Ok(bytes)
+        match encode(&instruction_data, offset, &mut bytes) {
+            Ok(()) => Ok(bytes),
+            Err(err) => Err(CompileError::EncodeError(err)),
+        }
     }
 }
 
