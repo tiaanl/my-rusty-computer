@@ -1,4 +1,3 @@
-mod assemble;
 pub mod ast;
 pub mod compiler;
 pub mod diagnostics;

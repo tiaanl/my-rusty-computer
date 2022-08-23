@@ -96,7 +96,11 @@ pub struct Output {
 
 #[derive(Debug)]
 pub struct LabelInfo {
+    /// The offset that this label points to.  [None] if the label was declared, but we don't know
+    /// what the offset is yet.
     offset: Option<u16>,
+
+    /// Used as the original name and span of the label.
     original: ast::Label,
 }
 
@@ -120,42 +124,48 @@ impl Compiler {
             return Err(CompileError::UnresolvedReference(label));
         }
 
-        self._debug_print_outputs();
+        // self._debug_print_outputs();
 
         let mut result = vec![];
 
-        let mut offset = START_OFFSET;
         for output in &self.outputs {
-            if matches!(
-                output.line,
-                ast::Line::Instruction(..) | ast::Line::Data(..)
-            ) {
-                // println!("line: {}", output.line);
-
-                let bytes = self.encode_line(&output.line, output.times, offset)?;
-
-                // At this point, an instruction with 0 size is invalid.
-                assert_ne!(output.size, 0, "Line size is zero: {:?}", &output.line);
-
-                // Does the number of bytes we emitted and the size of the instruction we calculated
-                // earlier match?
-                assert_eq!(
-                    output.size as usize,
-                    bytes.len(),
-                    "Calculated size and assembled sizes does not match."
-                );
-
-                for b in bytes {
-                    result.push(b);
+            match &output.line {
+                ast::Line::Instruction(insn) => {
+                    debug_assert_ne!(output.size, 0, "Output size should not be 0 at this point.");
+                    let instruction_data = self.build_instruction_data(insn)?;
+                    for _ in 0..output.times {
+                        let offset = START_OFFSET + result.len() as u16;
+                        encode(&instruction_data, offset, &mut result)
+                            .map_err(|err| CompileError::EncodeError(err))?;
+                    }
                 }
+
+                ast::Line::Data(_, data) => {
+                    for byte in data.iter() {
+                        result.push(*byte);
+                    }
+                }
+
+                _ => {}
             }
-            offset += output.size;
         }
 
         Ok(result)
     }
 
     fn _debug_print_outputs(&self) {
+        for (name, info) in self.labels.iter() {
+            println!(
+                "{} = {}",
+                name,
+                if let Some(offset) = info.offset {
+                    format!("{:04X}", offset)
+                } else {
+                    format!("None")
+                }
+            );
+        }
+
         let mut offset = START_OFFSET;
         for output in &self.outputs {
             if matches!(&output.line, ast::Line::Label(..) | ast::Line::Constant(..)) {
@@ -192,7 +202,7 @@ impl Compiler {
             debug_assert!(labels.is_empty());
 
             let mut unresolved_references = 0;
-            let mut offset = 0;
+            let mut offset = START_OFFSET;
 
             let outputs = unsafe {
                 &mut *std::ptr::slice_from_raw_parts_mut(
@@ -201,35 +211,38 @@ impl Compiler {
                 )
             };
 
-            macro_rules! drain_labels {
-                () => {{
-                    while let Some(label) = labels.pop_back() {
-                        self.set_label_offset(&label, Some(offset));
-                    }
-                }};
-            }
-
             for output in outputs {
                 match &mut output.line {
                     ast::Line::Label(label) => {
                         labels.push_back(label.clone());
                     }
 
-                    line @ ast::Line::Instruction(..) => {
-                        drain_labels!();
+                    ast::Line::Instruction(insn) => {
+                        while let Some(label) = labels.pop_back() {
+                            self.set_label_offset(&label, Some(offset));
+                        }
+
                         let mut size = 0;
                         for _ in 0..output.times {
-                            size += match self.calculate_line_size(line, offset) {
-                                Ok(size) => {
+                            size += match self.calculate_instruction_size(insn, offset + size) {
+                                Ok(Some(size)) => {
                                     output.unresolved_references = false;
                                     size
                                 }
+
+                                Ok(None) => {
+                                    unresolved_references += 1;
+                                    output.unresolved_references = true;
+                                    0
+                                }
+
                                 Err(CompileError::LabelNotFound(label)) => {
                                     self.set_label_offset(&label, None);
                                     unresolved_references += 1;
                                     output.unresolved_references = true;
                                     0
                                 }
+
                                 Err(err) => return Err(err),
                             };
                         }
@@ -238,7 +251,10 @@ impl Compiler {
                     }
 
                     ast::Line::Data(_, data) => {
-                        drain_labels!();
+                        while let Some(label) = labels.pop_back() {
+                            self.set_label_offset(&label, Some(offset));
+                        }
+
                         let mut size = 0;
                         for _ in 0..output.times {
                             size += data.len() as u16;
@@ -264,7 +280,9 @@ impl Compiler {
                 }
             }
 
-            drain_labels!();
+            while let Some(label) = labels.pop_back() {
+                self.set_label_offset(&label, Some(offset));
+            }
 
             // If there are no more unresolved references, then we can stop.
             if unresolved_references == 0 {
@@ -298,43 +316,6 @@ impl Compiler {
                     original: label.clone(),
                 },
             );
-        }
-    }
-
-    fn encode_line(
-        &self,
-        line: &ast::Line,
-        times: u16,
-        offset: u16,
-    ) -> Result<Vec<u8>, CompileError> {
-        match line {
-            ast::Line::Instruction(instruction) => {
-                let mut result = vec![];
-                for _ in 0..times {
-                    let data = self.encode_instruction(instruction, offset)?;
-
-                    for b in &data {
-                        result.push(*b)
-                    }
-                }
-
-                Ok(result)
-            }
-
-            ast::Line::Data(_, data) => {
-                let mut result = vec![];
-
-                for _ in 0..times {
-                    for b in data {
-                        result.push(*b)
-                    }
-                }
-
-                Ok(result)
-            }
-
-            // ast::Line::Label(..) => Ok(vec![]),
-            _ => todo!("{:?}", line),
         }
     }
 
@@ -411,19 +392,6 @@ impl Compiler {
             }
         })
     }
-
-    fn encode_instruction(
-        &self,
-        instruction: &ast::Instruction,
-        offset: u16,
-    ) -> Result<Vec<u8>, CompileError> {
-        let instruction_data = self.build_instruction_data(instruction)?;
-        let mut bytes: Vec<u8> = vec![];
-        match encode(&instruction_data, offset, &mut bytes) {
-            Ok(()) => Ok(bytes),
-            Err(err) => Err(CompileError::EncodeError(err)),
-        }
-    }
 }
 
 impl Compiler {
@@ -461,33 +429,22 @@ impl Compiler {
 }
 
 impl Compiler {
-    fn calculate_line_size(&self, line: &ast::Line, offset: u16) -> Result<u16, CompileError> {
-        Ok(match line {
-            ast::Line::Instruction(instruction) => {
-                let size_in_bytes = self.calculate_instruction_size(instruction, offset)?;
-
-                size_in_bytes as u16
-            }
-
-            ast::Line::Data(_, data) => data.len() as u16,
-
-            _ => unreachable!(),
-        })
-    }
-
     fn calculate_instruction_size(
         &self,
         instruction: &ast::Instruction,
         offset: u16,
-    ) -> Result<u8, CompileError> {
+    ) -> Result<Option<u16>, CompileError> {
         let insn_data = self.build_instruction_data(instruction)?;
-        let mut size_in_bytes = 0_u8;
+        let mut size_in_bytes = 0_u16;
 
         if let Err(err) = encode(&insn_data, offset, &mut size_in_bytes) {
-            panic!("Encode error: {:?} {}", err, instruction);
+            match err {
+                EncodeError::ImmediateOutOfRange(..) => Ok(None),
+                _ => Err(CompileError::EncodeError(err)),
+            }
+        } else {
+            Ok(Some(size_in_bytes))
         }
-
-        Ok(size_in_bytes)
     }
 }
 

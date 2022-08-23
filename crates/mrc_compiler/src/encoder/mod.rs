@@ -47,7 +47,7 @@ impl ByteEmitter for Vec<u8> {
     }
 }
 
-impl ByteEmitter for u8 {
+impl ByteEmitter for u16 {
     fn emit(&mut self, _byte: u8) {
         *self += 1;
     }
@@ -423,12 +423,12 @@ fn encode_group_mov(
 
         (OperandKind::Reg | OperandKind::Mem, OperandKind::Reg) => match size {
             OperandSize::Byte => {
-                store_instruction(0x88, dst, src.rm, OperandSize::Unspecified, 0, emitter);
+                emit_mod_reg_rm(0x88, dst, src.rm, OperandSize::Unspecified, 0, emitter);
                 Ok(())
             }
 
             OperandSize::Word => {
-                store_instruction(0x89, dst, src.rm, OperandSize::Unspecified, 0, emitter);
+                emit_mod_reg_rm(0x89, dst, src.rm, OperandSize::Unspecified, 0, emitter);
                 Ok(())
             }
 
@@ -462,12 +462,12 @@ fn encode_group_mov(
             } else {
                 match size {
                     OperandSize::Byte => {
-                        store_instruction(0x8A, src, dst.rm, OperandSize::Unspecified, 0, emitter);
+                        emit_mod_reg_rm(0x8A, src, dst.rm, OperandSize::Unspecified, 0, emitter);
                         Ok(())
                     }
 
                     OperandSize::Word => {
-                        store_instruction(0x8B, src, dst.rm, OperandSize::Unspecified, 0, emitter);
+                        emit_mod_reg_rm(0x8B, src, dst.rm, OperandSize::Unspecified, 0, emitter);
                         Ok(())
                     }
 
@@ -482,12 +482,12 @@ fn encode_group_mov(
             match dst.kind {
                 OperandKind::Mem => match size {
                     OperandSize::Byte => {
-                        store_instruction(0xC6, dst, 0, OperandSize::Byte, src.imm, emitter);
+                        emit_mod_reg_rm(0xC6, dst, 0, OperandSize::Byte, src.imm, emitter);
                         Ok(())
                     }
 
                     OperandSize::Word => {
-                        store_instruction(0xC7, dst, 0, OperandSize::Word, src.imm, emitter);
+                        emit_mod_reg_rm(0xC7, dst, 0, OperandSize::Word, src.imm, emitter);
                         Ok(())
                     }
 
@@ -519,13 +519,13 @@ fn encode_group_mov(
 
         (OperandKind::Reg | OperandKind::Mem, OperandKind::Seg) => {
             // reg/mem, seg
-            store_instruction(0x8C, dst, src.rm, OperandSize::Unspecified, 0, emitter);
+            emit_mod_reg_rm(0x8C, dst, src.rm, OperandSize::Unspecified, 0, emitter);
             Ok(())
         }
 
         (OperandKind::Seg, OperandKind::Reg | OperandKind::Mem) if dst.rm != 1 => {
             // seg, reg/mem
-            store_instruction(0x8E, src, dst.rm, OperandSize::Unspecified, 0, emitter);
+            emit_mod_reg_rm(0x8E, src, dst.rm, OperandSize::Unspecified, 0, emitter);
             Ok(())
         }
 
@@ -813,12 +813,12 @@ fn encode_group_rol_ror_rcl_rcr_shl_sal_shr_sar(
         {
             match dst.size {
                 OperandSize::Byte => {
-                    store_instruction(0xD2, dst, base, OperandSize::Unspecified, 0, emitter);
+                    emit_mod_reg_rm(0xD2, dst, base, OperandSize::Unspecified, 0, emitter);
                     Ok(())
                 }
 
                 OperandSize::Word => {
-                    store_instruction(0xD3, dst, base, OperandSize::Unspecified, 0, emitter);
+                    emit_mod_reg_rm(0xD3, dst, base, OperandSize::Unspecified, 0, emitter);
                     Ok(())
                 }
 
@@ -828,12 +828,12 @@ fn encode_group_rol_ror_rcl_rcr_shl_sal_shr_sar(
 
         (OperandKind::Reg | OperandKind::Mem, OperandKind::Imm) if src.imm == 1 => match dst.size {
             OperandSize::Byte => {
-                store_instruction(0xD0, dst, base, OperandSize::Unspecified, 0, emitter);
+                emit_mod_reg_rm(0xD0, dst, base, OperandSize::Unspecified, 0, emitter);
                 Ok(())
             }
 
             OperandSize::Word => {
-                store_instruction(0xD1, dst, base, OperandSize::Unspecified, 0, emitter);
+                emit_mod_reg_rm(0xD1, dst, base, OperandSize::Unspecified, 0, emitter);
                 Ok(())
             }
 
@@ -917,7 +917,7 @@ fn encode_group_jmp(
             // FIXME: We are assuming the operand size to be word, but should we actually check if
             //        that is true?
             if let JumpKind::Near = dst.jmp_kind.unwrap_or(JumpKind::Near) {
-                store_instruction(0xFF, dst, 0b100, OperandSize::Unspecified, 0, emitter);
+                emit_mod_reg_rm(0xFF, dst, 0b100, OperandSize::Unspecified, 0, emitter);
             } else {
                 return Err(EncodeError::InvalidOperands(dst.span.clone()));
             }
@@ -938,26 +938,18 @@ fn encode_group_jcc(
 ) -> Result<(), EncodeError> {
     let [dst, _] = &insn.opers;
 
-    if dst.kind != OperandKind::Imm && (!matches!(dst.jmp_kind, Some(JumpKind::Short))) {
-        return Err(EncodeError::InvalidOperands(dst.span.clone()));
+    match dst.kind {
+        OperandKind::Imm if dst.jmp_kind.unwrap_or(JumpKind::Short) == JumpKind::Short => {
+            emit_codes(
+                emitter,
+                insn,
+                offset,
+                &[Code::Byte(base), Code::RelByte(FIRST_OPER_DST, 2)],
+            )
+        }
+
+        _ => Err(EncodeError::InvalidOperands(dst.span.clone())),
     }
-
-    let jmp_dst = dst.imm - (offset as i32 + 2);
-
-    if !value_is_signed_byte(jmp_dst) {
-        // TODO: Re-enable this after finding out why the compiler gives us incorrect numbers.
-        // return Err(EncodeError::RelativeJumpOutOfRange(
-        //     dst.span.clone(),
-        //     OperandSize::Byte,
-        //     true,
-        //     jmp_dst,
-        // ));
-    }
-
-    emitter.emit(base);
-    emitter.emit(jmp_dst as i8 as u8);
-
-    Ok(())
 }
 
 fn encode_group_loopc(
@@ -1419,7 +1411,7 @@ impl InstructionData {
     }
 }
 
-fn store_instruction(
+fn emit_mod_reg_rm(
     op_code: u8,
     rm: &OperandData,
     reg: u8,

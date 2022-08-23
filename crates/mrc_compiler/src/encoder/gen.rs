@@ -72,8 +72,13 @@ pub fn emit_codes(
 
             Code::RelByte(first_operand, insn_size) => {
                 let oper = &insn.opers[*first_operand as usize];
+                // println!(
+                //     "oper.imm: {:04X}, offset: {:04X}, insn_size: {:02X}",
+                //     oper.imm, offset, insn_size
+                // );
                 let rel = oper.imm as i32 - (offset as i32 + *insn_size as i32);
                 let value = require_value_is_signed_byte(rel, &oper.span)?;
+                // let value = rel as i8;
                 emitter.emit(value as u8);
             }
 
