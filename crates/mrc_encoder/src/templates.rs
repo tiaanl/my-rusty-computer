@@ -334,7 +334,7 @@ pub const TEMPLATES: &[Template] = &[
     t!(XCHG, 2, REG_GPR|BITS_8, REG_GPR|BITS_8, &[C_BYTE, 0x86, C_MOD_REG_RM]),
     t!(XCHG, 2, MEMORY, REG_GPR|BITS_16, &[C_BYTE, 0x87, C_MOD_REG_RM]),
     t!(XCHG, 2, REG_GPR|BITS_16, REG_GPR|BITS_16, &[C_BYTE, 0x87, C_MOD_REG_RM]),
-    t!(XLAT, 0, 0, 0, &[C_BYTE, 0xD7]),
+    t!(XLATB, 0, 0, 0, &[C_BYTE, 0xD7]),
     t!(XOR, 2, REG_GPR|BITS_8, MEMORY, &[C_BYTE, 0x32, C_MOD_REG_RM]),
     t!(XOR, 2, REG_GPR|BITS_8, REG_GPR|BITS_8, &[C_BYTE, 0x32, C_MOD_REG_RM]),
     t!(XOR, 2, REG_GPR|BITS_16, MEMORY, &[C_BYTE, 0x33, C_MOD_REG_RM]),

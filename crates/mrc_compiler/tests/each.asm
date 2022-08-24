@@ -30,18 +30,18 @@ popf
 pushf
 
 ; nasm compiles there all as REP ?!
-;rep movsb
-;rep cmpsb
-;rep stosb
-;rep scasb
-;repne movsb
-;repne cmpsb
-;repne stosb
-;repne scasb
-;repnz movsb
-;repnz cmpsb
-;repnz stosb
-;repnz scasb
+rep movsb
+rep cmpsb
+rep stosb
+rep scasb
+repne movsb
+repne cmpsb
+repne stosb
+repne scasb
+repnz movsb
+repnz cmpsb
+repnz stosb
+repnz scasb
 
 ret
 sahf
@@ -59,5 +59,5 @@ cld
 std
 cli
 sti
-wait
+;wait
 xlat

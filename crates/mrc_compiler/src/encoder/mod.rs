@@ -239,7 +239,7 @@ pub fn encode(
 
         AAD => encode_group_aad(0x00, insn, offset, emitter),
 
-        XLAT => encode_group_xlat(0x00, insn, offset, emitter),
+        XLATB => encode_group_xlat(0x00, insn, offset, emitter),
 
         IN => encode_group_in(0x00, insn, offset, emitter),
 
@@ -875,7 +875,12 @@ fn encode_group_call(
             // exit
         }
 
-        OperandKind::Mem | OperandKind::Reg => todo!(),
+        OperandKind::Mem | OperandKind::Reg => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRM(FIRST_OPER_DST, 0xFF, 0x02)],
+        ),
 
         _ => Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
     }
@@ -1233,9 +1238,9 @@ pub struct OperandData {
 }
 
 impl OperandData {
-    pub fn empty() -> Self {
+    pub fn empty(span: ast::Span) -> Self {
         Self {
-            span: 0..0,
+            span,
             size: OperandSize::Unspecified,
             kind: OperandKind::Imm,
             segment_prefix: 0,
@@ -1387,7 +1392,10 @@ impl InstructionData {
         Self {
             operation: op,
             num_opers: 0,
-            opers: [OperandData::empty(), OperandData::empty()],
+            opers: [
+                OperandData::empty(span.clone()),
+                OperandData::empty(span.clone()),
+            ],
             opers_span: span,
         }
     }
@@ -1396,7 +1404,7 @@ impl InstructionData {
         Self {
             operation: op,
             num_opers: 1,
-            opers: [dst, OperandData::empty()],
+            opers: [dst, OperandData::empty(span.clone())],
             opers_span: span,
         }
     }
@@ -2119,7 +2127,7 @@ mod tests {
         assert_encode!(
             &[0xD7],
             insn!(
-                Operation::XLAT,
+                Operation::XLATB,
                 OperandData::indirect(
                     0..0,
                     ast::IndirectEncoding::Bx.encoding(),
@@ -2134,7 +2142,7 @@ mod tests {
         assert_encode!(
             &[0x2E, 0xD7],
             insn!(
-                Operation::XLAT,
+                Operation::XLATB,
                 OperandData::indirect(
                     0..0,
                     ast::IndirectEncoding::Bx.encoding(),
@@ -2149,7 +2157,7 @@ mod tests {
             assert_encode!(
                 &[0x3E, 0xD7],
                 insn!(
-                    Operation::XLAT,
+                    Operation::XLATB,
                     OperandData::indirect(
                         0..0,
                         ast::IndirectEncoding::Bx.encoding(),
@@ -2164,7 +2172,7 @@ mod tests {
             assert_encode!(
                 &[0xD7],
                 insn!(
-                    Operation::XLAT,
+                    Operation::XLATB,
                     OperandData::indirect(
                         0..0,
                         ast::IndirectEncoding::Bx.encoding(),

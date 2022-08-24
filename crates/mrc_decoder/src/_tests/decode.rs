@@ -3274,7 +3274,7 @@ fn test_d6() {
 fn test_d7() {
     test_decoder!(
         [0xD7, 0x60, 0x21, 0x55, 0xF8, 0xFC], // XLAT       BX
-        Instruction::new(Operation::XLAT, OperandSet::None)
+        Instruction::new(Operation::XLATB, OperandSet::None)
     );
 }
 

@@ -5,12 +5,7 @@ mod address;
 mod instruction;
 mod operand;
 mod operation;
-mod operation2;
 mod register;
-
-pub mod data;
-pub mod db;
-pub mod template;
 
 pub use address::{Address, RelativeToAddress};
 pub use instruction::{Instruction, OperandSet, Repeat};

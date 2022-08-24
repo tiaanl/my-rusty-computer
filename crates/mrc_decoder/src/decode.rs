@@ -522,7 +522,7 @@ pub fn decode_instruction(it: &mut impl Iterator<Item = u8>) -> Result<Instructi
 
         0xD6 => Ok(Instruction::new(Operation::SALC, OperandSet::None)),
 
-        0xD7 => Ok(Instruction::new(Operation::XLAT, OperandSet::None)),
+        0xD7 => Ok(Instruction::new(Operation::XLATB, OperandSet::None)),
 
         0xD8..=0xDF => {
             // This operation is executed in conjunction with a FPU.  From the CPU's point of view,

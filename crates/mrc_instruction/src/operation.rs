@@ -7,7 +7,7 @@ pub enum Operation {
     XCHG,  // Exchange
     IN,    // Input from
     OUT,   // Output to
-    XLAT,  // Translate byte to AL
+    XLATB, // Translate byte to AL
     LEA,   // Load effective address to register
     LDS,   // Load pointer to DS
     LES,   // Load pointer to ES
@@ -128,7 +128,7 @@ impl std::fmt::Display for Operation {
                 XCHG => "xchg",
                 IN => "in",
                 OUT => "out",
-                XLAT => "xlat",
+                XLATB => "xlatb",
                 LEA => "lea",
                 LDS => "lds",
                 LES => "les",
@@ -334,7 +334,7 @@ impl std::str::FromStr for Operation {
             "test" => TEST,
             "wait" => WAIT,
             "xchg" => XCHG,
-            "xlat" => XLAT,
+            "xlatb" => XLATB,
             "xor" => XOR,
             _ => return Err(()),
         })
