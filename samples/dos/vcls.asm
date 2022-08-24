@@ -2,6 +2,7 @@
 
 start:
     call bios_clear_screen
+    call bios_home_cursor
 
     mov ax, 0x4C00
     int 0x21
