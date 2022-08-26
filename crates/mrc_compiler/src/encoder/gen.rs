@@ -77,8 +77,17 @@ pub fn emit_codes(
                 //     oper.imm, offset, insn_size
                 // );
                 let rel = oper.imm as i32 - (offset as i32 + *insn_size as i32);
-                let value = require_value_is_signed_byte(rel, &oper.span)?;
-                // let value = rel as i8;
+                let value = match require_value_is_signed_byte(rel, &oper.span) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        return Err(EncodeError::RelativeJumpOutOfRange(
+                            err.span().clone(),
+                            OperandSize::Byte,
+                            true,
+                            rel,
+                        ))
+                    }
+                };
                 emitter.emit(value as u8);
             }
 

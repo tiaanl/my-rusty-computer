@@ -1,48 +1,15 @@
 use mrc_compiler::diagnostics::Diagnostics;
-use mrc_compiler::{ast::Span, compiler::Compiler, Parser};
+use mrc_compiler::{compiler::Compiler, Parser};
 use structopt::StructOpt;
-
-fn _print_source_pos(source: &str, span: &Span, path: Option<&str>) {
-    let prev_new_line = if let Some(found) = source[..span.start].rfind('\n') {
-        found + 1
-    } else {
-        0
-    };
-
-    let next_new_line = if let Some(found) = source[span.start..].find('\n') {
-        span.start + found
-    } else {
-        source.len()
-    };
-
-    let fragment = &source[prev_new_line..next_new_line];
-
-    let line = source[0..span.start].matches('\n').count() + 1;
-    let column = span.start - prev_new_line;
-
-    if let Some(path) = path {
-        println!("{}:{}:{}", path, line, column + 1);
-    }
-
-    println!("{}", fragment);
-    for _ in 0..column {
-        print!(" ");
-    }
-    let end = if span.start == span.end {
-        span.end + 1
-    } else {
-        span.end
-    };
-    for _ in span.start..end {
-        print!("^");
-    }
-    println!();
-}
 
 #[derive(StructOpt)]
 struct Opt {
     /// Source file to compile.
     source: String,
+
+    /// The location where to write the compiled binary.
+    #[structopt(short, default_value = "out.com")]
+    output: String,
 
     /// Only parse the source file and print the syntax tree.
     #[structopt(short)]
@@ -103,16 +70,9 @@ fn main() {
 
         match compiler.compile() {
             Ok(bytes) => {
-                // for b in &bytes {
-                //     print!("{:02X} ", b);
-                // }
-                // println!();
-                std::fs::write("out.com", bytes).unwrap();
-                // bytes.iter().for_each(|b| println!("{:?}", b));
+                std::fs::write(opts.output, bytes).unwrap();
             }
             Err(err) => {
-                // eprintln!("COMPILE ERROR: {}", err);
-                // print_source_pos(source, err.span(), Some(opts.source.as_str()));
                 diags.error(&err, err.span().clone());
             }
         }

@@ -1003,6 +1003,8 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             _ => illegal_operands(instruction),
         },
 
+        Operation::LOCK => {}
+
         _ => {
             // return Err(Error::IllegalInstruction);
             todo!("Instruction not implemented: {:?}", instruction)

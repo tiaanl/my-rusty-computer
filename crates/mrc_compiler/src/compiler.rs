@@ -4,7 +4,7 @@ use crate::encoder::{encode, value_is_signed_word, EncodeError, OperandData};
 use std::collections::{HashMap, LinkedList};
 use std::fmt::Formatter;
 
-const START_OFFSET: u16 = 0x100;
+const START_OFFSET: u16 = 0x0;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
@@ -180,10 +180,15 @@ impl Compiler {
         }
     }
 
+    /// Runs over all [Output]'s and calculate the size for each. If a label is not found, we
+    /// know we have unresolved references, so we have to run another pass. If we run a pass without
+    /// resolving any references, we return with the current number of unresolved references.
     fn resolve_labels(&mut self) -> Result<usize, CompileError> {
         let mut last_offset = u16::MAX;
 
         let mut labels = LinkedList::new();
+
+        let mut forward_references = 0;
 
         loop {
             // When we start a pass, there should not be any labels left over from a previous pass.
@@ -219,7 +224,9 @@ impl Compiler {
                                 }
 
                                 Ok(None) => {
-                                    unresolved_references += 1;
+                                    if output.unresolved_references {
+                                        forward_references += 1;
+                                    }
                                     output.unresolved_references = true;
                                     0
                                 }
@@ -270,6 +277,14 @@ impl Compiler {
 
             while let Some(label) = labels.pop_back() {
                 self.set_label_offset(&label, Some(offset));
+            }
+
+            // We finished a pass now, so if there were any forward references, then we try to
+            // resolve them with another pass.
+            println!("forward_references: {}", forward_references);
+            if forward_references != 0 {
+                forward_references = 0;
+                continue;
             }
 
             // If there are no more unresolved references, then we can stop.
@@ -427,7 +442,7 @@ impl Compiler {
 
         if let Err(err) = encode(&insn_data, offset, &mut size_in_bytes) {
             match err {
-                EncodeError::ImmediateOutOfRange(..) => Ok(None),
+                EncodeError::RelativeJumpOutOfRange(..) => Ok(None),
                 _ => Err(CompileError::EncodeError(err)),
             }
         } else {

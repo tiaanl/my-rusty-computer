@@ -60,7 +60,6 @@ pub enum EncodeError {
     OperandSizesDoNotMatch(ast::Span),
     InvalidOperandSize(ast::Span),
     ImmediateOutOfRange(ast::Span, i32, i32, i32),
-    #[allow(dead_code)]
     RelativeJumpOutOfRange(ast::Span, OperandSize, bool, i32),
 }
 
@@ -339,7 +338,10 @@ fn encode_group_add_or_adc_sbb_and_sub_xor_cmp(
                             emitter,
                             insn,
                             offset,
-                            &[Code::ModRM(FIRST_OPER_DST, 0x80, base >> 3)],
+                            &[
+                                Code::ModRM(FIRST_OPER_DST, 0x80, base >> 3),
+                                Code::ImmByte(FIRST_OPER_SRC),
+                            ],
                         )
                     }
                 }
@@ -1670,12 +1672,24 @@ mod tests {
             insn!(Operation::ADD, reg!(bx), imm!(0x10))
         );
 
-        assert_encode!(&[0x04, 0x10], insn!(Operation::ADD, reg!(al), imm!(0x10)));
+        assert_encode!(
+            &[0x04, 0x10],
+            insn!(Operation::ADD, reg!(al), imm!(0x10)),
+            "add al, 0x10"
+        );
+
         assert_encode!(
             &[0x83, 0xC0, 0x10],
             insn!(Operation::ADD, reg!(ax), imm!(0x10)),
             "add ax, 0x10"
         );
+
+        assert_encode!(
+            &[0x80, 0xC3, 0x10],
+            insn!(Operation::ADD, reg!(bl), imm!(0x10)),
+            "add bl, 0x10"
+        );
+
         assert_encode!(
             &[0x81, 0xC3, 0x00, 0x01],
             insn!(Operation::ADD, reg!(bx), imm!(0x100)),
