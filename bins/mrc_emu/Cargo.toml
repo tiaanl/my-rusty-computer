@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 bitflags = "1.3.2"
 dirs = "4.0"
-glium = "0.31"
+#glium = "0.31"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
 mrc_decoder = { path = "../../crates/mrc_decoder" }
 mrc_dos = { path = "../../crates/mrc_dos" }
@@ -14,6 +14,6 @@ mrc_emulator = { path = "../../crates/mrc_emulator" }
 mrc_instruction = { path = "../../crates/mrc_instruction" }
 mrc_screen = { path = "../../crates/mrc_screen" }
 pretty_env_logger = "0.4"
-serde = "1.0"
+serde = { version = "1.0", features = ["derive"] }
 structopt = "0.3"
 toml = "0.5"
