@@ -95,7 +95,7 @@ fn main() {
 
     let t = std::thread::spawn(
         move || {
-            while matches!(cpu.tick(), Ok(ExecuteResult::Continue)) {}
+            while matches!(cpu.cycle_once(), Ok(ExecuteResult::Continue)) {}
         },
     );
     t.join().unwrap();

@@ -4,7 +4,7 @@ mod state;
 pub use executor::{execute, ExecuteResult};
 pub use state::{ByteRegister, Flags, State, WordRegister};
 
-use crate::{error, Address, Bus, Cpu, ExecuteError, Port};
+use crate::{error, Address, Bus, Cpu, Port};
 use mrc_decoder::{decode_instruction, DecodedInstruction};
 use mrc_instruction::Segment;
 use Segment::CS;
@@ -37,7 +37,7 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
         self.state.ip = offset;
     }
 
-    pub fn tick(&mut self) -> Result<ExecuteResult, error::Error> {
+    pub fn cycle_once(&mut self) -> Result<ExecuteResult, error::Error> {
         const PRINT: bool = false;
 
         let cs = self.state.segment(CS);
@@ -78,7 +78,7 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
 
     pub fn start(&mut self) -> Result<(), error::Error> {
         loop {
-            if let Ok(result) = self.tick() {
+            if let Ok(result) = self.cycle_once() {
                 if result == ExecuteResult::Stop {
                     break;
                 }
@@ -119,8 +119,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Cpu for CPU<D, I> {
         Self::reset(self)
     }
 
-    fn step(&mut self) -> Result<usize, ExecuteError> {
-        Self::tick(self).unwrap();
-        Ok(0)
+    fn cycle(&mut self, _cycles: usize) {
+        Self::cycle_once(self).unwrap();
     }
 }

@@ -1,4 +1,8 @@
-use crate::{segment_and_offset, Address, Bus, ExecuteError, Port};
+mod calc;
+mod mrrm;
+mod ops;
+
+use crate::{segment_and_offset, Address, Bus, Port};
 use bitflags::bitflags;
 
 #[allow(dead_code)]
@@ -55,16 +59,43 @@ pub struct Intel8088<D: Bus<Address>, I: Bus<Port>> {
     data_bus: D,
     #[allow(dead_code)]
     io_bus: I,
+
+    // States
+    halted: bool,
+
+    /// The amount of cycles that was consumed so far and that needs to be processed.
+    to_consume: usize,
+
+    /// Amount of cycles since power on.
+    cycles: usize,
+
+    #[cfg(debug_assertions)]
+    last_op_code: u8,
 }
 
-struct OpCodeEntry<D: Bus<Address>, I: Bus<Port>> {
-    exec: fn(&mut Intel8088<D, I>, u8) -> usize,
+trait Inc: Copy {
+    fn inc(self) -> Self;
 }
 
-macro_rules! op {
-    ($op_code:literal, $exec:ident) => {{
-        OpCodeEntry { exec: Self::$exec }
-    }};
+impl Inc for Address {
+    fn inc(self) -> Self {
+        self.wrapping_add(1)
+    }
+}
+
+struct BusIter<'a, S: Inc, B: Bus<S>> {
+    bus: &'a B,
+    pos: S,
+}
+
+impl<'a, S: Inc, B: Bus<S>> Iterator for BusIter<'a, S, B> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let pos = self.pos;
+        self.pos = pos.inc();
+        Some(self.bus.read(pos).unwrap())
+    }
 }
 
 impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
@@ -73,18 +104,52 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
             registers: [0; 8],
             segments: [0; 4],
             ip: 0,
-            flags: Flags::empty(),
+            flags: Flags::RESERVED_1,
 
             segment_override: None,
 
             data_bus,
             io_bus,
+
+            halted: false,
+
+            to_consume: 0,
+            cycles: 0,
+
+            #[cfg(debug_assertions)]
+            last_op_code: 0x00,
         }
     }
 
     pub fn _print_state(&self) {
+        macro_rules! do_flag {
+            ($name:ident, $char:literal) => {{
+                if self.flags.contains(Flags::$name) {
+                    $char
+                } else {
+                    "-"
+                }
+            }};
+        }
+
+        let flags = format!(
+            "{}{}{}{}{}{}{}{}{}{}{}{}",
+            do_flag!(CARRY, "C"),
+            do_flag!(RESERVED_1, "R"),
+            do_flag!(PARITY, "P"),
+            do_flag!(RESERVED_3, "R"),
+            do_flag!(AUX_CARRY, "A"),
+            do_flag!(RESERVED_5, "R"),
+            do_flag!(ZERO, "Z"),
+            do_flag!(SIGN, "S"),
+            do_flag!(TRAP, "T"),
+            do_flag!(INTERRUPT, "I"),
+            do_flag!(DIRECTION, "D"),
+            do_flag!(OVERFLOW, "O"),
+        );
+
         println!(
-            "AX:{:04X} BX:{:04X} CX:{:04X} DX:{:04X} SP:{:04X} BP:{:04X} SI:{:04X} DI:{:04X} | ES:{:04X} CS:{:04X} SS:{:04X} DS:{:04X} | IP:{:04X} FL:{:04X}",
+            "AX:{:04X} BX:{:04X} CX:{:04X} DX:{:04X} SP:{:04X} BP:{:04X} SI:{:04X} DI:{:04X} | ES:{:04X} CS:{:04X} SS:{:04X} DS:{:04X} | IP:{:04X} FL:{} | {}",
             self.registers[AX],
             self.registers[BX],
             self.registers[CX],
@@ -98,7 +163,8 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
             self.segments[SS],
             self.segments[DS],
             self.ip,
-            self.flags,
+            flags,
+            self.cycles,
         );
     }
 
@@ -113,440 +179,147 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         Ok(byte)
     }
 
-    fn execute(&mut self) -> usize {
+    fn execute_instruction(&mut self) -> usize {
+        if self.halted {
+            return 0;
+        }
+
+        self._print_state();
+        print!("{:04X}:{:04X}  ", self.segments[CS], self.ip);
+
+        let decode_addr = self.flat_address();
+
+        #[cfg(debug_assertions)]
+        let pre_cycles = self.to_consume;
+
         let op_code = self.fetch().unwrap();
-        let oce = &Self::OP_CODE_TABLE[op_code as usize];
-        (oce.exec)(self, op_code)
+
+        if cfg!(debug_assertions) {
+            self.last_op_code = op_code;
+        }
+
+        self.execute_op_code(op_code);
+
+        let mut it = BusIter {
+            bus: &self.data_bus,
+            pos: decode_addr,
+        };
+        let insn = mrc_decoder::decode_instruction(&mut it).unwrap();
+        println!(
+            "{}",
+            mrc_instruction::At {
+                item: &insn,
+                addr: Some(mrc_instruction::Address {
+                    segment: self.segments[CS],
+                    offset: self.ip,
+                })
+            }
+        );
+
+        #[cfg(debug_assertions)]
+        debug_assert_ne!(
+            pre_cycles, self.to_consume,
+            "Operation should have consumed cycles (op_code: {op_code:02X})"
+        );
+
+        0
+    }
+
+    #[inline(always)]
+    fn consume_cycles(&mut self, cycles: usize) {
+        self.to_consume += cycles;
+    }
+
+    fn write_register_byte(&mut self, encoding: u8, value: u8) {
+        let encoding = encoding as usize;
+        if encoding <= 0b111 {
+            if encoding & 0b100 == 0b100 {
+                self.registers[encoding & 0b011] =
+                    (self.registers[encoding] & 0x00FF) | ((value as u16) << 8)
+            } else {
+                self.registers[encoding] = (self.registers[encoding] & 0xFF00) | (value as u16)
+            }
+        } else {
+            unreachable!("Invalid register encoding.");
+        }
+    }
+
+    fn write_register_word(&mut self, encoding: u8, value: u16) {
+        let encoding = encoding as usize;
+        if encoding <= 0b111 {
+            self.registers[encoding] = value;
+        } else {
+            unreachable!("Invalid register encoding.");
+        }
     }
 }
 
-enum Operand {
-    Register(usize),
-    #[allow(dead_code)]
-    Direct(u16),
-    #[allow(dead_code)]
-    Indirect(usize, i16),
+#[derive(Clone, Copy)]
+pub(crate) enum Operand {
+    Register(u8),
+    Memory(Address),
 }
 
 impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
-    fn address_from_operand(
-        &mut self,
-        operand: &Operand,
-        segment_override: Option<usize>,
-    ) -> Address {
-        match operand {
-            Operand::Register(_) => unreachable!("Address of register is not possible!"),
-            Operand::Direct(offset) => {
-                // Direct memory addressing uses DS as the default, unless overridden.
-                let segment = segment_override.unwrap_or(DS);
-                segment_and_offset(self.segments[segment], *offset)
-            }
-            Operand::Indirect(encoding, displacement) => {
-                let mut default_segment = DS;
-                let offset = match *encoding {
-                    0b000 => self.registers[BX].wrapping_add(self.registers[SI]),
-                    0b001 => self.registers[BX].wrapping_add(self.registers[DI]),
-                    0b010 => {
-                        default_segment = SS;
-                        self.registers[BP].wrapping_add(self.registers[SI])
-                    }
-                    0b011 => {
-                        default_segment = SS;
-                        self.registers[BP].wrapping_add(self.registers[DI])
-                    }
-                    0b100 => self.registers[SI],
-                    0b101 => self.registers[DI],
-                    0b110 => {
-                        default_segment = SS;
-                        self.registers[BP]
-                    }
-                    0b111 => self.registers[BX],
-                    _ => unreachable!("Invalid encoding"),
-                }
-                .wrapping_add(*displacement as u16);
-                let segment = segment_override.unwrap_or(default_segment);
-                segment_and_offset(self.segments[segment], offset)
-            }
-        }
-    }
-
-    fn mod_reg_rm_to_operands(&mut self, mrrm: u8) -> (Operand, Operand) {
-        let first = Operand::Register(((mrrm >> 3) & 0b111) as usize);
-
-        let second = match mrrm >> 6 {
-            0b00 => {
-                let rm = mrrm & 0b111;
-                if rm == 0b110 {
-                    let lo = self.fetch().unwrap();
-                    let hi = self.fetch().unwrap();
-                    Operand::Direct(u16::from_le_bytes([lo, hi]))
-                } else {
-                    todo!()
-                }
-            }
-            0b01 => todo!(),
-            0b10 => todo!(),
-            0b11 => Operand::Register((mrrm & 0b111) as usize),
-            _ => unreachable!(),
-        };
-
-        (first, second)
-    }
-
-    fn read_operand_byte(&mut self, operand: &Operand) -> u8 {
+    fn read_operand_byte(&mut self, operand: Operand) -> u8 {
         match operand {
             Operand::Register(encoding) => {
                 if (encoding & 0b100) == 0 {
-                    self.registers[encoding & 0b011] as u8
+                    self.registers[(encoding & 0b011) as usize] as u8
                 } else {
-                    (self.registers[encoding & 0b011] >> 8) as u8
+                    (self.registers[(encoding & 0b011) as usize] >> 8) as u8
                 }
             }
 
-            o @ Operand::Direct(..) | o @ Operand::Indirect(..) => {
-                let addr = self.address_from_operand(o, self.segment_override);
-                self.data_bus.read(addr).unwrap()
-            }
+            Operand::Memory(addr) => self.data_bus.read(addr).unwrap(),
         }
     }
 
-    fn read_operand_word(&mut self, operand: &Operand) -> u16 {
+    fn read_operand_word(&mut self, operand: Operand) -> u16 {
         match operand {
-            Operand::Register(encoding) => self.registers[encoding & 0b011],
+            Operand::Register(encoding) => self.registers[(encoding & 0b011) as usize],
 
-            o @ Operand::Direct(..) | o @ Operand::Indirect(..) => {
-                let addr = self.address_from_operand(o, self.segment_override);
-
+            Operand::Memory(addr) => {
                 let lo = self.data_bus.read(addr).unwrap();
-                let hi = self.data_bus.read(addr + 1).unwrap();
+                let hi = self.data_bus.read(addr.wrapping_add(1)).unwrap();
                 u16::from_le_bytes([lo, hi])
             }
         }
     }
 
-    fn write_operand_byte(&mut self, operand: &Operand, value: u8) {
+    fn write_operand_byte(&mut self, operand: Operand, value: u8) {
         match operand {
             Operand::Register(encoding) => {
                 if (encoding & 0b100) == 0 {
-                    let mut temp = self.registers[*encoding & 0b011] & 0xFF00;
+                    let encoding = (encoding & 0b011) as usize;
+                    let mut temp = self.registers[encoding] & 0xFF00;
                     temp |= value as u16;
-                    self.registers[encoding & 0b011] = temp;
+                    self.registers[encoding] = temp;
                 } else {
-                    let mut temp = self.registers[*encoding & 0b011] & 0x00FF;
+                    let encoding = (encoding & 0b011) as usize;
+                    let mut temp = self.registers[encoding] & 0x00FF;
                     temp |= (value as u16) << 8;
-                    self.registers[encoding & 0b011] = temp;
+                    self.registers[encoding] = temp;
                 }
             }
-            o @ Operand::Direct(..) | o @ Operand::Indirect(..) => {
-                let addr = self.address_from_operand(o, self.segment_override);
+            Operand::Memory(addr) => {
                 self.data_bus.write(addr, value).unwrap();
             }
         }
     }
 
-    fn write_operand_word(&mut self, operand: &Operand, value: u16) {
+    fn write_operand_word(&mut self, operand: Operand, value: u16) {
         match operand {
             Operand::Register(encoding) => {
-                self.registers[encoding & 0b011] = value;
+                let encoding = (encoding & 0b011) as usize;
+                self.registers[encoding] = value;
             }
-            o @ Operand::Direct(..) | o @ Operand::Indirect(..) => {
-                let addr = self.address_from_operand(o, self.segment_override);
+            Operand::Memory(addr) => {
                 let [lo, hi] = value.to_le_bytes();
                 self.data_bus.write(addr, lo).unwrap();
-                self.data_bus.write(addr + 1, hi).unwrap();
+                self.data_bus.write(addr.wrapping_add(1), hi).unwrap();
             }
         }
-    }
-}
-
-impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
-    const OP_CODE_TABLE: [OpCodeEntry<D, I>; 0x100] = [
-        op!(0x00, op_add_rm8_reg8),
-        op!(0x01, op_add_rm16_reg16),
-        op!(0x02, op_invalid),
-        op!(0x03, op_invalid),
-        op!(0x04, op_invalid),
-        op!(0x05, op_invalid),
-        op!(0x06, op_invalid),
-        op!(0x07, op_invalid),
-        op!(0x08, op_invalid),
-        op!(0x09, op_invalid),
-        op!(0x0A, op_invalid),
-        op!(0x0B, op_invalid),
-        op!(0x0C, op_invalid),
-        op!(0x0D, op_invalid),
-        op!(0x0E, op_invalid),
-        op!(0x0F, op_invalid),
-        op!(0x10, op_invalid),
-        op!(0x11, op_invalid),
-        op!(0x12, op_invalid),
-        op!(0x13, op_invalid),
-        op!(0x14, op_invalid),
-        op!(0x15, op_invalid),
-        op!(0x16, op_invalid),
-        op!(0x17, op_invalid),
-        op!(0x18, op_invalid),
-        op!(0x19, op_invalid),
-        op!(0x1A, op_invalid),
-        op!(0x1B, op_invalid),
-        op!(0x1C, op_invalid),
-        op!(0x1D, op_invalid),
-        op!(0x1E, op_invalid),
-        op!(0x1F, op_invalid),
-        op!(0x20, op_invalid),
-        op!(0x21, op_invalid),
-        op!(0x22, op_invalid),
-        op!(0x23, op_invalid),
-        op!(0x24, op_invalid),
-        op!(0x25, op_invalid),
-        op!(0x26, op_invalid),
-        op!(0x27, op_invalid),
-        op!(0x28, op_invalid),
-        op!(0x29, op_invalid),
-        op!(0x2A, op_invalid),
-        op!(0x2B, op_invalid),
-        op!(0x2C, op_invalid),
-        op!(0x2D, op_invalid),
-        op!(0x2E, op_invalid),
-        op!(0x2F, op_invalid),
-        op!(0x30, op_invalid),
-        op!(0x31, op_invalid),
-        op!(0x32, op_invalid),
-        op!(0x33, op_invalid),
-        op!(0x34, op_invalid),
-        op!(0x35, op_invalid),
-        op!(0x36, op_invalid),
-        op!(0x37, op_invalid),
-        op!(0x38, op_invalid),
-        op!(0x39, op_invalid),
-        op!(0x3A, op_invalid),
-        op!(0x3B, op_invalid),
-        op!(0x3C, op_invalid),
-        op!(0x3D, op_invalid),
-        op!(0x3E, op_invalid),
-        op!(0x3F, op_invalid),
-        op!(0x40, op_invalid),
-        op!(0x41, op_invalid),
-        op!(0x42, op_invalid),
-        op!(0x43, op_invalid),
-        op!(0x44, op_invalid),
-        op!(0x45, op_invalid),
-        op!(0x46, op_invalid),
-        op!(0x47, op_invalid),
-        op!(0x48, op_invalid),
-        op!(0x49, op_invalid),
-        op!(0x4A, op_invalid),
-        op!(0x4B, op_invalid),
-        op!(0x4C, op_invalid),
-        op!(0x4D, op_invalid),
-        op!(0x4E, op_invalid),
-        op!(0x4F, op_invalid),
-        op!(0x50, op_invalid),
-        op!(0x51, op_invalid),
-        op!(0x52, op_invalid),
-        op!(0x53, op_invalid),
-        op!(0x54, op_invalid),
-        op!(0x55, op_invalid),
-        op!(0x56, op_invalid),
-        op!(0x57, op_invalid),
-        op!(0x58, op_invalid),
-        op!(0x59, op_invalid),
-        op!(0x5A, op_invalid),
-        op!(0x5B, op_invalid),
-        op!(0x5C, op_invalid),
-        op!(0x5D, op_invalid),
-        op!(0x5E, op_invalid),
-        op!(0x5F, op_invalid),
-        op!(0x60, op_invalid),
-        op!(0x61, op_invalid),
-        op!(0x62, op_invalid),
-        op!(0x63, op_invalid),
-        op!(0x64, op_invalid),
-        op!(0x65, op_invalid),
-        op!(0x66, op_invalid),
-        op!(0x67, op_invalid),
-        op!(0x68, op_invalid),
-        op!(0x69, op_invalid),
-        op!(0x6A, op_invalid),
-        op!(0x6B, op_invalid),
-        op!(0x6C, op_invalid),
-        op!(0x6D, op_invalid),
-        op!(0x6E, op_invalid),
-        op!(0x6F, op_invalid),
-        op!(0x70, op_invalid),
-        op!(0x71, op_invalid),
-        op!(0x72, op_invalid),
-        op!(0x73, op_invalid),
-        op!(0x74, op_invalid),
-        op!(0x75, op_invalid),
-        op!(0x76, op_invalid),
-        op!(0x77, op_invalid),
-        op!(0x78, op_invalid),
-        op!(0x79, op_invalid),
-        op!(0x7A, op_invalid),
-        op!(0x7B, op_invalid),
-        op!(0x7C, op_invalid),
-        op!(0x7D, op_invalid),
-        op!(0x7E, op_invalid),
-        op!(0x7F, op_invalid),
-        op!(0x80, op_invalid),
-        op!(0x81, op_invalid),
-        op!(0x82, op_invalid),
-        op!(0x83, op_invalid),
-        op!(0x84, op_invalid),
-        op!(0x85, op_invalid),
-        op!(0x86, op_invalid),
-        op!(0x87, op_invalid),
-        op!(0x88, op_invalid),
-        op!(0x89, op_invalid),
-        op!(0x8A, op_invalid),
-        op!(0x8B, op_invalid),
-        op!(0x8C, op_invalid),
-        op!(0x8D, op_invalid),
-        op!(0x8E, op_invalid),
-        op!(0x8F, op_invalid),
-        op!(0x90, op_invalid),
-        op!(0x91, op_invalid),
-        op!(0x92, op_invalid),
-        op!(0x93, op_invalid),
-        op!(0x94, op_invalid),
-        op!(0x95, op_invalid),
-        op!(0x96, op_invalid),
-        op!(0x97, op_invalid),
-        op!(0x98, op_invalid),
-        op!(0x99, op_invalid),
-        op!(0x9A, op_invalid),
-        op!(0x9B, op_invalid),
-        op!(0x9C, op_invalid),
-        op!(0x9D, op_invalid),
-        op!(0x9E, op_invalid),
-        op!(0x9F, op_invalid),
-        op!(0xA0, op_invalid),
-        op!(0xA1, op_invalid),
-        op!(0xA2, op_invalid),
-        op!(0xA3, op_invalid),
-        op!(0xA4, op_invalid),
-        op!(0xA5, op_invalid),
-        op!(0xA6, op_invalid),
-        op!(0xA7, op_invalid),
-        op!(0xA8, op_invalid),
-        op!(0xA9, op_invalid),
-        op!(0xAA, op_invalid),
-        op!(0xAB, op_invalid),
-        op!(0xAC, op_invalid),
-        op!(0xAD, op_invalid),
-        op!(0xAE, op_invalid),
-        op!(0xAF, op_invalid),
-        op!(0xB0, op_invalid),
-        op!(0xB1, op_invalid),
-        op!(0xB2, op_invalid),
-        op!(0xB3, op_invalid),
-        op!(0xB4, op_invalid),
-        op!(0xB5, op_invalid),
-        op!(0xB6, op_invalid),
-        op!(0xB7, op_invalid),
-        op!(0xB8, op_invalid),
-        op!(0xB9, op_invalid),
-        op!(0xBA, op_invalid),
-        op!(0xBB, op_invalid),
-        op!(0xBC, op_invalid),
-        op!(0xBD, op_invalid),
-        op!(0xBE, op_invalid),
-        op!(0xBF, op_invalid),
-        op!(0xC0, op_invalid),
-        op!(0xC1, op_invalid),
-        op!(0xC2, op_invalid),
-        op!(0xC3, op_invalid),
-        op!(0xC4, op_invalid),
-        op!(0xC5, op_invalid),
-        op!(0xC6, op_invalid),
-        op!(0xC7, op_invalid),
-        op!(0xC8, op_invalid),
-        op!(0xC9, op_invalid),
-        op!(0xCA, op_invalid),
-        op!(0xCB, op_invalid),
-        op!(0xCC, op_invalid),
-        op!(0xCD, op_invalid),
-        op!(0xCE, op_invalid),
-        op!(0xCF, op_invalid),
-        op!(0xD0, op_invalid),
-        op!(0xD1, op_invalid),
-        op!(0xD2, op_invalid),
-        op!(0xD3, op_invalid),
-        op!(0xD4, op_invalid),
-        op!(0xD5, op_invalid),
-        op!(0xD6, op_invalid),
-        op!(0xD7, op_invalid),
-        op!(0xD8, op_invalid),
-        op!(0xD9, op_invalid),
-        op!(0xDA, op_invalid),
-        op!(0xDB, op_invalid),
-        op!(0xDC, op_invalid),
-        op!(0xDD, op_invalid),
-        op!(0xDE, op_invalid),
-        op!(0xDF, op_invalid),
-        op!(0xE0, op_invalid),
-        op!(0xE1, op_invalid),
-        op!(0xE2, op_invalid),
-        op!(0xE3, op_invalid),
-        op!(0xE4, op_invalid),
-        op!(0xE5, op_invalid),
-        op!(0xE6, op_invalid),
-        op!(0xE7, op_invalid),
-        op!(0xE8, op_invalid),
-        op!(0xE9, op_invalid),
-        op!(0xEA, op_invalid),
-        op!(0xEB, op_invalid),
-        op!(0xEC, op_invalid),
-        op!(0xED, op_invalid),
-        op!(0xEE, op_invalid),
-        op!(0xEF, op_invalid),
-        op!(0xF0, op_invalid),
-        op!(0xF1, op_invalid),
-        op!(0xF2, op_invalid),
-        op!(0xF3, op_invalid),
-        op!(0xF4, op_invalid),
-        op!(0xF5, op_invalid),
-        op!(0xF6, op_invalid),
-        op!(0xF7, op_invalid),
-        op!(0xF8, op_invalid),
-        op!(0xF9, op_invalid),
-        op!(0xFA, op_invalid),
-        op!(0xFB, op_invalid),
-        op!(0xFC, op_invalid),
-        op!(0xFD, op_invalid),
-        op!(0xFE, op_invalid),
-        op!(0xFF, op_invalid),
-    ];
-
-    fn op_add_rm8_reg8(&mut self, _op_code: u8) -> usize {
-        let mrrm = self.fetch().unwrap();
-        let (src_op, dst_op) = self.mod_reg_rm_to_operands(mrrm);
-
-        let dst = self.read_operand_byte(&dst_op);
-        let src = self.read_operand_byte(&src_op);
-
-        let dst = Self::add_byte(dst, src, &mut self.flags);
-        self.write_operand_byte(&dst_op, dst);
-
-        0
-    }
-
-    fn op_add_rm16_reg16(&mut self, _op_code: u8) -> usize {
-        let mrrm = self.fetch().unwrap();
-        let (src_op, dst_op) = self.mod_reg_rm_to_operands(mrrm);
-
-        let dst = self.read_operand_word(&dst_op);
-        let src = self.read_operand_word(&src_op);
-
-        let dst = Self::add_word(dst, src, &mut self.flags);
-        self.write_operand_word(&dst_op, dst);
-
-        0
-    }
-
-    fn op_invalid(&mut self, _op_code: u8) -> usize {
-        unreachable!()
     }
 }
 
@@ -577,14 +350,27 @@ impl<D: Bus<Address>, I: Bus<Port>> crate::Cpu for Intel8088<D, I> {
         self.registers = [0; 8];
         self.segments = [0x0000, 0xF000, 0x0000, 0x0000];
         self.ip = 0xFFF0;
-        self.flags = Flags::empty();
+        self.flags = Flags::RESERVED_1;
         self.segment_override = None;
+        self.cycles = 0;
     }
 
-    fn step(&mut self) -> Result<usize, ExecuteError> {
-        self._print_state();
-        self.execute();
-        Ok(0)
+    fn cycle(&mut self, cycles: usize) {
+        let mut cycles_to_run = cycles;
+
+        while cycles_to_run >= self.to_consume {
+            cycles_to_run -= self.to_consume;
+            self.cycles += self.to_consume;
+            self.to_consume = 0;
+
+            // Execute the next instructon.
+            self.execute_instruction();
+        }
+
+        // If the amount of cycles to consume did not fit into this run, then we will do it on the
+        // next run.
+        self.to_consume -= cycles_to_run;
+        self.cycles += cycles_to_run;
     }
 }
 
@@ -648,14 +434,14 @@ mod tests {
         let mut cpu = Intel8088::new(&mut data[..], BusPrinter { name: "io" });
         cpu.registers[AX] = 0x0101;
         cpu.registers[CX] = 0x0102;
-        cpu.step().unwrap();
+        cpu.cycle(1);
         assert_eq!(0x0103, cpu.registers[AX]);
 
         let data = &mut [0x00_u8, 0b00_001_110, 0x04, 0x00, 0x01];
 
         let mut cpu = Intel8088::new(&mut data[..], BusPrinter { name: "io" });
         cpu.registers[CX] = 0x0102;
-        cpu.step().unwrap();
+        cpu.cycle(1);
         assert_eq!(0x03, data[4]);
     }
 
@@ -668,14 +454,14 @@ mod tests {
         let mut cpu = Intel8088::new(&mut data[..], BusPrinter { name: "io" });
         cpu.registers[AX] = 0x0101;
         cpu.registers[CX] = 0x0102;
-        cpu.step().unwrap();
+        cpu.cycle(1);
         assert_eq!(0x0203, cpu.registers[AX]);
 
         let data = &mut [0x01_u8, 0b00_001_110, 0x04, 0x00, 0x02, 0x01];
 
         let mut cpu = Intel8088::new(&mut data[..], BusPrinter { name: "io" });
         cpu.registers[CX] = 0x0102;
-        cpu.step().unwrap();
+        cpu.cycle(1);
         assert_eq!(0x04, data[4]);
         assert_eq!(0x02, data[5]);
     }

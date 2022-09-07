@@ -2,12 +2,14 @@
 //! microprocessor (and friends).
 
 mod address;
+mod display;
 mod instruction;
 mod operand;
 mod operation;
 mod register;
 
 pub use address::{Address, RelativeToAddress};
+pub use display::At;
 pub use instruction::{Instruction, OperandSet, Repeat};
 pub use operand::{AddressingMode, Displacement, Immediate, Operand, OperandSize};
 pub use operation::Operation;

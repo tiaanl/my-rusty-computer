@@ -1,5 +1,6 @@
+use crate::display::At;
 use crate::{Operand, Operation};
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum OperandSet {
@@ -9,14 +10,12 @@ pub enum OperandSet {
 }
 
 impl Display for OperandSet {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            OperandSet::None => Ok(()),
-            OperandSet::Destination(destination) => destination.fmt(f),
-            OperandSet::DestinationAndSource(destination, source) => {
-                write!(f, "{}, {}", destination, source)
-            }
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        At {
+            item: self,
+            addr: None,
         }
+        .fmt(f)
     }
 }
 
@@ -79,19 +78,11 @@ impl Instruction {
 }
 
 impl Display for Instruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.repeat {
-            None => match self.operands {
-                OperandSet::None => write!(f, "{:<10}", self.operation),
-                _ => write!(f, "{:<10} {}", self.operation, &self.operands),
-            },
-            Some(rep) => {
-                match rep {
-                    Repeat::Equal => write!(f, "rep "),
-                    Repeat::NotEqual => write!(f, "repz "),
-                }?;
-                self.operation.fmt(f)
-            }
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        At {
+            item: self,
+            addr: None,
         }
+        .fmt(f)
     }
 }

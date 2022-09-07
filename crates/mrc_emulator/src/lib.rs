@@ -20,14 +20,11 @@ pub fn segment_and_offset(segment: u16, offset: u16) -> Address {
 /// The type used for reading from an I/O bus.
 pub type Port = u16;
 
-#[derive(Debug)]
-pub enum ExecuteError {}
-
 /// Interface for a central processing unit.
 pub trait Cpu {
     /// Reset the CPU to it's initial state.
     fn reset(&mut self);
 
-    /// Step the CPU a single instruction. Returns the amount of clock cycles used.
-    fn step(&mut self) -> Result<usize, ExecuteError>;
+    /// Cycle the CPU by the amount of clock cycles given.
+    fn cycle(&mut self, cycles: usize);
 }

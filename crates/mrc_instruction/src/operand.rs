@@ -1,3 +1,4 @@
+use crate::display::At;
 use crate::{Address, Segment, SizedRegisterEncoding};
 use std::str::FromStr;
 
@@ -65,15 +66,11 @@ pub enum Displacement {
 
 impl std::fmt::Display for Displacement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Displacement::None => Ok(()),
-            Displacement::Byte(offset) => {
-                write!(f, "{:+}", offset)
-            }
-            Displacement::Word(offset) => {
-                write!(f, "{:+}", offset)
-            }
+        At {
+            item: self,
+            addr: None,
         }
+        .fmt(f)
     }
 }
 
@@ -139,50 +136,12 @@ impl From<Immediate> for Operand {
     }
 }
 
-#[inline]
-fn write_segment_prefix(f: &mut std::fmt::Formatter<'_>, segment: Segment) -> std::fmt::Result {
-    match segment {
-        Segment::ES => write!(f, "es:"),
-        Segment::CS => write!(f, "cs:"),
-        Segment::SS => write!(f, "ss:"),
-        Segment::DS => Ok(()),
-    }
-}
-
 impl std::fmt::Display for Operand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Operand::Direct(segment, displacement, operand_size) => {
-                match operand_size {
-                    OperandSize::Byte => "byte ".fmt(f)?,
-                    OperandSize::Word => "word ".fmt(f)?,
-                }
-                "[".fmt(f)?;
-                write_segment_prefix(f, *segment)?;
-                write!(f, "{:#06x}]", displacement)
-            }
-
-            Operand::Indirect(segment, encoding, displacement, operand_size) => {
-                match operand_size {
-                    OperandSize::Byte => "byte ".fmt(f)?,
-                    OperandSize::Word => "word ".fmt(f)?,
-                }
-                "[".fmt(f)?;
-                write_segment_prefix(f, *segment)?;
-                write!(f, "{}{}]", encoding, displacement)
-            }
-
-            Operand::Register(SizedRegisterEncoding(register, operand_size)) => {
-                write!(f, "{}", SizedRegisterEncoding(*register, *operand_size))
-            }
-
-            Operand::Segment(encoding) => write!(f, "{}", encoding),
-
-            Operand::Immediate(value) => write!(f, "{}", value),
-
-            Operand::SegmentAndOffset(address) => address.fmt(f),
-
-            Operand::Displacement(displacement) => displacement.fmt(f),
+        At {
+            item: self,
+            addr: None,
         }
+        .fmt(f)
     }
 }

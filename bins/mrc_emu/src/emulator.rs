@@ -249,13 +249,12 @@ impl Emulator {
         }
     }
 
-    /// Perform a single tick of the CPU.  Typically executes a single instruction.
+    /// Perform a sincle clock cycle on the system.
     fn cycle(&mut self) {
         self.pit.borrow_mut().tick();
-        // if let Ok(ExecuteResult::Stop) = self.cpu.step() {
-        //     self.status = EmulatorStatus::Paused;
-        // }
-        self.cpu.step().unwrap();
+
+        // For not just run for an arbitraty amount of cycles.
+        self.cpu.cycle(50);
         self.update_debugger_state();
     }
 
