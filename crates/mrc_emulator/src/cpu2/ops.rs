@@ -28,8 +28,8 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         op!(0x07, op_invalid),
         op!(0x08, op_invalid),
         op!(0x09, op_invalid),
-        op!(0x0A, op_invalid),
-        op!(0x0B, op_invalid),
+        op!(0x0A, op_or_reg8_rm8),
+        op!(0x0B, op_or_reg16_rm16),
         op!(0x0C, op_invalid),
         op!(0x0D, op_invalid),
         op!(0x0E, op_invalid),
@@ -322,6 +322,16 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
         let dst = Self::add_word(dst, src, &mut self.flags);
         self.write_operand_word(dst_op, dst);
+    }
+
+    // 0A
+    fn op_or_reg8_rm8(&mut self) {
+        self.mod_reg_rm_op(|d: u8, s: u8, flags| calc::or(d, s, flags));
+    }
+
+    // 0B
+    fn op_or_reg16_rm16(&mut self) {
+        self.mod_reg_rm_op(|d: u16, s: u16, flags| calc::or(d, s, flags));
     }
 
     // 32
@@ -711,7 +721,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     // D0, D2
     fn op_group_d0_byte(&mut self, count: u8) {
         let mrrm = self.fetch().unwrap();
-        let (op, src) = self.mod_rm_to_operands(mrrm);
+        let (op, src_op) = self.mod_rm_to_operands(mrrm);
 
         if count == 0 {
             // 8 for register
@@ -720,10 +730,10 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
             return;
         }
 
-        let value = self.read_operand_byte(src);
+        let value = self.read_operand(src_op);
 
         let result = match op {
-            0b000 => calc::rol(value, count, &mut self.flags),
+            0b000 => calc::rol(value, count.into(), &mut self.flags),
             0b001 => calc::ror(value, count, &mut self.flags),
             0b010 => calc::rcl(value, count, &mut self.flags),
             0b011 => calc::rcr(value, count, &mut self.flags),
@@ -738,9 +748,9 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         self.flags
             .set(Flags::OVERFLOW, ((result ^ value) & 0x80) != 0);
 
-        self.write_operand_byte(src, result);
+        self.write_operand(src_op, result);
 
-        self.consume_cycles(match src {
+        self.consume_cycles(match src_op {
             Operand::Register(..) => 8 + 4 * count,
             Operand::Memory(..) => 20 + 4 * count,
         } as usize);

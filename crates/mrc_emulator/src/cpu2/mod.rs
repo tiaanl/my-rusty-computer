@@ -5,29 +5,18 @@ mod ops;
 use crate::{segment_and_offset, Address, Bus, Port};
 use bitflags::bitflags;
 
-#[allow(dead_code)]
 pub const ES: usize = 0b00;
 pub const CS: usize = 0b01;
-#[allow(dead_code)]
 pub const SS: usize = 0b10;
-#[allow(dead_code)]
 pub const DS: usize = 0b11;
 
-#[allow(dead_code)]
 pub const AX: usize = 0b000;
-#[allow(dead_code)]
 pub const CX: usize = 0b001;
-#[allow(dead_code)]
 pub const DX: usize = 0b010;
-#[allow(dead_code)]
 pub const BX: usize = 0b011;
-#[allow(dead_code)]
 pub const SP: usize = 0b100;
-#[allow(dead_code)]
 pub const BP: usize = 0b101;
-#[allow(dead_code)]
 pub const SI: usize = 0b110;
-#[allow(dead_code)]
 pub const DI: usize = 0b111;
 
 bitflags! {

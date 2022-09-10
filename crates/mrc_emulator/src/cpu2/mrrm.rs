@@ -1,7 +1,39 @@
 use super::{Intel8088, Operand, BP, BX, DI, DS, SI, SS};
+use crate::cpu2::calc::SizedValue;
+use crate::cpu2::Flags;
 use crate::{segment_and_offset, Address, Bus, Port};
 
 impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
+    pub(crate) fn read_operand<S, T: SizedValue<S>>(&self, operand: Operand) -> T {
+        match operand {
+            Operand::Register(encoding) => {
+                T::read_from_register(&self.registers, encoding as usize)
+            }
+            Operand::Memory(addr) => T::read_from_bus(&self.data_bus, addr),
+        }
+    }
+
+    pub(crate) fn write_operand<S, T: SizedValue<S>>(&mut self, operand: Operand, value: T) {
+        match operand {
+            Operand::Register(encoding) => {
+                T::write_to_register(&mut self.registers, encoding as usize, value)
+            }
+            Operand::Memory(addr) => T::write_to_bus(&mut self.data_bus, addr, value),
+        }
+    }
+
+    pub(crate) fn mod_reg_rm_op<S, T: SizedValue<S>>(&mut self, op: fn(T, T, &mut Flags) -> T) {
+        let mrrm = self.fetch().unwrap();
+        let (dst_op, src_op) = self.mod_reg_rm_to_operands(mrrm);
+
+        let dst = self.read_operand(dst_op);
+        let src = self.read_operand(src_op);
+
+        let result = op(dst, src, &mut self.flags);
+
+        self.write_operand(dst_op, result);
+    }
+
     pub(crate) fn mod_reg_rm_to_operands(&mut self, mrrm: u8) -> (Operand, Operand) {
         let (reg, rm) = self.mod_rm_to_operands(mrrm);
         (Operand::Register(reg), rm)
