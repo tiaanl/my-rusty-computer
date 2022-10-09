@@ -9,7 +9,7 @@ mod operation;
 mod register;
 
 pub use address::{Address, RelativeToAddress};
-pub use display::At;
+pub use display::DisAsmOptions;
 pub use instruction::{Instruction, OperandSet, Repeat};
 pub use operand::{AddressingMode, Displacement, Immediate, Operand, OperandSize};
 pub use operation::Operation;

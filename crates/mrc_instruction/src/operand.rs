@@ -1,4 +1,4 @@
-use crate::display::At;
+use crate::display::DisAsmOptions;
 use crate::{Address, Segment, SizedRegisterEncoding};
 use std::str::FromStr;
 
@@ -66,9 +66,10 @@ pub enum Displacement {
 
 impl std::fmt::Display for Displacement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        At {
+        DisAsmOptions {
             item: self,
             addr: None,
+            segment_override: None,
         }
         .fmt(f)
     }
@@ -138,9 +139,10 @@ impl From<Immediate> for Operand {
 
 impl std::fmt::Display for Operand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        At {
+        DisAsmOptions {
             item: self,
             addr: None,
+            segment_override: None,
         }
         .fmt(f)
     }

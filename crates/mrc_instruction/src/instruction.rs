@@ -1,4 +1,4 @@
-use crate::display::At;
+use crate::display::DisAsmOptions;
 use crate::{Operand, Operation};
 use std::fmt::{Display, Formatter};
 
@@ -11,9 +11,10 @@ pub enum OperandSet {
 
 impl Display for OperandSet {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        At {
+        DisAsmOptions {
             item: self,
             addr: None,
+            segment_override: None,
         }
         .fmt(f)
     }
@@ -54,6 +55,7 @@ pub struct Instruction {
     pub operation: Operation,
     pub operands: OperandSet,
     pub repeat: Option<Repeat>,
+    pub size_in_bytes: u8,
 }
 
 impl Instruction {
@@ -63,6 +65,7 @@ impl Instruction {
             operation,
             operands,
             repeat: None,
+            size_in_bytes: 0,
         }
     }
 
@@ -73,15 +76,17 @@ impl Instruction {
             operation,
             operands,
             repeat: Some(repeat),
+            size_in_bytes: 0,
         }
     }
 }
 
 impl Display for Instruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        At {
+        DisAsmOptions {
             item: self,
             addr: None,
+            segment_override: None,
         }
         .fmt(f)
     }

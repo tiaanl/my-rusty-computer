@@ -1,42 +1,145 @@
 use super::{Intel8088, Operand, BP, BX, DI, DS, SI, SS};
-use crate::cpu2::calc::SizedValue;
-use crate::cpu2::Flags;
 use crate::{segment_and_offset, Address, Bus, Port};
 
+pub(crate) enum ModRegRMDirection {
+    RegFirst,
+    RegMemFirst,
+}
+
 impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
-    pub(crate) fn read_operand<S, T: SizedValue<S>>(&self, operand: Operand) -> T {
+    pub(crate) fn read_operand_byte(&self, operand: Operand) -> u8 {
         match operand {
-            Operand::Register(encoding) => {
-                T::read_from_register(&self.registers, encoding as usize)
-            }
-            Operand::Memory(addr) => T::read_from_bus(&self.data_bus, addr),
+            Operand::Register(encoding) => self.read_register_byte(encoding as usize),
+            Operand::Memory(addr) => self.read_data_bus_byte(addr),
         }
     }
 
-    pub(crate) fn write_operand<S, T: SizedValue<S>>(&mut self, operand: Operand, value: T) {
+    pub(crate) fn read_operand_word(&self, operand: Operand) -> u16 {
         match operand {
-            Operand::Register(encoding) => {
-                T::write_to_register(&mut self.registers, encoding as usize, value)
-            }
-            Operand::Memory(addr) => T::write_to_bus(&mut self.data_bus, addr, value),
+            Operand::Register(encoding) => self.read_register_word(encoding as usize),
+            Operand::Memory(addr) => self.read_data_bus_word(addr),
         }
     }
 
-    pub(crate) fn mod_reg_rm_op<S, T: SizedValue<S>>(&mut self, op: fn(T, T, &mut Flags) -> T) {
+    pub(crate) fn write_operand_byte(&mut self, operand: Operand, value: u8) {
+        match operand {
+            Operand::Register(encoding) => self.write_register_byte(encoding as usize, value),
+            Operand::Memory(addr) => self.write_data_bus_byte(addr, value),
+        }
+    }
+
+    pub(crate) fn write_operand_word(&mut self, operand: Operand, value: u16) {
+        match operand {
+            Operand::Register(encoding) => self.write_register_word(encoding as usize, value),
+            Operand::Memory(addr) => self.write_data_bus_word(addr, value),
+        }
+    }
+
+    pub(crate) fn mod_reg_rm_arithmetic_byte(
+        &mut self,
+        op: impl super::calc::arithmetic::Operation<u8>,
+        direction: ModRegRMDirection,
+        reg_cycles: usize,
+        mem_cycles: usize,
+    ) {
         let mrrm = self.fetch().unwrap();
-        let (dst_op, src_op) = self.mod_reg_rm_to_operands(mrrm);
+        let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
-        let dst = self.read_operand(dst_op);
-        let src = self.read_operand(src_op);
+        let (dst, src, res_op) = self.mod_reg_rm_operands_byte(reg, rm, direction);
 
-        let result = op(dst, src, &mut self.flags);
+        let result = op.op(dst, src, &mut self.flags);
 
-        self.write_operand(dst_op, result);
+        self.write_operand_byte(res_op, result);
+        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
     }
 
-    pub(crate) fn mod_reg_rm_to_operands(&mut self, mrrm: u8) -> (Operand, Operand) {
+    pub(crate) fn _mod_reg_rm_logic_byte(
+        &mut self,
+        op: impl super::calc::logic::Operation<u8>,
+        direction: ModRegRMDirection,
+        reg_cycles: usize,
+        mem_cycles: usize,
+    ) {
+        let mrrm = self.fetch().unwrap();
+        let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
+
+        let (dst, src, _) = self.mod_reg_rm_operands_byte(reg, rm, direction);
+
+        op.op(dst, src, &mut self.flags);
+
+        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
+    }
+
+    pub(crate) fn mod_reg_rm_arithmetic_word(
+        &mut self,
+        op: impl super::calc::arithmetic::Operation<u16>,
+        direction: ModRegRMDirection,
+        reg_cycles: usize,
+        mem_cycles: usize,
+    ) {
+        let mrrm = self.fetch().unwrap();
+        let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
+
+        let (dst, src, res_op) = self.mod_reg_rm_operands_word(reg, rm, direction);
+
+        let result = op.op(dst, src, &mut self.flags);
+
+        self.write_operand_word(res_op, result);
+        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
+    }
+
+    pub(crate) fn mod_reg_rm_logic_word(
+        &mut self,
+        op: impl super::calc::logic::Operation<u16>,
+        direction: ModRegRMDirection,
+        reg_cycles: usize,
+        mem_cycles: usize,
+    ) {
+        let mrrm = self.fetch().unwrap();
+        let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
+
+        let (dst, src, _) = self.mod_reg_rm_operands_word(reg, rm, direction);
+
+        op.op(dst, src, &mut self.flags);
+
+        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
+    }
+
+    fn mod_reg_rm_operands_byte(
+        &mut self,
+        reg: Operand,
+        rm: Operand,
+        direction: ModRegRMDirection,
+    ) -> (u8, u8, Operand) {
+        match direction {
+            ModRegRMDirection::RegFirst => {
+                (self.read_operand_byte(reg), self.read_operand_byte(rm), reg)
+            }
+            ModRegRMDirection::RegMemFirst => {
+                (self.read_operand_byte(rm), self.read_operand_byte(reg), rm)
+            }
+        }
+    }
+
+    fn mod_reg_rm_operands_word(
+        &mut self,
+        reg: Operand,
+        rm: Operand,
+        direction: ModRegRMDirection,
+    ) -> (u16, u16, Operand) {
+        match direction {
+            ModRegRMDirection::RegFirst => {
+                (self.read_operand_word(reg), self.read_operand_word(rm), reg)
+            }
+            ModRegRMDirection::RegMemFirst => {
+                (self.read_operand_word(rm), self.read_operand_word(reg), rm)
+            }
+        }
+    }
+
+    pub(crate) fn mod_reg_rm_to_operands<O: From<Operand>>(&mut self, mrrm: u8) -> (O, Operand) {
         let (reg, rm) = self.mod_rm_to_operands(mrrm);
-        (Operand::Register(reg), rm)
+        (Operand::Register(reg).into(), rm)
     }
 
     pub(crate) fn mod_rm_to_operands(&mut self, mrrm: u8) -> (u8, Operand) {

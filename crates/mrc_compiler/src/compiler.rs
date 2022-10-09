@@ -281,7 +281,7 @@ impl Compiler {
 
             // We finished a pass now, so if there were any forward references, then we try to
             // resolve them with another pass.
-            println!("forward_references: {}", forward_references);
+            // println!("forward_references: {}", forward_references);
             if forward_references != 0 {
                 forward_references = 0;
                 continue;
@@ -366,7 +366,12 @@ impl Compiler {
                 )
             }
 
-            todo => todo!("{:?}", todo),
+            ast::Operand::Far(span, offset, segment) => {
+                let offset = self.evaluate_expression(offset)?;
+                let segment = self.evaluate_expression(segment)?;
+
+                OperandData::far(span.clone(), offset, segment)
+            }
         })
     }
 

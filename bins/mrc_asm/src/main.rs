@@ -1,5 +1,5 @@
 use mrc_compiler::diagnostics::Diagnostics;
-use mrc_compiler::{compiler::Compiler, Parser};
+use mrc_compiler::{compiler::Compiler, parser::Parser};
 use structopt::StructOpt;
 
 #[derive(StructOpt)]

@@ -915,7 +915,15 @@ fn encode_group_jmp(
                 }
 
                 Some(JumpKind::Far) => {
-                    todo!()
+                    let segment = require_value_is_word(dst.displacement, &dst.span)?;
+
+                    emitter.emit(0xEA);
+                    for byte in value.to_le_bytes() {
+                        emitter.emit(byte);
+                    }
+                    for byte in segment.to_le_bytes() {
+                        emitter.emit(byte);
+                    }
                 }
             }
         }
@@ -1362,6 +1370,21 @@ impl OperandData {
             jmp_kind: None,
             mode,
             rm: addr_mode,
+        }
+    }
+
+    pub fn far(span: ast::Span, offset: i32, segment: i32) -> Self {
+        OperandData {
+            span: span.clone(),
+            size: OperandSize::Unspecified,
+            kind: OperandKind::Imm,
+            segment_prefix: 0,
+            imm: offset,
+            displacement: segment,
+            displacement_size: OperandSize::Unspecified,
+            jmp_kind: Some(JumpKind::Far),
+            mode: 0,
+            rm: 0,
         }
     }
 

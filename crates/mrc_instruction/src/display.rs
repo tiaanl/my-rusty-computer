@@ -4,12 +4,13 @@ use crate::{
 };
 use std::fmt::{Display, Formatter};
 
-pub struct At<'a, I> {
+pub struct DisAsmOptions<'a, I> {
     pub item: &'a I,
     pub addr: Option<Address>,
+    pub segment_override: Option<Segment>,
 }
 
-impl Display for At<'_, Instruction> {
+impl Display for DisAsmOptions<'_, Instruction> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.item.repeat {
             None => match self.item.operands {
@@ -18,9 +19,10 @@ impl Display for At<'_, Instruction> {
                     f,
                     "{:<10} {}",
                     self.item.operation,
-                    At {
+                    DisAsmOptions {
                         item: &self.item.operands,
                         addr: self.addr,
+                        segment_override: self.segment_override,
                     }
                 ),
             },
@@ -35,26 +37,29 @@ impl Display for At<'_, Instruction> {
     }
 }
 
-impl Display for At<'_, OperandSet> {
+impl Display for DisAsmOptions<'_, OperandSet> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.item {
             OperandSet::None => Ok(()),
-            OperandSet::Destination(destination) => At {
+            OperandSet::Destination(destination) => DisAsmOptions {
                 item: destination,
                 addr: self.addr,
+                segment_override: self.segment_override,
             }
             .fmt(f),
             OperandSet::DestinationAndSource(destination, source) => {
                 write!(
                     f,
                     "{}, {}",
-                    At {
+                    DisAsmOptions {
                         item: destination,
                         addr: self.addr,
+                        segment_override: self.segment_override,
                     },
-                    At {
+                    DisAsmOptions {
                         item: source,
                         addr: self.addr,
+                        segment_override: self.segment_override,
                     }
                 )
             }
@@ -72,7 +77,7 @@ fn write_segment_prefix(f: &mut Formatter<'_>, segment: Segment) -> std::fmt::Re
     }
 }
 
-impl Display for At<'_, Operand> {
+impl Display for DisAsmOptions<'_, Operand> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.item {
             Operand::Direct(segment, displacement, operand_size) => {
@@ -105,16 +110,17 @@ impl Display for At<'_, Operand> {
 
             Operand::SegmentAndOffset(address) => address.fmt(f),
 
-            Operand::Displacement(displacement) => At {
+            Operand::Displacement(displacement) => DisAsmOptions {
                 item: displacement,
                 addr: self.addr,
+                segment_override: self.segment_override,
             }
             .fmt(f),
         }
     }
 }
 
-impl Display for At<'_, Displacement> {
+impl Display for DisAsmOptions<'_, Displacement> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(addr) = self.addr {
             match self.item {

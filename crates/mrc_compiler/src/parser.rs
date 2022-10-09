@@ -354,11 +354,14 @@ impl<'a> Parser<'a> {
         let start = self.token_start;
 
         let expression = self.parse_expression()?;
-        if let Some(segment) = self.parse_far()? {
+        if let Some(offset) = self.parse_far()? {
+            // The first value is the segment and if we parsed an expression with `parse_far` that
+            // would be the offset.  Values are stored offset first in the operand, matching the
+            // order they values are encoded.
             Ok(ast::Operand::Far(
                 start..self.last_token_end,
+                offset,
                 expression,
-                segment,
             ))
         } else {
             Ok(ast::Operand::Immediate(

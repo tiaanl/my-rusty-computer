@@ -1,9 +1,11 @@
 mod calc;
+mod calc2;
 mod mrrm;
 mod ops;
 
 use crate::{segment_and_offset, Address, Bus, Port};
 use bitflags::bitflags;
+use mrc_decoder::TryFromEncoding;
 
 pub const ES: usize = 0b00;
 pub const CS: usize = 0b01;
@@ -51,6 +53,7 @@ pub struct Intel8088<D: Bus<Address>, I: Bus<Port>> {
 
     // States
     halted: bool,
+    repeat: bool,
 
     /// The amount of cycles that was consumed so far and that needs to be processed.
     to_consume: usize,
@@ -58,7 +61,6 @@ pub struct Intel8088<D: Bus<Address>, I: Bus<Port>> {
     /// Amount of cycles since power on.
     cycles: usize,
 
-    #[cfg(debug_assertions)]
     last_op_code: u8,
 }
 
@@ -75,6 +77,9 @@ impl Inc for Address {
 struct BusIter<'a, S: Inc, B: Bus<S>> {
     bus: &'a B,
     pos: S,
+
+    /// Setting to true will print out each byte it consumes.
+    print: bool,
 }
 
 impl<'a, S: Inc, B: Bus<S>> Iterator for BusIter<'a, S, B> {
@@ -83,7 +88,13 @@ impl<'a, S: Inc, B: Bus<S>> Iterator for BusIter<'a, S, B> {
     fn next(&mut self) -> Option<Self::Item> {
         let pos = self.pos;
         self.pos = pos.inc();
-        Some(self.bus.read(pos).unwrap())
+        let value = self.bus.read(pos).unwrap();
+
+        if self.print {
+            print!("{:02X} ", value);
+        }
+
+        Some(value)
     }
 }
 
@@ -101,11 +112,11 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
             io_bus,
 
             halted: false,
+            repeat: false,
 
             to_consume: 0,
             cycles: 0,
 
-            #[cfg(debug_assertions)]
             last_op_code: 0x00,
         }
     }
@@ -176,42 +187,59 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         self._print_state();
         print!("{:04X}:{:04X}  ", self.segments[CS], self.ip);
 
-        let decode_addr = self.flat_address();
+        self.disasm_instruction(self.flat_address());
 
         #[cfg(debug_assertions)]
         let pre_cycles = self.to_consume;
 
-        let op_code = self.fetch().unwrap();
+        let mut op_code = self.fetch().unwrap();
 
-        if cfg!(debug_assertions) {
-            self.last_op_code = op_code;
+        // Handle segment prefixes.
+        if op_code == 0x2E {
+            self.segment_override = Some(CS);
+            op_code = self.fetch().unwrap();
         }
+
+        self.last_op_code = op_code;
 
         self.execute_op_code(op_code);
 
+        // Reset any prefixes after the instruction ran.
+        self.segment_override = None;
+
+        // Ignore prefix op_codes.
+        #[cfg(debug_assertions)]
+        if op_code != 0x2E {
+            debug_assert_ne!(
+                pre_cycles, self.to_consume,
+                "Operation should have consumed cycles (op_code: {op_code:02X})"
+            );
+        }
+
+        0
+    }
+
+    fn disasm_instruction(&mut self, decode_addr: Address) {
         let mut it = BusIter {
             bus: &self.data_bus,
             pos: decode_addr,
+            print: true,
         };
         let insn = mrc_decoder::decode_instruction(&mut it).unwrap();
         println!(
             "{}",
-            mrc_instruction::At {
+            mrc_instruction::DisAsmOptions {
                 item: &insn,
-                addr: Some(mrc_instruction::Address {
-                    segment: self.segments[CS],
-                    offset: self.ip,
-                })
+                // addr: Some(mrc_instruction::Address {
+                //     segment: self.segments[CS],
+                //     offset: self.ip,
+                // }),
+                addr: None,
+                segment_override: self
+                    .segment_override
+                    .map(|enc| mrc_instruction::Segment::try_from_encoding(enc as u8).unwrap()),
             }
         );
-
-        #[cfg(debug_assertions)]
-        debug_assert_ne!(
-            pre_cycles, self.to_consume,
-            "Operation should have consumed cycles (op_code: {op_code:02X})"
-        );
-
-        0
     }
 
     #[inline(always)]
@@ -219,27 +247,87 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         self.to_consume += cycles;
     }
 
-    fn write_register_byte(&mut self, encoding: u8, value: u8) {
-        let encoding = encoding as usize;
-        if encoding <= 0b111 {
-            if encoding & 0b100 == 0b100 {
-                self.registers[encoding & 0b011] =
-                    (self.registers[encoding] & 0x00FF) | ((value as u16) << 8)
-            } else {
-                self.registers[encoding] = (self.registers[encoding] & 0xFF00) | (value as u16)
-            }
+    #[inline(always)]
+    fn consume_cycles_for_operand(
+        &mut self,
+        operand: Operand,
+        reg_cycles: usize,
+        mem_cycles: usize,
+    ) {
+        self.consume_cycles(match operand {
+            Operand::Register(..) => reg_cycles,
+            Operand::Memory(..) => mem_cycles,
+        });
+    }
+
+    #[inline(always)]
+    fn read_register_byte(&self, encoding: usize) -> u8 {
+        if encoding & 0b100 != 0 {
+            // high byte
+            (self.registers[encoding & 0b11] >> 8) as u8
         } else {
-            unreachable!("Invalid register encoding.");
+            // low byte
+            self.registers[encoding & 0b11] as u8
         }
     }
 
-    fn write_register_word(&mut self, encoding: u8, value: u16) {
-        let encoding = encoding as usize;
-        if encoding <= 0b111 {
-            self.registers[encoding] = value;
+    #[inline(always)]
+    fn read_register_word(&self, encoding: usize) -> u16 {
+        self.registers[encoding]
+    }
+
+    #[inline(always)]
+    fn write_register_byte(&mut self, encoding: usize, value: u8) {
+        let original = self.registers[encoding & 0b11];
+        if encoding & 0b100 != 0 {
+            self.registers[encoding & 0b11] = (original & 0x00FF) | ((value as u16) << 8);
         } else {
-            unreachable!("Invalid register encoding.");
+            self.registers[encoding & 0b11] = (original & 0xFF00) | (value as u16);
         }
+    }
+
+    #[inline(always)]
+    fn write_register_word(&mut self, encoding: usize, value: u16) {
+        self.registers[encoding] = value;
+    }
+
+    fn read_data_bus_byte(&self, addr: Address) -> u8 {
+        self.data_bus.read(addr).unwrap()
+    }
+
+    fn read_data_bus_word(&self, addr: Address) -> u16 {
+        let lo = self.data_bus.read(addr).unwrap();
+        let hi = self.data_bus.read(addr.wrapping_add(1)).unwrap();
+        u16::from_le_bytes([lo, hi])
+    }
+
+    fn write_data_bus_byte(&mut self, addr: Address, value: u8) {
+        self.data_bus.write(addr, value).unwrap();
+    }
+
+    fn write_data_bus_word(&mut self, addr: Address, value: u16) {
+        let [lo, hi] = value.to_le_bytes();
+        self.data_bus.write(addr, lo).unwrap();
+        self.data_bus.write(addr.wrapping_add(1), hi).unwrap();
+    }
+
+    fn _push(&mut self, value: u16) {
+        let ss = self.segments[SS];
+        let sp = self.registers[SP].wrapping_sub(2);
+        self.registers[SP] = sp;
+
+        let addr = segment_and_offset(ss, sp);
+        self.write_data_bus_word(addr, value);
+    }
+
+    fn pop(&mut self) -> u16 {
+        let ss = self.segments[SS];
+        let sp = self.read_register_word(SP);
+
+        let value = self.read_data_bus_word(segment_and_offset(ss, sp));
+        self.write_register_word(SP, sp.wrapping_add(2));
+
+        value
     }
 }
 
@@ -249,71 +337,26 @@ pub(crate) enum Operand {
     Memory(Address),
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
-    fn read_operand_byte(&mut self, operand: Operand) -> u8 {
+impl From<Operand> for u8 {
+    fn from(operand: Operand) -> Self {
         match operand {
-            Operand::Register(encoding) => {
-                if (encoding & 0b100) == 0 {
-                    self.registers[(encoding & 0b011) as usize] as u8
-                } else {
-                    (self.registers[(encoding & 0b011) as usize] >> 8) as u8
-                }
-            }
-
-            Operand::Memory(addr) => self.data_bus.read(addr).unwrap(),
+            Operand::Register(enc) => enc,
+            Operand::Memory(_) => unreachable!(),
         }
     }
+}
 
-    fn read_operand_word(&mut self, operand: Operand) -> u16 {
+impl From<Operand> for usize {
+    fn from(operand: Operand) -> Self {
         match operand {
-            Operand::Register(encoding) => self.registers[(encoding & 0b011) as usize],
-
-            Operand::Memory(addr) => {
-                let lo = self.data_bus.read(addr).unwrap();
-                let hi = self.data_bus.read(addr.wrapping_add(1)).unwrap();
-                u16::from_le_bytes([lo, hi])
-            }
-        }
-    }
-
-    fn write_operand_byte(&mut self, operand: Operand, value: u8) {
-        match operand {
-            Operand::Register(encoding) => {
-                if (encoding & 0b100) == 0 {
-                    let encoding = (encoding & 0b011) as usize;
-                    let mut temp = self.registers[encoding] & 0xFF00;
-                    temp |= value as u16;
-                    self.registers[encoding] = temp;
-                } else {
-                    let encoding = (encoding & 0b011) as usize;
-                    let mut temp = self.registers[encoding] & 0x00FF;
-                    temp |= (value as u16) << 8;
-                    self.registers[encoding] = temp;
-                }
-            }
-            Operand::Memory(addr) => {
-                self.data_bus.write(addr, value).unwrap();
-            }
-        }
-    }
-
-    fn write_operand_word(&mut self, operand: Operand, value: u16) {
-        match operand {
-            Operand::Register(encoding) => {
-                let encoding = (encoding & 0b011) as usize;
-                self.registers[encoding] = value;
-            }
-            Operand::Memory(addr) => {
-                let [lo, hi] = value.to_le_bytes();
-                self.data_bus.write(addr, lo).unwrap();
-                self.data_bus.write(addr.wrapping_add(1), hi).unwrap();
-            }
+            Operand::Register(enc) => enc as usize,
+            Operand::Memory(_) => unreachable!(),
         }
     }
 }
 
 impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
-    fn add_byte(dst: u8, src: u8, flags: &mut Flags) -> u8 {
+    fn _add_byte(dst: u8, src: u8, flags: &mut Flags) -> u8 {
         let (result, o) = dst.overflowing_add(src);
 
         flags.set(Flags::CARRY, o);
@@ -323,7 +366,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         result
     }
 
-    fn add_word(dst: u16, src: u16, flags: &mut Flags) -> u16 {
+    fn _add_word(dst: u16, src: u16, flags: &mut Flags) -> u16 {
         let (result, o) = dst.overflowing_add(src);
 
         flags.set(Flags::CARRY, o);
@@ -453,5 +496,34 @@ mod tests {
         cpu.cycle(1);
         assert_eq!(0x04, data[4]);
         assert_eq!(0x02, data[5]);
+    }
+
+    #[test]
+    fn test_asm() {
+        let source = include_str!("tests.asm");
+        let mut bytes = mrc_compiler::compile(source).unwrap();
+        let bytes_len = bytes.len();
+        let mut cpu = Intel8088::new(&mut bytes[..], BusPrinter { name: "io" });
+        let mut failure_ip;
+        while (cpu.ip as usize) < bytes_len {
+            // Store the value of IP before running the next instruction so that we can decode this
+            // instruction on failure.
+            failure_ip = cpu.ip;
+
+            cpu.execute_instruction();
+
+            // Halting the CPU signals a failed test.
+            if cpu.halted {
+                let mut it = BusIter {
+                    bus: &cpu.data_bus,
+                    pos: segment_and_offset(0, failure_ip),
+                    print: false,
+                };
+                let insn = mrc_decoder::decode_instruction(&mut it).unwrap();
+                eprintln!("ERROR: {}", insn);
+                break;
+            }
+        }
+        assert_eq!(cpu.ip, 0xFFFF);
     }
 }
