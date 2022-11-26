@@ -1,8 +1,8 @@
 mod gen;
 
 use super::ast;
+use crate::operations::Operation;
 use gen::{emit_codes, Code, FIRST_OPER_DST, FIRST_OPER_SRC};
-use mrc_instruction::Operation;
 use std::fmt::{Display, Formatter};
 
 const EMIT_DEFAULT_SEGMENTS: bool = true;
@@ -119,7 +119,7 @@ pub fn encode(
     offset: u16,
     emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    use mrc_instruction::Operation::*;
+    use crate::operations::Operation::*;
 
     match insn.operation {
         ADD => encode_group_add_or_adc_sbb_and_sub_xor_cmp(0x00, insn, offset, emitter),
@@ -1496,7 +1496,7 @@ fn emit_mod_reg_rm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mrc_instruction::Operation;
+    use crate::operations::Operation;
     use std::fmt::{Debug, Formatter};
 
     #[derive(PartialEq)]

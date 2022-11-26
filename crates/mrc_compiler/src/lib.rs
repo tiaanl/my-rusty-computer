@@ -3,6 +3,7 @@ pub mod compiler;
 pub mod diagnostics;
 mod encoder;
 pub mod lexer;
+mod operations;
 pub mod parser;
 
 #[derive(Debug)]

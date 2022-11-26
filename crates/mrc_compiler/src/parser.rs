@@ -1,6 +1,6 @@
 use crate::ast;
 use crate::lexer::{Cursor, LiteralKind, PunctuationKind, Token};
-use mrc_instruction::Operation;
+use crate::operations::Operation;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
@@ -1175,8 +1175,8 @@ mod tests {
                     4..17,
                     ast::Operand::Far(
                         4..17,
-                        ast::Expression::Value(4..10, ast::Value::Constant(0xF000)),
                         ast::Expression::Value(11..17, ast::Value::Constant(0xFFF0)),
+                        ast::Expression::Value(4..10, ast::Value::Constant(0xF000)),
                     )
                 )
             })]

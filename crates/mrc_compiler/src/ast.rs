@@ -1,4 +1,4 @@
-use mrc_instruction::Operation;
+use crate::operations::Operation;
 use std::collections::LinkedList;
 use std::str::FromStr;
 
