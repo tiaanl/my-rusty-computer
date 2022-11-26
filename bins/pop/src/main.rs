@@ -16,25 +16,21 @@ struct Opt {
 struct DataBus;
 
 impl Bus<Address> for DataBus {
-    fn read(&self, _address: Address) -> mrc_emulator::error::Result<u8> {
-        Ok(0)
+    fn read(&self, _address: Address) -> u8 {
+        0
     }
 
-    fn write(&mut self, _address: Address, _value: u8) -> mrc_emulator::error::Result<()> {
-        Ok(())
-    }
+    fn write(&mut self, _address: Address, _value: u8) {}
 }
 
 struct IO;
 
 impl Bus<Port> for IO {
-    fn read(&self, _port: u16) -> mrc_emulator::error::Result<u8> {
-        Ok(0)
+    fn read(&self, _port: u16) -> u8 {
+        0
     }
 
-    fn write(&mut self, _port: u16, _value: u8) -> mrc_emulator::error::Result<()> {
-        Ok(())
-    }
+    fn write(&mut self, _port: u16, _value: u8) {}
 }
 
 fn load_executable(
@@ -57,7 +53,7 @@ fn load_executable(
     file.read_exact(&mut code)?;
 
     for (i, b) in code.into_iter().enumerate() {
-        memory.write(location + i as Address, b).unwrap();
+        memory.write(location + i as Address, b);
     }
 
     Ok(exe_header.mz_header)

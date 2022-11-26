@@ -55,7 +55,7 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
                 for i in 0..(bytes_read as usize) {
                     let byte = self
                         .bus
-                        .read(mrc_instruction::Address::new(cs, ip + i as u16).flat())?;
+                        .read(mrc_instruction::Address::new(cs, ip + i as u16).flat());
                     byte_buffer[i as usize] = byte;
                 }
 
@@ -88,7 +88,7 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
         Ok(())
     }
 
-    pub fn read_from_bus(&self, address: Address) -> Result<u8, error::Error> {
+    pub fn read_from_bus(&self, address: Address) -> u8 {
         self.bus.read(address)
     }
 }
@@ -99,17 +99,14 @@ impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let address = mrc_instruction::Address::new(self.state.segment(CS), self.state.ip).flat();
-        if let Ok(byte) = self.bus.read(address) {
-            let (new_ip, overflow) = self.state.ip.overflowing_add(1);
-            if overflow {
-                log::error!("IP overflow!");
-                None
-            } else {
-                self.state.ip = new_ip;
-                Some(byte)
-            }
-        } else {
+        let byte = self.bus.read(address);
+        let (new_ip, overflow) = self.state.ip.overflowing_add(1);
+        if overflow {
+            log::error!("IP overflow!");
             None
+        } else {
+            self.state.ip = new_ip;
+            Some(byte)
         }
     }
 }

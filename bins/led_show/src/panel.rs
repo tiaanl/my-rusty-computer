@@ -1,5 +1,3 @@
-use mrc_emulator::error::Error;
-use mrc_emulator::error::Result;
 use mrc_emulator::{Bus, Port};
 
 #[derive(Default)]
@@ -14,16 +12,15 @@ impl Panel {
 }
 
 impl Bus<Port> for Panel {
-    fn read(&self, address: Port) -> Result<u8> {
-        Err(Error::InvalidPort(address))
+    fn read(&self, _address: Port) -> u8 {
+        //Err(Error::InvalidPort(address))
+        0
     }
 
-    fn write(&mut self, _address: Port, value: u8) -> Result<()> {
+    fn write(&mut self, _address: Port, value: u8) {
         let index = value >> 4;
         let color = value & 0x0F;
 
         self.colors[index as usize] = color;
-
-        Ok(())
     }
 }

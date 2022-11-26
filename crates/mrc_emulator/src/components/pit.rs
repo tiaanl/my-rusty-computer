@@ -11,10 +11,7 @@
 
 // const TICK_RATE: usize = 1193182;
 
-use crate::{
-    error::{Error, Result},
-    Bus, Port,
-};
+use crate::{Bus, Port};
 use std::cell::RefCell;
 
 const COUNTER_COUNT: u8 = 3;
@@ -27,18 +24,16 @@ pub enum ReadWrite {
     LoThenHiByte,
 }
 
-impl TryFrom<u8> for ReadWrite {
-    type Error = Error;
-
-    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
+impl From<u8> for ReadWrite {
+    fn from(value: u8) -> Self {
         use ReadWrite::*;
 
         match value {
-            0b00 => Ok(Latch),
-            0b01 => Ok(LoByte),
-            0b10 => Ok(HiByte),
-            0b11 => Ok(LoThenHiByte),
-            _ => Err(Error::IllegalDataAccess),
+            0b00 => Latch,
+            0b01 => LoByte,
+            0b10 => HiByte,
+            0b11 => LoThenHiByte,
+            _ => unreachable!(),
         }
     }
 }
@@ -94,16 +89,14 @@ impl ControlRegister {
     }
 }
 
-impl TryFrom<u8> for ControlRegister {
-    type Error = Error;
-
-    fn try_from(value: u8) -> std::result::Result<Self, Self::Error> {
-        Ok(Self {
+impl From<u8> for ControlRegister {
+    fn from(value: u8) -> Self {
+        Self {
             select_counter: value >> 6,
-            read_write: ReadWrite::try_from(value >> 4 & 0b11)?,
+            read_write: ReadWrite::from(value >> 4 & 0b11),
             mode: value >> 1 & 0b111,
             bcd: (value & 0b1) != 0,
-        })
+        }
     }
 }
 
@@ -187,11 +180,12 @@ impl ProgrammableIntervalTimer8253 {
 }
 
 impl Bus<Port> for ProgrammableIntervalTimer8253 {
-    fn read(&self, port: u16) -> Result<u8> {
+    fn read(&self, port: u16) -> u8 {
         let counter = port & 0b11;
 
         if counter == 0b11 {
-            return Err(Error::Unspecified("Only the 3 counters can be read from."));
+            log::warn!("Only the 3 counters can be read from.");
+            return 0;
         }
 
         let counter = &mut self.inner.borrow_mut().counters[counter as usize];
@@ -213,17 +207,17 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
 
         log::info!("Read from timer port {:#06X}: {:#04X}", port, value);
 
-        Ok(value)
+        value
     }
 
-    fn write(&mut self, port: u16, value: u8) -> Result<()> {
+    fn write(&mut self, port: u16, value: u8) {
         // log::info!("Writing to timer port: {:#06X} <= {:#04X}", port, value);
 
         let counter = port & 0b11;
 
         if counter == 0x03 {
             // Writing to the Mode/Command register.
-            let control_register = ControlRegister::try_from(value)?;
+            let control_register = ControlRegister::from(value);
             debug_assert!(control_register.select_counter < COUNTER_COUNT);
             let counter =
                 &mut self.inner.borrow_mut().counters[control_register.select_counter as usize];
@@ -273,8 +267,6 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
 
             log::info!("Set counter {} to {:?}", port & 0b11, counter);
         }
-
-        Ok(())
     }
 }
 
@@ -289,21 +281,19 @@ mod tests {
         let mut timer = ProgrammableIntervalTimer8253::default();
 
         // Counter 0 to mode 0 and binary.
-        timer
-            .write(
-                0x43,
-                ControlRegister::new(0, ReadWrite::LoByte, 0, false).into(),
-            )
-            .unwrap();
+        timer.write(
+            0x43,
+            ControlRegister::new(0, ReadWrite::LoByte, 0, false).into(),
+        );
 
         // Set the count for timer 0 to 64.
-        timer.write(0x40, 64).unwrap();
+        timer.write(0x40, 64);
 
         // TODO: There should be no need to tick the timer?
         timer.tick();
 
         // Read the value of the timer.
-        let value = timer.read(0x40).unwrap();
+        let value = timer.read(0x40);
 
         assert!(value < 64);
     }

@@ -2,7 +2,6 @@
 
 mod codes;
 mod emitter;
-mod gen;
 mod op_flags;
 mod template;
 mod templates;

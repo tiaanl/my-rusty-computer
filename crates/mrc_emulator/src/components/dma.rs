@@ -3,7 +3,7 @@
 //! IBM PC/XT model 5150 and up uses DMA channel 0 for memory refresh cycles and channel 2 for the
 //! fixed disk controller.
 
-use crate::{error::Result, Bus, Port};
+use crate::{Bus, Port};
 use std::cell::Cell;
 
 #[derive(Default)]
@@ -150,17 +150,17 @@ impl DirectMemoryAccessController {
 }
 
 impl Bus<Port> for DirectMemoryAccessController {
-    fn read(&self, port: u16) -> Result<u8> {
+    fn read(&self, port: u16) -> u8 {
         log::info!("Reading from DMA controller on port {:#06x}.", port);
 
         if port >> 7 == 0 {
             let channel_index = (port >> 1 & 0b11) as usize;
             if port & 1 == 0 {
                 // Address
-                Ok(self.read_channel_addr(channel_index))
+                self.read_channel_addr(channel_index)
             } else {
                 // Count
-                Ok(self.read_channel_count(channel_index))
+                self.read_channel_count(channel_index)
             }
         } else {
             // Page Register
@@ -168,7 +168,7 @@ impl Bus<Port> for DirectMemoryAccessController {
         }
     }
 
-    fn write(&mut self, port: u16, value: u8) -> Result<()> {
+    fn write(&mut self, port: u16, value: u8) {
         log::info!(
             "Writing {:#04x} to DMA controller on port {:#06x}.",
             value,
@@ -201,8 +201,6 @@ impl Bus<Port> for DirectMemoryAccessController {
             // Page Register
             self.write_channel_page_register(channel_index, value);
         }
-
-        Ok(())
     }
 }
 
@@ -213,13 +211,13 @@ mod tests {
     #[test]
     fn init() {
         let mut dmac = DirectMemoryAccessController::default();
-        dmac.write(0x00, 0x00).unwrap();
-        dmac.write(0x01, 0x00).unwrap();
-        dmac.write(0x02, 0x00).unwrap();
-        dmac.write(0x03, 0x00).unwrap();
-        dmac.write(0x04, 0x00).unwrap();
-        dmac.write(0x05, 0x00).unwrap();
-        dmac.write(0x06, 0x00).unwrap();
-        dmac.write(0x07, 0x00).unwrap();
+        dmac.write(0x00, 0x00);
+        dmac.write(0x01, 0x00);
+        dmac.write(0x02, 0x00);
+        dmac.write(0x03, 0x00);
+        dmac.write(0x04, 0x00);
+        dmac.write(0x05, 0x00);
+        dmac.write(0x06, 0x00);
+        dmac.write(0x07, 0x00);
     }
 }

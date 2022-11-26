@@ -1,4 +1,4 @@
-use crate::{error::Result, Bus, Port};
+use crate::{Bus, Port};
 use std::collections::VecDeque;
 
 #[derive(Default)]
@@ -85,13 +85,13 @@ impl Keyboard {
 }
 
 impl Bus<Port> for Keyboard {
-    fn read(&self, _address: Port) -> Result<u8> {
+    fn read(&self, _address: Port) -> u8 {
         log::info!("Writing to keyboard port: {:#04X}", self.value);
 
-        Ok(self.value)
+        self.value
     }
 
-    fn write(&mut self, _address: Port, value: u8) -> Result<()> {
+    fn write(&mut self, _address: Port, value: u8) {
         log::info!("Writing to keyboard port: {:#04X}", value);
         self.value = value;
 
@@ -99,7 +99,5 @@ impl Bus<Port> for Keyboard {
         let clock = value & 0b01000000 != 0;
 
         self.enable(data, clock);
-
-        Ok(())
     }
 }

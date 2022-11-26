@@ -1,4 +1,3 @@
-use mrc_emulator::error::Result;
 use mrc_emulator::{Bus, Port};
 
 /// Temporary implementation for the NMI register
@@ -8,17 +7,16 @@ pub struct NMI {
 }
 
 impl Bus<Port> for NMI {
-    fn read(&self, port: u16) -> Result<u8> {
+    fn read(&self, port: u16) -> u8 {
         log::info!("Reading NMI register from port {:#06X}", port);
-        Ok(self.value)
+        self.value
     }
 
-    fn write(&mut self, port: u16, value: u8) -> Result<()> {
+    fn write(&mut self, port: u16, value: u8) {
         log::info!(
             "Writing to NMI port {:#06X} with value {:#04X}",
             port,
             value
         );
-        Ok(())
     }
 }

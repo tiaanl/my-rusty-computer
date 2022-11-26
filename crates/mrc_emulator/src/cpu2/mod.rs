@@ -88,7 +88,7 @@ impl<'a, S: Inc, B: Bus<S>> Iterator for BusIter<'a, S, B> {
     fn next(&mut self) -> Option<Self::Item> {
         let pos = self.pos;
         self.pos = pos.inc();
-        let value = self.bus.read(pos).unwrap();
+        let value = self.bus.read(pos);
 
         if self.print {
             print!("{:02X} ", value);
@@ -173,10 +173,10 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         segment_and_offset(self.segments[CS], self.ip)
     }
 
-    fn fetch(&mut self) -> Result<u8, crate::error::Error> {
-        let byte = self.data_bus.read(self.flat_address())?;
+    fn fetch(&mut self) -> u8 {
+        let byte = self.data_bus.read(self.flat_address());
         self.ip = self.ip.wrapping_add(1);
-        Ok(byte)
+        byte
     }
 
     fn execute_instruction(&mut self) -> usize {
@@ -192,12 +192,12 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         #[cfg(debug_assertions)]
         let pre_cycles = self.to_consume;
 
-        let mut op_code = self.fetch().unwrap();
+        let mut op_code = self.fetch();
 
         // Handle segment prefixes.
         if op_code == 0x2E {
             self.segment_override = Some(CS);
-            op_code = self.fetch().unwrap();
+            op_code = self.fetch();
         }
 
         self.last_op_code = op_code;
@@ -292,23 +292,23 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     }
 
     fn read_data_bus_byte(&self, addr: Address) -> u8 {
-        self.data_bus.read(addr).unwrap()
+        self.data_bus.read(addr)
     }
 
     fn read_data_bus_word(&self, addr: Address) -> u16 {
-        let lo = self.data_bus.read(addr).unwrap();
-        let hi = self.data_bus.read(addr.wrapping_add(1)).unwrap();
+        let lo = self.data_bus.read(addr);
+        let hi = self.data_bus.read(addr.wrapping_add(1));
         u16::from_le_bytes([lo, hi])
     }
 
     fn write_data_bus_byte(&mut self, addr: Address, value: u8) {
-        self.data_bus.write(addr, value).unwrap();
+        self.data_bus.write(addr, value);
     }
 
     fn write_data_bus_word(&mut self, addr: Address, value: u16) {
         let [lo, hi] = value.to_le_bytes();
-        self.data_bus.write(addr, lo).unwrap();
-        self.data_bus.write(addr.wrapping_add(1), hi).unwrap();
+        self.data_bus.write(addr, lo);
+        self.data_bus.write(addr.wrapping_add(1), hi);
     }
 
     fn _push(&mut self, value: u16) {
@@ -415,44 +415,44 @@ mod tests {
     }
 
     impl Bus<Address> for BusPrinter {
-        fn read(&self, address: Address) -> crate::error::Result<u8> {
+        fn read(&self, address: Address) -> u8 {
             println!("{}: r [{:04X}]", self.name, address);
-            Ok(0)
+            0
         }
 
-        fn write(&mut self, address: Address, value: u8) -> crate::error::Result<()> {
+        fn write(&mut self, address: Address, value: u8) {
             println!("{}: w [{:04X}] {:02X}", self.name, address, value);
-            Ok(())
         }
     }
 
     impl Bus<Port> for BusPrinter {
-        fn read(&self, port: Port) -> crate::error::Result<u8> {
+        fn read(&self, port: Port) -> u8 {
             println!("{}: r [{:04X}]", self.name, port);
-            Ok(0)
+            0
         }
 
-        fn write(&mut self, port: Port, value: u8) -> crate::error::Result<()> {
+        fn write(&mut self, port: Port, value: u8) {
             println!("{}: w [{:04X}] {:02X}", self.name, port, value);
-            Ok(())
         }
     }
 
     impl Bus<Address> for &mut [u8] {
-        fn read(&self, address: Address) -> crate::error::Result<u8> {
-            if address as usize >= self.len() {
-                Err(crate::error::Error::AddressOutOfRange(address))
+        fn read(&self, address: Address) -> u8 {
+            let address = address as usize;
+            if address >= self.len() {
+                log::warn!("Reading outside of bounds! ({:05X})", address);
+                0
             } else {
-                Ok(self[address as usize])
+                self[address]
             }
         }
 
-        fn write(&mut self, address: Address, value: u8) -> crate::error::Result<()> {
-            if address as usize >= self.len() {
-                Err(crate::error::Error::AddressOutOfRange(address))
+        fn write(&mut self, address: Address, value: u8) {
+            let address = address as usize;
+            if address >= self.len() {
+                log::warn!("Writing outside of bounds! ({:05X})", address);
             } else {
                 self[address as usize] = value;
-                Ok(())
             }
         }
     }

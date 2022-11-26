@@ -12,7 +12,6 @@ use mrc_emulator::{
         rom::ReadOnlyMemory,
     },
     cpu::CPU,
-    error::Error,
     Address, Bus, Cpu, Port,
 };
 use std::{cell::RefCell, rc::Rc};
@@ -37,23 +36,24 @@ impl DataBus {
 }
 
 impl Bus<Address> for DataBus {
-    fn read(&self, address: Address) -> mrc_emulator::error::Result<u8> {
+    fn read(&self, address: Address) -> u8 {
         if address >= BIOS_START {
             self.bios.read(address - BIOS_START)
         } else if address < 0xA0000 {
             self.ram.read(address)
         } else {
-            Err(Error::AddressOutOfRange(address))
+            log::warn!("Invalid address read from data bus! ({:#07X})", address);
+            0
         }
     }
 
-    fn write(&mut self, address: Address, value: u8) -> mrc_emulator::error::Result<()> {
+    fn write(&mut self, address: Address, value: u8) {
         if address >= BIOS_START {
             self.bios.write(address - BIOS_START, value)
         } else if address < 0xA0000 {
             self.ram.write(address, value)
         } else {
-            Err(Error::AddressOutOfRange(address))
+            log::warn!("Invalid address written to data bus! ({:#07X})", address);
         }
     }
 }
@@ -69,7 +69,7 @@ pub struct InputOutputBus {
 }
 
 impl Bus<Port> for InputOutputBus {
-    fn read(&self, address: Port) -> mrc_emulator::error::Result<u8> {
+    fn read(&self, address: Port) -> u8 {
         match address {
             0x0000..=0x000D => self.dma.read(address),
 
@@ -85,7 +85,7 @@ impl Bus<Port> for InputOutputBus {
         }
     }
 
-    fn write(&mut self, address: Port, value: u8) -> mrc_emulator::error::Result<()> {
+    fn write(&mut self, address: Port, value: u8) {
         match address {
             0x0000..=0x000D => self.dma.write(address, value),
 
@@ -99,19 +99,17 @@ impl Bus<Port> for InputOutputBus {
 
             0x00A0 => {
                 self.interrupt_manager.borrow_mut().allow_nmi = false;
-                Ok(())
             }
 
             0x03D0..=0x03DF => self.cga.write(address, value),
 
-            0x03B0..=0x03BF => Ok(()),
+            0x03B0..=0x03BF => {}
 
             _ => {
                 // panic!(
                 //     "Writing {:#04x} to unsupported port: {:#06X}",
                 //     value, address
                 // );
-                Ok(())
             }
         }
     }
@@ -342,12 +340,8 @@ impl<'cpu, D: Bus<Address>, I: Bus<Port>> Iterator for CPUIt<'cpu, D, I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.cpu.read_from_bus(self.address) {
-            Ok(byte) => {
-                self.address = self.address.wrapping_add(1);
-                Some(byte)
-            }
-            Err(_) => None,
-        }
+        let byte = self.cpu.read_from_bus(self.address);
+        self.address = self.address.wrapping_add(1);
+        Some(byte)
     }
 }

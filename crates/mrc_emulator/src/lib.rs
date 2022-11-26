@@ -1,13 +1,12 @@
 pub mod components;
 pub mod cpu;
 pub mod cpu2;
-// pub mod debugger;
 pub mod error;
 
 /// An object where bytes can be read from or written to.
 pub trait Bus<Size> {
-    fn read(&self, address: Size) -> error::Result<u8>;
-    fn write(&mut self, address: Size, value: u8) -> error::Result<()>;
+    fn read(&self, address: Size) -> u8;
+    fn write(&mut self, address: Size, value: u8);
 }
 
 /// The type used for reading from a data bus.

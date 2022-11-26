@@ -42,7 +42,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         reg_cycles: usize,
         mem_cycles: usize,
     ) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
         let (dst, src, res_op) = self.mod_reg_rm_operands_byte(reg, rm, direction);
@@ -60,7 +60,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         reg_cycles: usize,
         mem_cycles: usize,
     ) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
         let (dst, src, _) = self.mod_reg_rm_operands_byte(reg, rm, direction);
@@ -77,7 +77,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         reg_cycles: usize,
         mem_cycles: usize,
     ) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
         let (dst, src, res_op) = self.mod_reg_rm_operands_word(reg, rm, direction);
@@ -95,7 +95,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         reg_cycles: usize,
         mem_cycles: usize,
     ) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
         let (dst, src, _) = self.mod_reg_rm_operands_word(reg, rm, direction);
@@ -149,8 +149,8 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         let rm = match mrrm >> 6 {
             0b00 => {
                 if rm == 0b110 {
-                    let lo = self.fetch().unwrap();
-                    let hi = self.fetch().unwrap();
+                    let lo = self.fetch();
+                    let hi = self.fetch();
 
                     Operand::Memory(segment_and_offset(
                         self.segments[self.segment_override.unwrap_or(DS)],
@@ -162,14 +162,14 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
             }
 
             0b01 => {
-                let lo = self.fetch().unwrap();
+                let lo = self.fetch();
                 let disp = i16::from_le_bytes([lo, 0]);
                 Operand::Memory(self.mod_reg_rm_effective_addr(rm, disp))
             }
 
             0b10 => {
-                let lo = self.fetch().unwrap();
-                let hi = self.fetch().unwrap();
+                let lo = self.fetch();
+                let hi = self.fetch();
                 let disp = i16::from_le_bytes([lo, hi]);
                 Operand::Memory(self.mod_reg_rm_effective_addr(rm, disp))
             }

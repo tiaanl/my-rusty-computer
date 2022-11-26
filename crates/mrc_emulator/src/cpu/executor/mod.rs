@@ -30,7 +30,7 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
             &mut self.bus,
             segment_and_offset(self.state.segment(SS), self.state.register(SP)),
             value,
-        )?;
+        );
 
         // log::info!("Push {:04X} to [{:04X}:{:04X}]", value, ss, sp,);
 
@@ -41,7 +41,7 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
         let value = word::bus_read(
             &self.bus,
             segment_and_offset(self.state.segment(SS), self.state.register(SP)),
-        )?;
+        );
 
         // log::info!("Pop {:04X} from [{:04X}:{:04X}]", value, ss, sp,);
 
@@ -130,18 +130,18 @@ mod byte {
     use super::*;
     use mrc_instruction::{Immediate, SizedRegisterEncoding};
 
-    pub fn bus_read(bus: &impl Bus<Address>, address: Address) -> Result<u8> {
+    pub fn bus_read(bus: &impl Bus<Address>, address: Address) -> u8 {
         bus.read(address)
     }
 
-    pub fn bus_write(bus: &mut impl Bus<Address>, address: Address, value: u8) -> Result<()> {
-        bus.write(address, value)
+    pub fn bus_write(bus: &mut impl Bus<Address>, address: Address, value: u8) {
+        bus.write(address, value);
     }
 
     pub fn get_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         operand_type: &Operand,
-    ) -> Result<u8> {
+    ) -> u8 {
         match operand_type {
             Operand::Direct(segment, offset, OperandSize::Byte) => {
                 // TODO: Handle segment override.
@@ -156,14 +156,14 @@ mod byte {
             }
 
             Operand::Register(SizedRegisterEncoding(register, OperandSize::Byte)) => {
-                Ok(cpu.state.register(*register))
+                cpu.state.register(*register)
             }
 
-            Operand::Immediate(Immediate::Byte(value)) => Ok(*value as u8),
+            Operand::Immediate(Immediate::Byte(value)) => *value as u8,
 
             _ => {
                 log::warn!("Invalid data access");
-                Ok(0)
+                0
             }
         }
     }
@@ -171,7 +171,7 @@ mod byte {
     pub fn get_operand_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         operand: &Operand,
-    ) -> Result<u8> {
+    ) -> u8 {
         assert_eq!(OperandSize::Byte, operand.operand_size());
         byte::get_operand_type_value(cpu, operand)
     }
@@ -180,7 +180,7 @@ mod byte {
         cpu: &mut CPU<D, I>,
         operand_type: &Operand,
         value: u8,
-    ) -> Result<()> {
+    ) {
         match operand_type {
             Operand::Direct(segment, offset, OperandSize::Byte) => {
                 // TODO: Handle segment override.
@@ -195,10 +195,9 @@ mod byte {
 
             Operand::Register(SizedRegisterEncoding(register, OperandSize::Byte)) => {
                 cpu.state.set_register(*register, value);
-                Ok(())
             }
 
-            _ => Err(Error::IllegalDataAccess),
+            _ => log::warn!("Invalid data access"),
         }
     }
 
@@ -206,7 +205,7 @@ mod byte {
         cpu: &mut CPU<D, I>,
         operand: &Operand,
         value: u8,
-    ) -> Result<()> {
+    ) {
         assert_eq!(OperandSize::Byte, operand.operand_size());
         byte::set_operand_type_value(cpu, operand, value)
     }
@@ -214,50 +213,46 @@ mod byte {
 
 mod word {
     use super::*;
-    use crate::error::Error::IllegalDataAccess;
     use mrc_instruction::{Immediate, SizedRegisterEncoding};
 
-    pub fn bus_read(bus: &impl Bus<Address>, address: Address) -> Result<u16> {
-        let lo = byte::bus_read(bus, address)?;
-        let hi = byte::bus_read(bus, address + 1)?;
-        Ok(u16::from_le_bytes([lo, hi]))
+    pub fn bus_read(bus: &impl Bus<Address>, address: Address) -> u16 {
+        let lo = byte::bus_read(bus, address);
+        let hi = byte::bus_read(bus, address + 1);
+        u16::from_le_bytes([lo, hi])
     }
 
-    pub fn bus_write(bus: &mut impl Bus<Address>, address: Address, value: u16) -> Result<()> {
+    pub fn bus_write(bus: &mut impl Bus<Address>, address: Address, value: u16) {
         let bytes = value.to_le_bytes();
-        byte::bus_write(bus, address, bytes[0])?;
-        byte::bus_write(bus, address + 1, bytes[1])?;
-        Ok(())
+        byte::bus_write(bus, address, bytes[0]);
+        byte::bus_write(bus, address + 1, bytes[1]);
     }
 
     pub fn set_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &mut CPU<D, I>,
         operand_type: &Operand,
         value: u16,
-    ) -> Result<()> {
+    ) {
         match operand_type {
             Operand::Direct(segment, offset, OperandSize::Word) => {
                 // TODO: Handle segment override.
                 let seg = cpu.state.segment(*segment);
-                word::bus_write(&mut cpu.bus, segment_and_offset(seg, *offset), value)
+                word::bus_write(&mut cpu.bus, segment_and_offset(seg, *offset), value);
             }
 
             Operand::Indirect(segment, addressing_mode, displacement, OperandSize::Word) => {
                 let addr = indirect_address_for(cpu, *segment, addressing_mode, displacement);
-                word::bus_write(&mut cpu.bus, addr, value)
+                word::bus_write(&mut cpu.bus, addr, value);
             }
 
             Operand::Register(SizedRegisterEncoding(register, OperandSize::Word)) => {
                 cpu.state.set_register(*register, value);
-                Ok(())
             }
 
             Operand::Segment(segment) => {
                 cpu.state.set_segment(*segment, value);
-                Ok(())
             }
 
-            _ => Err(Error::IllegalDataAccess),
+            _ => log::warn!("Invalid data access"),
         }
     }
 
@@ -265,15 +260,15 @@ mod word {
         cpu: &mut CPU<D, I>,
         operand: &Operand,
         value: u16,
-    ) -> Result<()> {
+    ) {
         assert_eq!(OperandSize::Word, operand.operand_size());
-        set_operand_type_value(cpu, operand, value)
+        set_operand_type_value(cpu, operand, value);
     }
 
     pub fn get_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         operand_type: &Operand,
-    ) -> Result<u16> {
+    ) -> u16 {
         match operand_type {
             Operand::Direct(segment, offset, OperandSize::Word) => {
                 // Get a single byte from DS:offset
@@ -291,22 +286,24 @@ mod word {
             }
 
             Operand::Register(SizedRegisterEncoding(register, OperandSize::Word)) => {
-                let value: u16 = cpu.state.register(*register);
-                Ok(value)
+                cpu.state.register(*register)
             }
 
-            Operand::Segment(segment) => Ok(cpu.state.segment(*segment)),
+            Operand::Segment(segment) => cpu.state.segment(*segment),
 
-            Operand::Immediate(Immediate::Word(value)) => Ok(*value),
+            Operand::Immediate(Immediate::Word(value)) => *value,
 
-            _ => Err(IllegalDataAccess),
+            _ => {
+                log::warn!("Invalid data access");
+                0
+            }
         }
     }
 
     pub fn get_operand_value<D: Bus<Address>, I: Bus<Port>>(
         cpu: &CPU<D, I>,
         operand: &Operand,
-    ) -> Result<u16> {
+    ) -> u16 {
         assert_eq!(OperandSize::Word, operand.operand_size());
 
         word::get_operand_type_value(cpu, operand)
@@ -344,25 +341,25 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         if destination.operand_size() == source.operand_size() {
             match destination.operand_size() {
                 OperandSize::Byte => {
-                    let d = byte::get_operand_type_value(cpu, destination)?;
-                    let s = byte::get_operand_type_value(cpu, source)?;
+                    let d = byte::get_operand_type_value(cpu, destination);
+                    let s = byte::get_operand_type_value(cpu, source);
                     if let Some(result) =
                         destination_and_source_ops!(instruction.operation, d, s, byte)
                     {
                         if let Some(result) = result {
-                            byte::set_operand_type_value(cpu, destination, result)?;
+                            byte::set_operand_type_value(cpu, destination, result);
                         }
                         return Ok(ExecuteResult::Continue);
                     }
                 }
                 OperandSize::Word => {
-                    let d = word::get_operand_type_value(cpu, destination)?;
-                    let s = word::get_operand_type_value(cpu, source)?;
+                    let d = word::get_operand_type_value(cpu, destination);
+                    let s = word::get_operand_type_value(cpu, source);
                     if let Some(result) =
                         destination_and_source_ops!(instruction.operation, d, s, word)
                     {
                         if let Some(result) = result {
-                            word::set_operand_type_value(cpu, destination, result)?;
+                            word::set_operand_type_value(cpu, destination, result);
                         }
                         return Ok(ExecuteResult::Continue);
                     }
@@ -407,14 +404,14 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             OperandSet::Destination(ref destination) => {
                 match destination.operand_size() {
                     OperandSize::Byte => {
-                        let mut value = byte::get_operand_type_value(cpu, destination)?;
+                        let mut value = byte::get_operand_type_value(cpu, destination);
                         value = operations::byte::decrement(value, &mut cpu.state.flags).unwrap();
-                        byte::set_operand_type_value(cpu, destination, value)?
+                        byte::set_operand_type_value(cpu, destination, value)
                     }
                     OperandSize::Word => {
-                        let mut value = word::get_operand_type_value(cpu, destination)?;
+                        let mut value = word::get_operand_type_value(cpu, destination);
                         value = operations::word::decrement(value, &mut cpu.state.flags).unwrap();
-                        word::set_operand_type_value(cpu, destination, value)?
+                        word::set_operand_type_value(cpu, destination, value)
                     }
                 };
             }
@@ -433,18 +430,18 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::IN => match instruction.operands {
             OperandSet::DestinationAndSource(ref destination, ref port) => {
                 let port = match port.operand_size() {
-                    OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
-                    OperandSize::Word => word::get_operand_value(cpu, port)?,
+                    OperandSize::Byte => byte::get_operand_value(cpu, port) as u16,
+                    OperandSize::Word => word::get_operand_value(cpu, port),
                 };
 
                 match destination.operand_size() {
                     OperandSize::Byte => {
-                        let value = cpu.io_controller.read(port)?;
-                        byte::set_operand_value(cpu, destination, value)?;
+                        let value = cpu.io_controller.read(port);
+                        byte::set_operand_value(cpu, destination, value);
                     }
                     OperandSize::Word => {
-                        let value = cpu.io_controller.read(port)? as u16;
-                        word::set_operand_value(cpu, destination, value)?;
+                        let value = cpu.io_controller.read(port) as u16;
+                        word::set_operand_value(cpu, destination, value);
                     }
                 };
             }
@@ -455,14 +452,14 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::INC => match &instruction.operands {
             OperandSet::Destination(destination) => match destination.operand_size() {
                 OperandSize::Byte => {
-                    let mut value = byte::get_operand_value(cpu, destination)?;
+                    let mut value = byte::get_operand_value(cpu, destination);
                     value = operations::byte::increment(value, &mut cpu.state.flags).unwrap();
-                    byte::set_operand_value(cpu, destination, value)?;
+                    byte::set_operand_value(cpu, destination, value);
                 }
                 OperandSize::Word => {
-                    let mut value = word::get_operand_value(cpu, destination)?;
+                    let mut value = word::get_operand_value(cpu, destination);
                     value = operations::word::increment(value, &mut cpu.state.flags).unwrap();
-                    word::set_operand_value(cpu, destination, value)?;
+                    word::set_operand_value(cpu, destination, value)
                 }
             },
             _ => illegal_operands(instruction),
@@ -483,8 +480,8 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 let interrupt_descriptor_table = segment_and_offset(0x0000, 0x0000);
                 let addr = interrupt_descriptor_table + 4u32 * index as Address;
 
-                let ip = word::bus_read(&cpu.bus, addr)?;
-                let cs = word::bus_read(&cpu.bus, addr + 2)?;
+                let ip = word::bus_read(&cpu.bus, addr);
+                let cs = word::bus_read(&cpu.bus, addr + 2);
 
                 // If the far call points to 0000:0000 again, this is probably an invalid interrupt
                 // vector.
@@ -714,12 +711,12 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             {
                 match destination.operand_size() {
                     OperandSize::Byte => {
-                        let source_value = byte::get_operand_type_value(cpu, source)?;
-                        byte::set_operand_type_value(cpu, destination, source_value)?;
+                        let source_value = byte::get_operand_type_value(cpu, source);
+                        byte::set_operand_type_value(cpu, destination, source_value);
                     }
                     OperandSize::Word => {
-                        let source_value = word::get_operand_type_value(cpu, source)?;
-                        word::set_operand_type_value(cpu, destination, source_value)?;
+                        let source_value = word::get_operand_type_value(cpu, source);
+                        word::set_operand_type_value(cpu, destination, source_value);
                     }
                 }
             }
@@ -790,45 +787,45 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             loop {
                 match instruction.operation {
                     Operation::LODSB => {
-                        let value = byte::bus_read(&cpu.bus, segment_and_offset(ds, si))?;
+                        let value = byte::bus_read(&cpu.bus, segment_and_offset(ds, si));
                         cpu.state.set_register(AL, value);
                     }
 
                     Operation::LODSW => {
-                        let value = word::bus_read(&cpu.bus, segment_and_offset(ds, si))?;
+                        let value = word::bus_read(&cpu.bus, segment_and_offset(ds, si));
                         cpu.state.set_register(AX, value);
                     }
 
                     Operation::MOVSB => {
-                        let value = byte::bus_read(&cpu.bus, segment_and_offset(ds, si))?;
-                        byte::bus_write(&mut cpu.bus, segment_and_offset(es, di), value)?;
+                        let value = byte::bus_read(&cpu.bus, segment_and_offset(ds, si));
+                        byte::bus_write(&mut cpu.bus, segment_and_offset(es, di), value);
                     }
 
                     Operation::MOVSW => {
-                        let value = word::bus_read(&cpu.bus, segment_and_offset(ds, si))?;
-                        word::bus_write(&mut cpu.bus, segment_and_offset(es, di), value)?;
+                        let value = word::bus_read(&cpu.bus, segment_and_offset(ds, si));
+                        word::bus_write(&mut cpu.bus, segment_and_offset(es, di), value);
                     }
 
                     Operation::STOSB => {
                         let value = cpu.state.register(AL);
-                        byte::bus_write(&mut cpu.bus, segment_and_offset(es, di), value)?;
+                        byte::bus_write(&mut cpu.bus, segment_and_offset(es, di), value);
                     }
 
                     Operation::STOSW => {
                         let value = cpu.state.register(AX);
-                        word::bus_write(&mut cpu.bus, segment_and_offset(es, di), value)?;
+                        word::bus_write(&mut cpu.bus, segment_and_offset(es, di), value);
                     }
 
                     Operation::SCASB => {
-                        let destination = byte::bus_read(&cpu.bus, segment_and_offset(ds, si))?;
-                        let source = byte::bus_read(&cpu.bus, segment_and_offset(es, di))?;
+                        let destination = byte::bus_read(&cpu.bus, segment_and_offset(ds, si));
+                        let source = byte::bus_read(&cpu.bus, segment_and_offset(es, di));
                         let _ =
                             operations::byte::compare(destination, source, &mut cpu.state.flags);
                     }
 
                     Operation::SCASW => {
-                        let destination = word::bus_read(&cpu.bus, segment_and_offset(ds, si))?;
-                        let source = word::bus_read(&cpu.bus, segment_and_offset(es, di))?;
+                        let destination = word::bus_read(&cpu.bus, segment_and_offset(ds, si));
+                        let source = word::bus_read(&cpu.bus, segment_and_offset(es, di));
                         let _ =
                             operations::word::compare(destination, source, &mut cpu.state.flags);
                     }
@@ -879,15 +876,15 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::NOT => match instruction.operands {
             OperandSet::Destination(ref destination) => match destination.operand_size() {
                 OperandSize::Byte => {
-                    let value = byte::get_operand_type_value(cpu, destination)?;
+                    let value = byte::get_operand_type_value(cpu, destination);
                     if let Some(result) = operations::byte::not(value, &mut cpu.state.flags) {
-                        byte::set_operand_type_value(cpu, destination, result)?;
+                        byte::set_operand_type_value(cpu, destination, result);
                     }
                 }
                 OperandSize::Word => {
-                    let value = word::get_operand_type_value(cpu, destination)?;
+                    let value = word::get_operand_type_value(cpu, destination);
                     if let Some(result) = operations::word::not(value, &mut cpu.state.flags) {
-                        word::set_operand_type_value(cpu, destination, result)?;
+                        word::set_operand_type_value(cpu, destination, result);
                     }
                 }
             },
@@ -897,12 +894,12 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::OUT => match instruction.operands {
             OperandSet::DestinationAndSource(ref port, ref value) => {
                 let port = match port.operand_size() {
-                    OperandSize::Byte => byte::get_operand_value(cpu, port)? as u16,
-                    OperandSize::Word => word::get_operand_value(cpu, port)?,
+                    OperandSize::Byte => byte::get_operand_value(cpu, port) as u16,
+                    OperandSize::Word => word::get_operand_value(cpu, port),
                 };
 
-                let value = byte::get_operand_type_value(cpu, value)?;
-                cpu.io_controller.write(port, value)?;
+                let value = byte::get_operand_type_value(cpu, value);
+                cpu.io_controller.write(port, value);
 
                 if port == 0x60 || port == 0x80 {
                     log::info!("POST port out ({:04X}): {:02X}", port, value);
@@ -914,7 +911,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
         Operation::PUSH => match &instruction.operands {
             OperandSet::Destination(destination) => {
-                let value = word::get_operand_value(cpu, destination)?;
+                let value = word::get_operand_value(cpu, destination);
                 cpu.push(value)?;
             }
             _ => illegal_operands(instruction),
@@ -927,7 +924,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
         Operation::POP => match &instruction.operands {
             OperandSet::Destination(destination) => {
                 let value = cpu.pop()?;
-                word::set_operand_value(cpu, destination, value)?;
+                word::set_operand_value(cpu, destination, value);
             }
             _ => illegal_operands(instruction),
         },
@@ -947,7 +944,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 ref destination,
                 Operand::Register(SizedRegisterEncoding(RegisterEncoding::ClCx, OperandSize::Byte)),
             ) if destination.operand_size() == OperandSize::Word => {
-                let d = word::get_operand_type_value(cpu, destination)?;
+                let d = word::get_operand_type_value(cpu, destination);
                 let s = cpu.state.register(CX);
                 let result = match instruction.operation {
                     Operation::SHL => {
@@ -958,7 +955,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                     }
                     _ => unreachable!(),
                 };
-                word::set_operand_type_value(cpu, destination, result)?;
+                word::set_operand_type_value(cpu, destination, result);
             }
 
             _ => illegal_operands(instruction),
@@ -984,18 +981,18 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
             {
                 match destination.operand_size() {
                     OperandSize::Byte => {
-                        let d = byte::get_operand_type_value(cpu, destination)?;
-                        let s = byte::get_operand_type_value(cpu, source)?;
+                        let d = byte::get_operand_type_value(cpu, destination);
+                        let s = byte::get_operand_type_value(cpu, source);
 
-                        byte::set_operand_type_value(cpu, destination, s)?;
-                        byte::set_operand_type_value(cpu, source, d)?;
+                        byte::set_operand_type_value(cpu, destination, s);
+                        byte::set_operand_type_value(cpu, source, d);
                     }
                     OperandSize::Word => {
-                        let d = word::get_operand_type_value(cpu, destination)?;
-                        let s = word::get_operand_type_value(cpu, source)?;
+                        let d = word::get_operand_type_value(cpu, destination);
+                        let s = word::get_operand_type_value(cpu, source);
 
-                        word::set_operand_type_value(cpu, destination, s)?;
-                        word::set_operand_type_value(cpu, source, d)?;
+                        word::set_operand_type_value(cpu, destination, s);
+                        word::set_operand_type_value(cpu, source, d);
                     }
                 }
             }

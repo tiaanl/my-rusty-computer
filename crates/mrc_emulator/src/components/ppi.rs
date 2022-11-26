@@ -1,6 +1,5 @@
 //! Emulation of the Intel 8255 Programmable Peripheral Interface
 
-use crate::error::{Error, Result};
 use crate::{Bus, Port};
 
 #[derive(Clone, Copy, Debug)]
@@ -45,19 +44,22 @@ where
     B: Bus<Port>,
     C: Bus<Port>,
 {
-    fn read(&self, address: Port) -> Result<u8> {
+    fn read(&self, address: Port) -> u8 {
         let address = address & 0b11;
 
         match address {
             0b00 => self.port_a.read(address),
             0b01 => self.port_b.read(address),
             0b10 => self.port_c.read(address),
-            0b11 => Err(Error::InvalidPort(address)),
-            _ => unreachable!(),
+            0b11 => {
+                log::warn!("Reading from invalid port. ({:02b})", address);
+                0
+            }
+            _ => 0,
         }
     }
 
-    fn write(&mut self, address: Port, value: u8) -> Result<()> {
+    fn write(&mut self, address: Port, value: u8) {
         let address = address & 0b11;
 
         match address {
@@ -73,9 +75,8 @@ where
                     }
                 }
                 log::info!("Writing to PPI control register: {:?}", self.modes);
-                Ok(())
             }
-            _ => Err(Error::InvalidPort(address)),
+            _ => log::warn!("Writing to invalid PPI address! ({:02b})", address),
         }
     }
 }
@@ -83,13 +84,12 @@ where
 pub struct Latch(pub u8);
 
 impl Bus<Port> for Latch {
-    fn read(&self, _address: Port) -> Result<u8> {
-        Ok(self.0)
+    fn read(&self, _address: Port) -> u8 {
+        self.0
     }
 
-    fn write(&mut self, _address: Port, value: u8) -> Result<()> {
+    fn write(&mut self, _address: Port, value: u8) {
         self.0 = value;
-        Ok(())
     }
 }
 

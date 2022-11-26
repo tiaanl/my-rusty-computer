@@ -523,7 +523,7 @@ impl TextModeInterface {
 }
 
 impl Bus<Address> for TextModeInterface {
-    fn read(&self, address: Address) -> mrc_emulator::error::Result<u8> {
+    fn read(&self, address: Address) -> u8 {
         let text_mode = self.text_mode.read().unwrap();
 
         let index = address as usize / 2;
@@ -535,10 +535,10 @@ impl Bus<Address> for TextModeInterface {
 
         // log::info!("Read \"{:02X}\" from VGA memory at [{:05X}]", value, address);
 
-        Ok(value)
+        value
     }
 
-    fn write(&mut self, address: Address, value: u8) -> mrc_emulator::error::Result<()> {
+    fn write(&mut self, address: Address, value: u8) {
         let mut text_mode = self.text_mode.write().unwrap();
 
         let index = address as usize / 2;
@@ -549,8 +549,6 @@ impl Bus<Address> for TextModeInterface {
         }
 
         // log::info!("Wrote \"{:02X}\" to VGA memory at [{:05X}] ", value, address);
-
-        Ok(())
     }
 }
 

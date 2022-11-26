@@ -1,13 +1,15 @@
-use super::calc::arithmetic::{arithmetic, Add, Subtract};
-use super::{Flags, Intel8088, Operand, AX, BX, CS, CX, DX};
-use crate::cpu2::calc::arithmetic::{
-    And, ExclusiveOr, Or, RotateLeft, RotateLeftWithCarry, RotateRight, RotateRightWithCarry,
-    ShiftArithmeticRight, ShiftLeft, ShiftRight,
+use super::{
+    calc::{
+        arithmetic::{
+            arithmetic, Add, And, ExclusiveOr, Or, RotateLeft, RotateLeftWithCarry, RotateRight,
+            RotateRightWithCarry, ShiftArithmeticRight, ShiftLeft, ShiftRight, Subtract,
+        },
+        logic::{logic, Compare, Test},
+    },
+    mrrm::{ModRegRMDirection::RegFirst, ModRegRMDirection::RegMemFirst},
+    segment_and_offset, Address, Bus, Flags, Intel8088, Operand, Port, AX, BP, BX, CS, CX, DI, DS,
+    DX, ES, SI, SP, SS,
 };
-use crate::cpu2::calc::logic::{logic, Compare, Test};
-use crate::cpu2::mrrm::ModRegRMDirection::{RegFirst, RegMemFirst};
-use crate::cpu2::{BP, DI, DS, ES, SI, SP, SS};
-use crate::{segment_and_offset, Address, Bus, Port};
 use std::ops::Not;
 
 macro_rules! op {
@@ -309,7 +311,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     // 04
     fn op_add_al_imm8(&mut self) {
         let al = self.read_register_byte(AX);
-        let imm = self.fetch().unwrap();
+        let imm = self.fetch();
 
         let result = arithmetic(Add, al, imm, &mut self.flags);
 
@@ -349,7 +351,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     // 24
     fn op_and_al_imm8(&mut self) {
         let al = self.read_register_byte(AX);
-        let imm = self.fetch().unwrap();
+        let imm = self.fetch();
 
         let result = arithmetic(And, al, imm, &mut self.flags);
 
@@ -551,13 +553,13 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 80
     fn op_xxx_rm8_imm8(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (xop, dst_op) = self.mod_reg_rm_to_operands::<u8>(mrrm);
 
         let dst = self.read_operand_byte(dst_op);
 
         // Sign extended byte into word.
-        let src = self.fetch().unwrap();
+        let src = self.fetch();
 
         let (reg_cycles, mem_cycles) = if xop == 0b111 {
             logic(Compare, dst, src, &mut self.flags);
@@ -585,13 +587,13 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 81
     fn op_xxx_rm16_imm16(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (xop, dst_op) = self.mod_reg_rm_to_operands::<u8>(mrrm);
 
         let dst = self.read_operand_word(dst_op);
 
-        let lo = self.fetch().unwrap();
-        let hi = self.fetch().unwrap();
+        let lo = self.fetch();
+        let hi = self.fetch();
         let src = u16::from_le_bytes([lo, hi]);
 
         let (reg_cycles, mem_cycles) = if xop == 0b111 {
@@ -620,13 +622,13 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 83
     fn op_xxx_rm16_imm8(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (xop, rm) = self.mod_reg_rm_to_operands::<u8>(mrrm);
 
         let dst = self.read_operand_word(rm);
 
         // Sign extended byte into word.
-        let src = self.fetch().unwrap() as u16;
+        let src = self.fetch() as u16;
         let src = if src & 0x80 == 0x80 {
             src | 0xFF00
         } else {
@@ -634,25 +636,34 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         };
 
         let (result, reg_cycles, mem_cycles) = match xop {
-            0b000 => (arithmetic(Add, dst, src, &mut self.flags), 4, 17),
-            0b001 => (arithmetic(Or, dst, src, &mut self.flags), 4, 17),
+            0b000 => (Some(arithmetic(Add, dst, src, &mut self.flags)), 4, 17),
+            0b001 => (Some(arithmetic(Or, dst, src, &mut self.flags)), 4, 17),
             0b010 => todo!(), // (cpu_arith::word::adc(dst, src, &mut self.flags), 4, 17),
             0b011 => todo!(), // (cpu_arith::word::sbb(dst, src, &mut self.flags), 4, 17),
             0b100 => todo!(), // (cpu_arith::word::and(dst, src, &mut self.flags), 4, 17),
-            0b101 => (arithmetic(Subtract, dst, src, &mut self.flags), 4, 17),
-            0b110 => (arithmetic(ExclusiveOr, dst, src, &mut self.flags), 4, 17),
-            // 0b111 => (cpu_arith::word::cmp(dst, src, &mut self.flags), 4, 10),
+            0b101 => (Some(arithmetic(Subtract, dst, src, &mut self.flags)), 4, 17),
+            0b110 => (
+                Some(arithmetic(ExclusiveOr, dst, src, &mut self.flags)),
+                4,
+                17,
+            ),
+            0b111 => {
+                logic(Compare, dst, src, &mut self.flags);
+                (None, 4, 10)
+            }
             _ => unreachable!(),
         };
 
-        self.write_operand_word(rm, result);
+        if let Some(result) = result {
+            self.write_operand_word(rm, result);
+        }
 
         self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
     }
 
     // 88
     fn op_mov_rm8_reg8(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
         let src = self.read_operand_byte(reg);
@@ -663,7 +674,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 89
     fn op_mov_rm16_reg16(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
         let src = self.read_operand_word(reg);
@@ -674,7 +685,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 8A
     fn op_mov_reg8_rm8(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
         let src = self.read_operand_byte(rm);
@@ -684,7 +695,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 8B
     fn op_mov_reg16_rm16(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
 
         let src = self.read_operand_word(rm);
@@ -694,7 +705,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 8C
     fn op_mov_rm16_seg(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (seg, rm) = self.mod_reg_rm_to_operands::<usize>(mrrm);
 
         let src = self.segments[seg];
@@ -704,7 +715,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 8E
     fn op_mov_seg_rm16(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (seg, rm) = self.mod_reg_rm_to_operands::<usize>(mrrm);
 
         let src = self.read_operand_word(rm);
@@ -743,7 +754,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
         let al = self.read_register_byte(AX);
 
-        self.data_bus.write(segment_and_offset(es, di), al).unwrap();
+        self.data_bus.write(segment_and_offset(es, di), al);
 
         let di = if self.flags.contains(Flags::DIRECTION) {
             di.wrapping_add(1)
@@ -763,10 +774,9 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         let ax = self.read_register_word(AX);
 
         let [lo, hi] = ax.to_le_bytes();
-        self.data_bus.write(segment_and_offset(es, di), lo).unwrap();
+        self.data_bus.write(segment_and_offset(es, di), lo);
         self.data_bus
-            .write(segment_and_offset(es, di.wrapping_add(1)), hi)
-            .unwrap();
+            .write(segment_and_offset(es, di.wrapping_add(1)), hi);
 
         let di = if self.flags.contains(Flags::DIRECTION) {
             di.wrapping_add(2)
@@ -789,7 +799,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         if self.repeat {
             let cx = self.read_register_word(CX);
             if cx != 0 {
-                let src = self.data_bus.read(segment_and_offset(ds, si)).unwrap();
+                let src = self.data_bus.read(segment_and_offset(ds, si));
                 self.write_register_byte(AX, src);
                 self.write_register_word(SI, si.wrapping_add(increment));
                 self.write_register_word(CX, cx.wrapping_sub(1));
@@ -803,7 +813,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
                 // Keep the repeat prefix.
             }
         } else {
-            let src = self.data_bus.read(segment_and_offset(ds, si)).unwrap();
+            let src = self.data_bus.read(segment_and_offset(ds, si));
             self.write_register_byte(AX, src);
             self.write_register_word(SI, si.wrapping_add(increment));
             self.consume_cycles(12);
@@ -898,10 +908,10 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // C6
     fn op_mov_rm8_imm8(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (_, rm) = self.mod_reg_rm_to_operands::<u8>(mrrm);
 
-        let src = self.fetch().unwrap();
+        let src = self.fetch();
         self.write_operand_byte(rm, src);
 
         self.consume_cycles_for_operand(rm, 4, 10);
@@ -909,11 +919,11 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // C7
     fn op_mov_rm16_imm16(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (_, rm) = self.mod_reg_rm_to_operands::<u8>(mrrm);
 
-        let lo = self.fetch().unwrap();
-        let hi = self.fetch().unwrap();
+        let lo = self.fetch();
+        let hi = self.fetch();
         let src = u16::from_le_bytes([lo, hi]);
         self.write_operand_word(rm, src);
 
@@ -942,7 +952,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         let cx = self.read_register_word(CX).wrapping_sub(1);
         self.write_register_word(CX, cx);
 
-        let rel = self.fetch().unwrap();
+        let rel = self.fetch();
 
         if cx != 0 && self.flags.contains(Flags::ZERO) {
             self.ip = self.ip.wrapping_add(rel as i8 as i16 as u16);
@@ -957,7 +967,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         let cx = self.read_register_word(CX).wrapping_sub(1);
         self.write_register_word(CX, cx);
 
-        let rel = self.fetch().unwrap();
+        let rel = self.fetch();
 
         if cx != 0 {
             self.ip = self.ip.wrapping_add(rel as i8 as i16 as u16);
@@ -969,17 +979,17 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // E4
     fn op_in_al_imm8(&mut self) {
-        let port = self.fetch().unwrap();
-        self.write_register_byte(AX, self.io_bus.read(port as Port).unwrap());
+        let port = self.fetch();
+        self.write_register_byte(AX, self.io_bus.read(port as Port));
         self.consume_cycles(11);
     }
 
     // E6
     fn op_out_imm8_al(&mut self) {
-        let port = self.fetch().unwrap();
+        let port = self.fetch();
         let al = self.read_register_byte(AX);
 
-        self.io_bus.write(port.into(), al).unwrap();
+        self.io_bus.write(port.into(), al);
         self.consume_cycles(11);
     }
 
@@ -987,8 +997,8 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     fn op_call_imm16(&mut self) {
         self._push(self.ip);
 
-        let lo = self.fetch().unwrap();
-        let hi = self.fetch().unwrap();
+        let lo = self.fetch();
+        let hi = self.fetch();
         let new_ip = u16::from_le_bytes([lo, hi]);
 
         self.ip = self.ip.wrapping_add(new_ip);
@@ -1005,12 +1015,12 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // EA
     fn op_jmp_seg_off(&mut self) {
-        let lo = self.fetch().unwrap();
-        let hi = self.fetch().unwrap();
+        let lo = self.fetch();
+        let hi = self.fetch();
         let offset = u16::from_le_bytes([lo, hi]);
 
-        let lo = self.fetch().unwrap();
-        let hi = self.fetch().unwrap();
+        let lo = self.fetch();
+        let hi = self.fetch();
         let segment = u16::from_le_bytes([lo, hi]);
 
         self.ip = offset;
@@ -1022,7 +1032,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     // EC
     fn op_in_al_dx(&mut self) {
         let port = self.read_register_word(DX);
-        let value = self.io_bus.read(port).unwrap();
+        let value = self.io_bus.read(port);
         self.write_register_byte(AX, value);
 
         self.consume_cycles(9);
@@ -1031,8 +1041,8 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     // ED
     fn op_in_ax_dx(&mut self) {
         let port = self.read_register_word(DX);
-        let lo = self.io_bus.read(port).unwrap();
-        let hi = self.io_bus.read(port.wrapping_add(1)).unwrap();
+        let lo = self.io_bus.read(port);
+        let hi = self.io_bus.read(port.wrapping_add(1));
         let value = u16::from_le_bytes([lo, hi]);
         self.write_register_word(AX, value);
 
@@ -1044,7 +1054,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         let dx = self.read_register_word(DX);
         let al = self.read_register_byte(AX);
 
-        self.io_bus.write(dx, al).unwrap();
+        self.io_bus.write(dx, al);
 
         self.consume_cycles(9);
     }
@@ -1063,7 +1073,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // F6
     fn op_xxx_rm8(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (xop, dst_op) = self.mod_reg_rm_to_operands(mrrm);
         let xop = if let Operand::Register(xop) = xop {
             xop
@@ -1075,7 +1085,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
         match xop {
             0b000 => {
-                let src = self.fetch().unwrap();
+                let src = self.fetch();
                 logic(Test, dst, src, &mut self.flags);
                 self.consume_cycles_for_operand(dst_op, 5, 11);
             }
@@ -1150,7 +1160,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // FE
     fn op_inc_dec_rm8(&mut self) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (xop, rm) = self.mod_reg_rm_to_operands::<usize>(mrrm);
 
         let dst = self.read_operand_byte(rm);
@@ -1192,7 +1202,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // 70..7F
     fn jump_if(&mut self, condition: fn(Flags) -> bool) {
-        let rel = self.fetch().unwrap() as i8;
+        let rel = self.fetch() as i8;
 
         if condition(self.flags) {
             self.ip = self.ip.wrapping_add(rel as u16);
@@ -1204,15 +1214,15 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // B0..B7
     fn mov_reg8_imm8(&mut self, reg: usize) {
-        let value = self.fetch().unwrap();
+        let value = self.fetch();
         self.write_register_byte(reg, value);
         self.consume_cycles(4);
     }
 
     // B8..BF
     fn mov_reg16_imm16(&mut self, reg: u8) {
-        let lo = self.fetch().unwrap();
-        let hi = self.fetch().unwrap();
+        let lo = self.fetch();
+        let hi = self.fetch();
         let value = u16::from_le_bytes([lo, hi]);
 
         self.write_register_word(reg as usize, value);
@@ -1222,7 +1232,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // D0, D2
     fn op_group_d0_byte(&mut self, count: u8) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (op, src_op) = self.mod_rm_to_operands(mrrm);
 
         if count == 0 {
@@ -1257,7 +1267,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 
     // D1, D3
     fn op_group_d0_word(&mut self, count: u16) {
-        let mrrm = self.fetch().unwrap();
+        let mrrm = self.fetch();
         let (op, src_op) = self.mod_rm_to_operands(mrrm);
 
         if count == 0 {
@@ -1288,5 +1298,55 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         self.write_operand_word(src_op, result);
 
         self.consume_cycles_for_operand(src_op, 8 + 4 * count as usize, 20 + 4 * count as usize);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::ram::RandomAccessMemory;
+
+    // #[test]
+    fn _effective_address_size() {
+        let mut mem = RandomAccessMemory::with_capacity(1024);
+        let io = RandomAccessMemory::with_capacity(1024);
+
+        // reg, reg = 3
+        // mem, reg = 24 + EA
+        // reg, mem = 13 + EA
+        // reg, imm = 4
+        // mem, imm = 23 + EA
+        // acc, imm = 4
+        //
+        // base                     = 5
+        // BP+DI or BX+SI           = 7
+        // BP+DI+disp or BX+SI+disp = 11
+        // index                    = 5
+        // BX+DI or BP+SI           = 8
+        // BX+DI+disp or BP+SI+disp = 12
+        // disp                     = 6
+        // segment override         = +2
+        let bytes = mrc_compiler::compile(
+            "
+            add bx, ax          ; reg,reg:3 = 3
+            add [bp+di], ax     ; mem,reg:24 + bp+di:7 = 31
+            add [bx+si], ax     ; mem,reg:24 + bx+si:7 = 31
+            add [bp+di+20], ax  ; mem,reg:24 + bp+di+disp:11 = 35
+            add [bx+si+20], ax  ; mem,reg:24 + bx+si+disp:11 = 35
+            ",
+        )
+        .unwrap();
+        for (i, b) in bytes.into_iter().enumerate() {
+            mem.write(i as Address, b);
+        }
+
+        let mut cpu = Intel8088::new(mem, io);
+
+        let counts = [3_usize, 31, 31, 35, 35];
+        for c in counts {
+            let _ = cpu.execute_instruction();
+            assert_eq!(cpu.to_consume, c);
+            cpu.to_consume = 0;
+        }
     }
 }

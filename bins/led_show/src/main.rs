@@ -4,10 +4,7 @@ mod screen;
 use crate::panel::Panel;
 use glium::{glutin, Surface};
 use mrc_emulator::components::pit::ProgrammableIntervalTimer8253;
-use mrc_emulator::{
-    error::{Error, Result},
-    Bus, Port,
-};
+use mrc_emulator::{Bus, Port};
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
@@ -35,11 +32,11 @@ impl<Inner: Bus<Size>, Size> ThreadSafeBus<Inner, Size> {
 }
 
 impl<Inner: Bus<Size>, Size> Bus<Size> for ThreadSafeBus<Inner, Size> {
-    fn read(&self, address: Size) -> Result<u8> {
+    fn read(&self, address: Size) -> u8 {
         self.inner.read().unwrap().read(address)
     }
 
-    fn write(&mut self, address: Size, value: u8) -> Result<()> {
+    fn write(&mut self, address: Size, value: u8) {
         self.inner.write().unwrap().write(address, value)
     }
 }
@@ -50,19 +47,19 @@ struct Chipset {
 }
 
 impl Bus<Port> for Chipset {
-    fn read(&self, address: Port) -> Result<u8> {
+    fn read(&self, address: Port) -> u8 {
         match address {
             0x00 => self.panel.read(address),
             0x40..=0x43 => self.pit.read(address),
-            _ => Err(Error::InvalidPort(address)),
+            _ => 0,
         }
     }
 
-    fn write(&mut self, address: Port, value: u8) -> Result<()> {
+    fn write(&mut self, address: Port, value: u8) {
         match address {
             0x00 => self.panel.write(address, value),
             0x40..=0x43 => self.pit.write(address, value),
-            _ => Err(Error::InvalidPort(address)),
+            _ => {}
         }
     }
 }
@@ -90,7 +87,7 @@ fn main() {
         let mut data = mrc_emulator::components::ram::RandomAccessMemory::with_capacity(0x100000);
 
         for (i, &byte) in code.iter().enumerate() {
-            data.write(i as u32, byte).unwrap();
+            data.write(i as u32, byte);
         }
 
         let io = Chipset {

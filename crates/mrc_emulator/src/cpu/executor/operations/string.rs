@@ -19,20 +19,19 @@ trait Sized<T> {
     fn read(&self, addr: Address) -> Result<T>;
 }
 
-impl<T: Bus<Address>> Sized<u8> for T {
-    fn read(&self, addr: Address) -> Result<u8> {
-        self.read(addr)
-    }
-}
+// impl<T: Bus<Address>> Sized<u8> for T {
+//     fn read(&self, addr: Address) -> u8 {
+//         self.read(addr)
+//     }
+// }
 
-impl<T: Bus<Address>> Sized<u16> for T {
-    fn read(&self, addr: Address) -> Result<u16> {
-        Ok(u16::from_le_bytes([self.read(addr)?, self.read(addr)?]))
-    }
-}
+// impl<T: Bus<Address>> Sized<u16> for T {
+//     fn read(&self, addr: Address) -> Result<u16> {
+//         Ok(u16::from_le_bytes([self.read(addr)?, self.read(addr)?]))
+//     }
+// }
 
 pub mod byte {
-    use Segment::{DS, ES};
     use super::*;
     use crate::cpu::state::WordRegister::{DI, SI};
     use crate::{
@@ -42,12 +41,13 @@ pub mod byte {
         },
         cpu::state::ByteRegister::AL,
     };
+    use Segment::{DS, ES};
 
     pub fn load(bus: &impl Bus<Address>, state: &mut State) -> Result<()> {
         let value = bus_read(
             bus,
             segment_and_offset(state.segment(DS), state.register(SI)),
-        )?;
+        );
 
         state.set_register(AL, value);
 
@@ -60,13 +60,13 @@ pub mod byte {
         let value = bus_read(
             bus,
             segment_and_offset(state.segment(DS), state.register(SI)),
-        )?;
+        );
 
         bus_write(
             bus,
             segment_and_offset(state.segment(ES), state.register(DI)),
             value,
-        )?;
+        );
 
         advance(state, SI, 1);
         advance(state, DI, 1);
@@ -81,7 +81,7 @@ pub mod byte {
             bus,
             segment_and_offset(state.segment(ES), state.register(DI)),
             value,
-        )?;
+        );
 
         advance(state, DI, 1);
 
@@ -92,12 +92,12 @@ pub mod byte {
         let destination = bus_read(
             bus,
             segment_and_offset(state.segment(DS), state.register(SI)),
-        )?;
+        );
 
         let source = bus_read(
             bus,
             segment_and_offset(state.segment(ES), state.register(DI)),
-        )?;
+        );
 
         let _ = compare(destination, source, &mut state.flags);
 

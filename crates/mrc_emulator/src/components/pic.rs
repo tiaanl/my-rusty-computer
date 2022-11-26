@@ -1,6 +1,6 @@
 //! Emulation of Intel 8259A programmable interrupt controller.
 
-use crate::{error::Result, Bus, Port};
+use crate::{Bus, Port};
 
 pub struct ProgrammableInterruptController {
     /// Set to true if all the ICW's were received and the chip is ready to operate.
@@ -26,37 +26,32 @@ impl Default for ProgrammableInterruptController {
 }
 
 impl ProgrammableInterruptController {
-    fn read_low(&self) -> Result<u8> {
-        //todo!()
-        Ok(0)
+    fn read_low(&self) -> u8 {
+        0
     }
 
-    fn read_high(&self) -> Result<u8> {
-        Ok(self.interrupt_mask_register)
+    fn read_high(&self) -> u8 {
+        self.interrupt_mask_register
     }
 
-    fn write_low(&mut self, value: u8) -> Result<()> {
+    fn write_low(&mut self, value: u8) {
         log::info!("Writing to PIC low port: {:#04X}", value);
 
         if value & 0x10 != 0 {
             return self.write_icw1(value);
         }
-
-        Ok(())
     }
 
-    fn write_high(&mut self, value: u8) -> Result<()> {
+    fn write_high(&mut self, value: u8) {
         if self.icw2_expected {
-            self.write_icw2(value)?;
+            self.write_icw2(value);
         } else if self.icw4_expected {
-            self.write_icw4(value)?;
+            self.write_icw4(value);
         } else {
             // We have all the ICW's, so this must be an OCW1 write.
             log::info!("Setting interrupt mask register to: {:08b}", value);
             self.interrupt_mask_register = value;
         }
-
-        Ok(())
     }
 
     /// ICW1:
@@ -71,7 +66,7 @@ impl ProgrammableInterruptController {
     /// D3: 0 = Edge triggered mode.
     ///     1 = Level triggered mode.
     /// D4: 1 = Chip is being initialized.
-    fn write_icw1(&mut self, value: u8) -> Result<()> {
+    fn write_icw1(&mut self, value: u8) {
         let icw4_expected = value & 0x01 != 0;
         log::info!(
             "ICW1 received | {} | {} | {} | {}",
@@ -104,11 +99,9 @@ impl ProgrammableInterruptController {
 
         self.icw2_expected = true;
         self.icw4_expected = icw4_expected;
-
-        Ok(())
     }
 
-    fn write_icw2(&mut self, value: u8) -> Result<()> {
+    fn write_icw2(&mut self, value: u8) {
         debug_assert!(
             self.icw2_expected,
             "ICW2 with value {:#04X} not expected to be written!",
@@ -122,11 +115,9 @@ impl ProgrammableInterruptController {
             // TODO update isr base
             self.icw2_expected = false;
         }
-
-        Ok(())
     }
 
-    fn write_icw4(&mut self, value: u8) -> Result<()> {
+    fn write_icw4(&mut self, value: u8) {
         debug_assert!(
             self.icw4_expected,
             "ICW4 with value {:#04X} not expected to be written!",
@@ -148,13 +139,11 @@ impl ProgrammableInterruptController {
         );
 
         self.icw4_expected = false;
-
-        Ok(())
     }
 }
 
 impl Bus<Port> for ProgrammableInterruptController {
-    fn read(&self, port: u16) -> Result<u8> {
+    fn read(&self, port: u16) -> u8 {
         if port & 0b1 == 0 {
             self.read_low()
         } else {
@@ -162,7 +151,7 @@ impl Bus<Port> for ProgrammableInterruptController {
         }
     }
 
-    fn write(&mut self, port: u16, value: u8) -> Result<()> {
+    fn write(&mut self, port: u16, value: u8) {
         if port & 0b1 == 0 {
             self.write_low(value)
         } else {
@@ -182,7 +171,7 @@ mod test {
         let mut pic = ProgrammableInterruptController::default();
 
         // Write ICW1 with ICW4 not expected.
-        pic.write(0x0000, 0x10).unwrap();
+        pic.write(0x0000, 0x10);
 
         assert_eq!(pic.initialized, false);
         assert_eq!(pic.interrupt_mask_register, 0x00);
@@ -193,7 +182,7 @@ mod test {
         let mut pic = ProgrammableInterruptController::default();
 
         // Write ICW1 with ICW4 being expected.
-        pic.write(0x0000, 0x11).unwrap();
+        pic.write(0x0000, 0x11);
 
         assert_eq!(pic.initialized, false);
         assert_eq!(pic.interrupt_mask_register, 0x00);

@@ -1,4 +1,3 @@
-use crate::error::{Error, Result};
 use crate::{Address, Bus};
 
 pub struct ReadOnlyMemory {
@@ -12,15 +11,17 @@ impl ReadOnlyMemory {
 }
 
 impl Bus<Address> for ReadOnlyMemory {
-    fn read(&self, address: Address) -> Result<u8> {
-        if address as usize >= self.data.len() {
-            Err(Error::AddressNotMapped(address))
+    fn read(&self, address: Address) -> u8 {
+        let address = address as usize;
+        if address >= self.data.len() {
+            log::warn!("Reading outside of bounds! ({:05X})", address);
+            0
         } else {
-            Ok(self.data[address as usize])
+            self.data[address]
         }
     }
 
-    fn write(&mut self, address: Address, _value: u8) -> Result<()> {
-        Err(Error::AddressOutOfRange(address))
+    fn write(&mut self, address: Address, _value: u8) {
+        log::warn!("Writing to read only memory at {:#05X}", address);
     }
 }

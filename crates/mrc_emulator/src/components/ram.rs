@@ -1,4 +1,3 @@
-use crate::error::{Error, Result};
 use crate::{Address, Bus, Port};
 
 pub struct RandomAccessMemory {
@@ -18,39 +17,43 @@ impl RandomAccessMemory {
 }
 
 impl Bus<Address> for RandomAccessMemory {
-    fn read(&self, address: Address) -> Result<u8> {
-        if address as usize >= self.data.len() {
-            Err(Error::AddressNotMapped(address))
+    fn read(&self, address: Address) -> u8 {
+        let address = address as usize;
+        if address >= self.data.len() {
+            log::warn!("Reading outside of bounds! ({:05X})", address);
+            0
         } else {
-            Ok(self.data[address as usize])
+            self.data[address]
         }
     }
 
-    fn write(&mut self, address: Address, value: u8) -> Result<()> {
-        if address as usize >= self.data.len() {
-            Err(Error::AddressNotMapped(address))
+    fn write(&mut self, address: Address, value: u8) {
+        let address = address as usize;
+        if address >= self.data.len() {
+            log::warn!("Writing outside of bounds! ({:05X})", address);
         } else {
             self.data[address as usize] = value;
-            Ok(())
         }
     }
 }
 
 impl Bus<Port> for RandomAccessMemory {
-    fn read(&self, address: Port) -> Result<u8> {
-        if address as usize >= self.data.len() {
-            Err(Error::InvalidPort(address))
+    fn read(&self, address: Port) -> u8 {
+        let address = address as usize;
+        if address >= self.data.len() {
+            log::warn!("Reading outside of bounds! ({:05X})", address);
+            0
         } else {
-            Ok(self.data[address as usize])
+            self.data[address]
         }
     }
 
-    fn write(&mut self, address: Port, value: u8) -> Result<()> {
-        if address as usize >= self.data.len() {
-            Err(Error::InvalidPort(address))
+    fn write(&mut self, address: Port, value: u8) {
+        let address = address as usize;
+        if address >= self.data.len() {
+            log::warn!("Writing outside of bounds! ({:05X})", address);
         } else {
             self.data[address as usize] = value;
-            Ok(())
         }
     }
 }
