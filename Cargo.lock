@@ -857,6 +857,9 @@ dependencies = [
 [[package]]
 name = "mrc_instruction"
 version = "0.0.1"
+dependencies = [
+ "data_sheet",
+]
 
 [[package]]
 name = "mrc_screen"
