@@ -76,7 +76,7 @@ impl std::fmt::Display for CompileError {
 pub struct Output {
     line: ast::Line,
     size: u16,
-    times: u16,
+    times: ast::Expression,
     unresolved_references: bool,
 }
 
@@ -115,19 +115,24 @@ impl Compiler {
         let mut result = vec![];
 
         for output in &self.outputs {
+            let current_offset = START_OFFSET + result.len() as u16;
+
             match &output.line {
                 ast::Line::Instruction(insn) => {
                     debug_assert_ne!(output.size, 0, "Output size should not be 0 at this point.");
-                    let instruction_data = self.build_instruction_data(insn)?;
-                    for _ in 0..output.times {
+                    let instruction_data = self.build_instruction_data(insn, current_offset)?;
+
+                    let times = self.evaluate_expression(&output.times, current_offset)?;
+                    for _ in 0..times {
                         let offset = START_OFFSET + result.len() as u16;
                         encode(&instruction_data, offset, &mut result)
-                            .map_err(|err| CompileError::EncodeError(err))?;
+                            .map_err(CompileError::EncodeError)?;
                     }
                 }
 
                 ast::Line::Data(_, data) => {
-                    for _ in 0..output.times {
+                    let times = self.evaluate_expression(&output.times, current_offset)?;
+                    for _ in 0..times {
                         for byte in data.iter() {
                             result.push(*byte);
                         }
@@ -149,7 +154,7 @@ impl Compiler {
                 if let Some(offset) = info.offset {
                     format!("{:04X}", offset)
                 } else {
-                    format!("None")
+                    "None".to_string()
                 }
             );
         }
@@ -160,6 +165,8 @@ impl Compiler {
                 continue;
             }
 
+            let times = self.evaluate_expression(&output.times, offset).unwrap();
+
             println!(
                 "{:04X} {:04X} {} {}{}",
                 offset,
@@ -169,8 +176,8 @@ impl Compiler {
                 } else {
                     " "
                 },
-                if output.times > 1 {
-                    format!("TIMES {} ", output.times)
+                if times > 1 {
+                    format!("TIMES {} ", times)
                 } else {
                     "".to_owned()
                 },
@@ -215,9 +222,14 @@ impl Compiler {
                             self.set_label_offset(&label, Some(offset));
                         }
 
+                        let times = self.evaluate_expression(&output.times, offset)?;
                         let mut size = 0;
-                        for _ in 0..output.times {
-                            size += match self.calculate_instruction_size(insn, offset + size) {
+                        for _ in 0..times {
+                            size += match self.calculate_instruction_size(
+                                insn,
+                                offset,
+                                offset + size,
+                            ) {
                                 Ok(Some(size)) => {
                                     output.unresolved_references = false;
                                     size
@@ -250,8 +262,9 @@ impl Compiler {
                             self.set_label_offset(&label, Some(offset));
                         }
 
+                        let times = self.evaluate_expression(&output.times, offset)?;
                         let mut size = 0;
-                        for _ in 0..output.times {
+                        for _ in 0..times {
                             size += data.len() as u16;
                         }
                         output.size = size;
@@ -260,7 +273,7 @@ impl Compiler {
 
                     ast::Line::Constant(span, expr) => {
                         if let Some(label) = labels.pop_back() {
-                            let value = self.evaluate_expression(expr)?;
+                            let value = self.evaluate_expression(expr, offset)?;
                             self.constants.insert(label.1.clone(), value);
                         } else {
                             return Err(CompileError::ConstantWithoutLabel(span.clone()));
@@ -322,10 +335,14 @@ impl Compiler {
         }
     }
 
-    fn build_operand_data(&self, operand: &ast::Operand) -> Result<OperandData, CompileError> {
+    fn build_operand_data(
+        &self,
+        operand: &ast::Operand,
+        current_offset: u16,
+    ) -> Result<OperandData, CompileError> {
         Ok(match operand {
             ast::Operand::Immediate(span, expr) => {
-                let value = self.evaluate_expression(expr)?;
+                let value = self.evaluate_expression(expr, current_offset)?;
                 OperandData::immediate(span.clone(), value)
             }
 
@@ -342,14 +359,14 @@ impl Compiler {
 
             ast::Operand::Direct(span, expr, data_size, seg) => OperandData::direct(
                 span.clone(),
-                self.evaluate_expression(expr)?,
+                self.evaluate_expression(expr, current_offset)?,
                 data_size,
                 seg,
             ),
 
             ast::Operand::Indirect(span, indirect_encoding, expr, data_size, seg) => {
                 let value = if let Some(expr) = expr {
-                    self.evaluate_expression(expr)?
+                    self.evaluate_expression(expr, current_offset)?
                 } else {
                     0
                 };
@@ -367,8 +384,8 @@ impl Compiler {
             }
 
             ast::Operand::Far(span, offset, segment) => {
-                let offset = self.evaluate_expression(offset)?;
-                let segment = self.evaluate_expression(segment)?;
+                let offset = self.evaluate_expression(offset, current_offset)?;
+                let segment = self.evaluate_expression(segment, current_offset)?;
 
                 OperandData::far(span.clone(), offset, segment)
             }
@@ -378,6 +395,7 @@ impl Compiler {
     fn build_instruction_data(
         &self,
         instruction: &ast::Instruction,
+        current_offset: u16,
     ) -> Result<crate::encoder::InstructionData, CompileError> {
         Ok(match &instruction.operands {
             ast::Operands::None(span) => {
@@ -387,15 +405,15 @@ impl Compiler {
             ast::Operands::Destination(span, dst) => crate::encoder::InstructionData::dst(
                 span.clone(),
                 instruction.operation,
-                self.build_operand_data(dst)?,
+                self.build_operand_data(dst, current_offset)?,
             ),
 
             ast::Operands::DestinationAndSource(span, dst, src) => {
                 crate::encoder::InstructionData::dst_and_src(
                     span.clone(),
                     instruction.operation,
-                    self.build_operand_data(dst)?,
-                    self.build_operand_data(src)?,
+                    self.build_operand_data(dst, current_offset)?,
+                    self.build_operand_data(src, current_offset)?,
                 )
             }
         })
@@ -403,35 +421,45 @@ impl Compiler {
 }
 
 impl Compiler {
-    fn evaluate_expression(&self, expression: &ast::Expression) -> Result<i32, CompileError> {
+    fn evaluate_expression(
+        &self,
+        expression: &ast::Expression,
+        current_offset: u16,
+    ) -> Result<i32, CompileError> {
         match expression {
             ast::Expression::PrefixOperator(_, operator, expr) => {
-                let value = self.evaluate_expression(expr)?;
+                let value = self.evaluate_expression(expr, current_offset)?;
                 Ok(operator.evaluate(0, value))
             }
 
             ast::Expression::InfixOperator(_, operator, left, right) => {
-                let left = self.evaluate_expression(left)?;
-                let right = self.evaluate_expression(right)?;
+                let left = self.evaluate_expression(left, current_offset)?;
+                let right = self.evaluate_expression(right, current_offset)?;
 
                 Ok(operator.evaluate(left, right))
             }
 
-            ast::Expression::Value(_, ast::Value::Label(label)) => {
-                if let Some(value) = self.constants.get(label.1.as_str()) {
-                    Ok(*value)
-                } else if let Some(LabelInfo {
-                    offset: Some(label_offset),
-                    ..
-                }) = self.labels.get(label.1.as_str())
-                {
-                    Ok(*label_offset as i32)
-                } else {
-                    Err(CompileError::LabelNotFound(label.clone()))
+            ast::Expression::Value(_, value) => match value {
+                ast::Value::Label(label) => {
+                    if let Some(value) = self.constants.get(label.1.as_str()) {
+                        Ok(*value)
+                    } else if let Some(LabelInfo {
+                        offset: Some(label_offset),
+                        ..
+                    }) = self.labels.get(label.1.as_str())
+                    {
+                        Ok(*label_offset as i32)
+                    } else {
+                        Err(CompileError::LabelNotFound(label.clone()))
+                    }
                 }
-            }
 
-            ast::Expression::Value(_, ast::Value::Constant(value)) => Ok(*value),
+                ast::Value::Constant(value) => Ok(*value),
+
+                ast::Value::InstructionStart => Ok(current_offset as i32),
+
+                ast::Value::SectionStart => Ok(START_OFFSET as i32),
+            },
         }
     }
 }
@@ -440,9 +468,10 @@ impl Compiler {
     fn calculate_instruction_size(
         &self,
         instruction: &ast::Instruction,
+        current_offset: u16,
         offset: u16,
     ) -> Result<Option<u16>, CompileError> {
-        let insn_data = self.build_instruction_data(instruction)?;
+        let insn_data = self.build_instruction_data(instruction, current_offset)?;
         let mut size_in_bytes = 0_u16;
 
         if let Err(err) = encode(&insn_data, offset, &mut size_in_bytes) {
@@ -459,21 +488,18 @@ impl Compiler {
 impl Compiler {
     pub fn push_line(&mut self, line: ast::Line) -> Result<(), CompileError> {
         match line {
-            ast::Line::Times(_, expr, line) => {
-                let times = self.evaluate_expression(&expr)? as u16;
-                self.outputs.push(Output {
-                    line: *line,
-                    size: 0,
-                    times,
-                    unresolved_references: false,
-                })
-            }
+            ast::Line::Times(_, expr, line) => self.outputs.push(Output {
+                line: *line,
+                size: 0,
+                times: expr,
+                unresolved_references: false,
+            }),
 
             _ => {
                 self.outputs.push(Output {
                     line,
                     size: 0,
-                    times: 1,
+                    times: ast::Expression::Value(0..0, ast::Value::Constant(1)),
                     unresolved_references: false,
                 });
             }
@@ -485,6 +511,8 @@ impl Compiler {
 
 #[cfg(test)]
 mod tests {
+    use crate::compiler::Compiler;
+    use crate::parser::Parser;
     macro_rules! _compile_test {
         ($source:literal, $binary:literal) => {{
             use std::path::Path;
@@ -542,5 +570,28 @@ mod tests {
         // compile_test!("../tests/group1.asm", "../tests/group1.bin");
         // compile_test!("../tests/imul.asm", "../tests/imul.bin");
         // compile_test!("../tests/incdec.asm", "../tests/incdec.bin");
+    }
+
+    #[test]
+    fn current_position() {
+        let mut compiler = Compiler::default();
+
+        let mut parser = Parser::new(include_str!("../tests/curpos.asm"));
+        while let Some(line) = parser.parse_line().unwrap() {
+            compiler.push_line(line).unwrap();
+        }
+
+        let bytes = compiler.compile().unwrap();
+
+        println!(
+            "bytes: {}",
+            bytes
+                .iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<String>>()
+                .join(" ")
+        );
+
+        assert_eq!(1, 1);
     }
 }

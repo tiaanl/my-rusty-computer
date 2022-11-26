@@ -1,10 +1,12 @@
 use std::process::Command;
 
+const NASM: &str = "nasm";
+
 fn compile_test(name: &str) {
     let source = format!("tests/{name}.asm");
     let binary = format!("tests/{name}.bin");
 
-    let result = Command::new("/home/tilo/code/nasm/nasm")
+    let result = Command::new(NASM)
         .arg("-o")
         .arg(binary)
         .arg(source)
@@ -13,18 +15,16 @@ fn compile_test(name: &str) {
     assert_eq!(result.code().unwrap(), 0);
 }
 
-fn main() {
-    println!("cargo:rerun-if-changed=tests/calljmp.asm");
-    println!("cargo:rerun-if-changed=tests/ea.asm");
-    println!("cargo:rerun-if-changed=tests/each.asm");
-    println!("cargo:rerun-if-changed=tests/group1.asm");
-    println!("cargo:rerun-if-changed=tests/imul.asm");
-    println!("cargo:rerun-if-changed=tests/incdec.asm");
+const FILES: &[&str] = &[
+    "calljmp", "curpos", "ea", "each", "group1", "imul", "incdec",
+];
 
-    compile_test("calljmp");
-    compile_test("ea");
-    compile_test("each");
-    compile_test("group1");
-    compile_test("imul");
-    compile_test("incdec");
+fn main() {
+    for file in FILES {
+        println!("cargo:rerun-if-changed=tests/{}.asm", file);
+    }
+
+    for file in FILES {
+        compile_test(file);
+    }
 }
