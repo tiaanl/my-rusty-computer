@@ -819,12 +819,7 @@ dependencies = [
 
 [[package]]
 name = "mrc_compiler"
-version = "0.1.0"
-dependencies = [
- "mrc_decoder",
- "mrc_encoder",
- "mrc_instruction",
-]
+version = "0.0.1"
 
 [[package]]
 name = "mrc_decoder"
@@ -862,9 +857,6 @@ dependencies = [
 [[package]]
 name = "mrc_instruction"
 version = "0.0.1"
-dependencies = [
- "data_sheet",
-]
 
 [[package]]
 name = "mrc_screen"
