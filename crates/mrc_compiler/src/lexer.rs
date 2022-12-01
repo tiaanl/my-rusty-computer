@@ -48,6 +48,7 @@ pub enum PunctuationKind {
     CloseParenthesis,
     Colon,
     Comma,
+    Dollar,
     Dot,
     ForwardSlash,
     Minus,
@@ -177,6 +178,7 @@ impl<'a> Lexer<'a> {
 
             ':' => Token::Punctuation(1, PunctuationKind::Colon),
             ',' => Token::Punctuation(1, PunctuationKind::Comma),
+            '$' => Token::Punctuation(1, PunctuationKind::Dollar),
             '.' => Token::Punctuation(1, PunctuationKind::Dot),
             '[' => Token::Punctuation(1, PunctuationKind::OpenBracket),
             ']' => Token::Punctuation(1, PunctuationKind::CloseBracket),

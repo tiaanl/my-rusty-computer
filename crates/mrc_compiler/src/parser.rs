@@ -821,6 +821,19 @@ impl<'a> Parser<'a> {
                 )))
             }
 
+            Token::Punctuation(_, PunctuationKind::Dollar) => {
+                self.next_token();
+
+                // $ is an instruction start symbol.
+                // $$ is a section start symbol.
+                if let Token::Punctuation(_, PunctuationKind::Dollar) = self.token {
+                    self.next_token();
+                    Ok(ast::Value::SectionStart)
+                } else {
+                    Ok(ast::Value::InstructionStart)
+                }
+            }
+
             _ => Err(ParserError::OperandExpected(
                 self.token_range(),
                 format!("{}", FoundToken(self.token.clone(), self.token_source())),

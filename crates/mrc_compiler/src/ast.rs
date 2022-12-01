@@ -277,6 +277,8 @@ impl std::fmt::Display for IndirectEncoding {
 pub enum Value {
     Constant(i32),
     Label(Label),
+    InstructionStart,
+    SectionStart,
 }
 
 impl<'a> std::fmt::Display for Value {
@@ -284,6 +286,8 @@ impl<'a> std::fmt::Display for Value {
         match self {
             Value::Constant(value) => write!(f, "{:#04X}", *value),
             Value::Label(label) => write!(f, "{}", *label),
+            Value::InstructionStart => write!(f, "$"),
+            Value::SectionStart => write!(f, "$$"),
         }
     }
 }
