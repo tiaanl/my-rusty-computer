@@ -294,11 +294,15 @@ impl<'a> Lexer<'a> {
             todo!("The requested base in lower than the detected base")
         }
 
-        // We can unwrap here, because we already checked that all the characters are valid for the
-        // base.
-        let value = i32::from_str_radix(s, base as u32).unwrap();
-
-        Token::Literal(end, LiteralKind::Number(value))
+        match i32::from_str_radix(s, base as u32) {
+            Ok(value) => Token::Literal(end, LiteralKind::Number(value)),
+            Err(_) => {
+                // TODO: Numbers need more checking here, e.g.
+                //       '0BB00' should return a valid number of 0 instead of
+                //       an invalid token.
+                Token::Invalid(1, s.chars().next().unwrap_or('\0'))
+            }
+        }
     }
 
     fn string_literal(&mut self) -> Token {

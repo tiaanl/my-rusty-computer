@@ -153,7 +153,7 @@ pub fn encode(
         RET => encode_group_ret_retn_retf(0xC2, insn, offset, emitter),
         // RETF => encode_group_ret_retn_retf(0xCA, insn, offset, emitter),
         //
-        LEA => encode_group_lea(0x00, insn, offset, emitter),
+        LEA => encode_group_lea(0x8D, insn, offset, emitter),
 
         LES => encode_group_les_lds(0xC4, insn, offset, emitter),
         LDS => encode_group_les_lds(0xC5, insn, offset, emitter),
@@ -769,12 +769,23 @@ fn encode_group_ret_retn_retf(
 }
 
 fn encode_group_lea(
-    _base: u8,
-    _insn: &InstructionData,
-    _offset: u16,
-    _emitter: &mut impl ByteEmitter,
+    base: u8,
+    insn: &InstructionData,
+    offset: u16,
+    emitter: &mut impl ByteEmitter,
 ) -> Result<(), EncodeError> {
-    todo!()
+    let [dst, src] = &insn.opers;
+
+    match (dst.kind, src.kind) {
+        (OperandKind::Reg, OperandKind::Mem) if dst.size == OperandSize::Word => emit_codes(
+            emitter,
+            insn,
+            offset,
+            &[Code::ModRegRM(FIRST_OPER_SRC, base)],
+        ),
+
+        _ => return Err(EncodeError::InvalidOperands(insn.opers_span.clone())),
+    }
 }
 
 fn encode_group_les_lds(
