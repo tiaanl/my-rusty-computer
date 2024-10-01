@@ -1,7 +1,6 @@
 use serde::Deserialize;
 use std::io::{Error, Read};
 use std::path::Path;
-use structopt::StructOpt;
 
 #[derive(Debug)]
 #[allow(unused)]
@@ -41,8 +40,7 @@ impl Config {
     }
 }
 
-#[derive(StructOpt)]
-#[structopt(name = "My Rusty Computer")]
+#[derive(clap::Parser)]
 struct CommandLine {
     /// Path to an optional BIOS binary to load when the emulator starts
     pub bios: Option<String>,
@@ -111,7 +109,9 @@ impl Config {
     }
 
     fn load_command_line(&mut self) -> Result<(), ConfigError> {
-        let command_line = CommandLine::from_args();
+        use clap::Parser;
+
+        let command_line = CommandLine::parse();
 
         if let Some(bios) = command_line.bios {
             self.bios = Some(bios);

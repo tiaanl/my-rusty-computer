@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 bitflags = "1.3.2"
+clap = { version = "4.5.18", features = ["derive"] }
 dirs = "4.0"
 log = { version = "0.4", features = [
     "max_level_debug",
@@ -17,5 +18,4 @@ mrc_instruction = { path = "../../crates/mrc_instruction" }
 mrc_screen = { path = "../../crates/mrc_screen" }
 pretty_env_logger = "0.4"
 serde = { version = "1.0", features = ["derive"] }
-structopt = "0.3"
 toml = "0.5"
