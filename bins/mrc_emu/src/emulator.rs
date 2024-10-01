@@ -1,5 +1,5 @@
 use crate::InterruptManager;
-use mrc_emulator::cpu2::Intel8088;
+use mrc_emulator::cpu::Intel8088;
 use mrc_emulator::{
     components::{
         cga::Cga,
@@ -110,7 +110,7 @@ impl Bus for InputOutputBus {
 
 pub struct Emulator {
     // cpu: CPU<DataBus, InputOutputBus>,
-    cpu: mrc_emulator::cpu2::Intel8088<DataBus, InputOutputBus>,
+    cpu: mrc_emulator::cpu::Intel8088<DataBus, InputOutputBus>,
     pit: Rc<RefCell<ProgrammableIntervalTimer8253>>,
     // debugger_state: Arc<Mutex<DebuggerState>>,
     // breakpoints: Vec<Address>,

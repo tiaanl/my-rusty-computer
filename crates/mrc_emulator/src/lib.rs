@@ -1,6 +1,5 @@
 pub mod components;
 pub mod cpu;
-pub mod cpu2;
 pub mod error;
 
 /// Specified the address used to read/write to/from a bus.

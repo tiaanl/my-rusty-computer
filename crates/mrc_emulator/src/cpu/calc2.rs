@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::cpu2::Flags;
+use crate::cpu::Flags;
 
 const PARITY_TABLE: [u8; 0x100] = [
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0,
