@@ -1,6 +1,6 @@
 use crate::cpu::{Flags, State, WordRegister};
 use crate::error::Result;
-use crate::{segment_and_offset, Address, Bus};
+use crate::{segment_and_offset, Bus};
 use mrc_instruction::Segment;
 
 fn advance(state: &mut State, register: WordRegister, count: u16) {
@@ -14,22 +14,6 @@ fn advance(state: &mut State, register: WordRegister, count: u16) {
         },
     );
 }
-
-trait Sized<T> {
-    fn read(&self, addr: Address) -> Result<T>;
-}
-
-// impl<T: Bus<Address>> Sized<u8> for T {
-//     fn read(&self, addr: Address) -> u8 {
-//         self.read(addr)
-//     }
-// }
-
-// impl<T: Bus<Address>> Sized<u16> for T {
-//     fn read(&self, addr: Address) -> Result<u16> {
-//         Ok(u16::from_le_bytes([self.read(addr)?, self.read(addr)?]))
-//     }
-// }
 
 pub mod byte {
     use super::*;

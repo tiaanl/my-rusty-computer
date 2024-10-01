@@ -4,6 +4,7 @@ use std::path::Path;
 use structopt::StructOpt;
 
 #[derive(Debug)]
+#[allow(unused)]
 pub enum ConfigError {
     Io(std::io::Error),
     Deserialize(toml::de::Error),

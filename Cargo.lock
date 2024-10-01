@@ -1103,18 +1103,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pop"
-version = "0.1.0"
-dependencies = [
- "log",
- "mrc_dos",
- "mrc_emulator",
- "mrc_instruction",
- "pretty_env_logger",
- "structopt",
-]
-
-[[package]]
 name = "ppv-lite86"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"

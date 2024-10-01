@@ -8,7 +8,6 @@ members = [
     "bins/mrc_dis",
     "bins/mrc_emu",
     "bins/mz_inspect",
-    "bins/pop",
     "bins/romcheck",
     "bins/tests",
     "crates/data_sheet",
