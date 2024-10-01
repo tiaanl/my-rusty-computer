@@ -14,6 +14,7 @@ use mrc_emulator::{
     Address, Bus, Cpu,
 };
 use std::{cell::RefCell, rc::Rc};
+use tracing::warn;
 
 pub const MEMORY_MAX: usize = 0x100000;
 pub const BIOS_SIZE: usize = 0x2000;
@@ -41,7 +42,7 @@ impl Bus for DataBus {
         } else if address < 0xA0000 {
             self.ram.read(address)
         } else {
-            log::warn!("Invalid address read from data bus! ({:#07X})", address);
+            warn!("Invalid address read from data bus! ({:#07X})", address);
             0
         }
     }
@@ -52,7 +53,7 @@ impl Bus for DataBus {
         } else if address < 0xA0000 {
             self.ram.write(address, value)
         } else {
-            log::warn!("Invalid address written to data bus! ({:#07X})", address);
+            warn!("Invalid address written to data bus! ({:#07X})", address);
         }
     }
 }

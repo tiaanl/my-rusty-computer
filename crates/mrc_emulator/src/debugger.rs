@@ -209,7 +209,7 @@ impl Debugger {
 
     pub fn send_command(sender: &Sender<EmulatorCommand>, command: EmulatorCommand) {
         if let Err(SendError(command)) = sender.send(command) {
-            log::warn!("Could not send emulator command: {:?}", command);
+            warn!("Could not send emulator command: {:?}", command);
         }
     }
 

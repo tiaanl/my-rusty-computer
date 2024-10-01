@@ -3,6 +3,8 @@
 //! IBM PC/XT model 5150 and up uses DMA channel 0 for memory refresh cycles and channel 2 for the
 //! fixed disk controller.
 
+use tracing::info;
+
 use crate::{Address, Bus};
 use std::cell::Cell;
 
@@ -36,7 +38,7 @@ impl DirectMemoryAccessController {
         let byte_index = self.index.get() as usize;
         let value = channel.address_current[byte_index];
 
-        log::info!("Reading DMA channel {} address: {:#04X}", index, value);
+        info!("Reading DMA channel {} address: {:#04X}", index, value);
 
         self.flip_index();
 
@@ -52,11 +54,9 @@ impl DirectMemoryAccessController {
         channel.address_current[byte_index] = value;
         channel.address_init[byte_index] = value;
 
-        log::info!(
+        info!(
             "Write DMA channel {} address: current {:?}, init: {:?}",
-            channel_index,
-            channel.address_init,
-            channel.address_current
+            channel_index, channel.address_init, channel.address_current
         );
     }
 
@@ -66,10 +66,9 @@ impl DirectMemoryAccessController {
         let byte_index = self.index.get() as usize;
         let value = channel.count_current[byte_index];
 
-        log::info!(
+        info!(
             "Reading DMA channel {} count: {:#04X}",
-            channel_index,
-            value
+            channel_index, value
         );
 
         self.flip_index();
@@ -86,28 +85,25 @@ impl DirectMemoryAccessController {
         channel.count_current[byte_index] = value;
         channel.count_init[byte_index] = value;
 
-        log::info!(
+        info!(
             "Write DMA channel {} count: current {:?}, init: {:?}",
-            channel_index,
-            channel.count_init,
-            channel.count_current
+            channel_index, channel.count_init, channel.count_current
         );
     }
 
     fn write_channel_page_register(&mut self, channel_index: usize, value: u8) {
         self.channels[channel_index].page = value;
 
-        log::info!(
+        info!(
             "Write DMA channel {} page regsiter: {:?}",
-            channel_index,
-            value,
+            channel_index, value,
         );
     }
 
     fn write_command(&mut self, value: u8) {
         self.command = value;
 
-        log::info!("Write DMA command: {:#04X}", value);
+        info!("Write DMA command: {:#04X}", value);
     }
 
     fn write_request(&mut self, _value: u8) {
@@ -129,7 +125,7 @@ impl DirectMemoryAccessController {
         let channel_index = (value & 0b11) as usize;
         self.channels[channel_index].mode = value;
 
-        log::info!("Write DMA channel {} mode: {:#04X}", channel_index, value);
+        info!("Write DMA channel {} mode: {:#04X}", channel_index, value);
     }
 
     fn write_reset(&mut self, _value: u8) {
@@ -141,7 +137,7 @@ impl DirectMemoryAccessController {
             self.channels[index] = Channel::default();
         }
 
-        log::info!("Write DMA master clear");
+        info!("Write DMA master clear");
     }
 
     fn request(&mut self, _channel_index: usize) {
@@ -151,7 +147,7 @@ impl DirectMemoryAccessController {
 
 impl Bus for DirectMemoryAccessController {
     fn read(&self, port: Address) -> u8 {
-        log::info!("Reading from DMA controller on port {:#06x}.", port);
+        info!("Reading from DMA controller on port {:#06x}.", port);
 
         if port >> 7 == 0 {
             let channel_index = (port >> 1 & 0b11) as usize;
@@ -169,10 +165,9 @@ impl Bus for DirectMemoryAccessController {
     }
 
     fn write(&mut self, port: Address, value: u8) {
-        log::info!(
+        info!(
             "Writing {:#04x} to DMA controller on port {:#06x}.",
-            value,
-            port
+            value, port
         );
 
         let channel_index = (port >> 1 & 0b11) as usize;

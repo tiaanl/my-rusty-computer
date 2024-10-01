@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "bins/ds_reader",
     "bins/gen_test_bin",
-    "bins/led_show",
     "bins/mrc_asm",
     "bins/mrc_dis",
     "bins/mrc_emu",
@@ -17,5 +16,12 @@ members = [
     "crates/mrc_emulator",
     "crates/mrc_encoder",
     "crates/mrc_instruction",
-    "crates/mrc_screen",
+    # "crates/mrc_screen",
 ]
+
+[workspace.dependencies]
+tracing-subscriber = "0.3.18"
+tracing = { version = "0.1", features = [
+    "max_level_debug",
+    "release_max_level_warn",
+] }

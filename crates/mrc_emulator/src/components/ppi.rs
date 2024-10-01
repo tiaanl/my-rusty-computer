@@ -1,5 +1,7 @@
 //! Emulation of the Intel 8255 Programmable Peripheral Interface
 
+use tracing::{info, warn};
+
 use crate::{Address, Bus};
 
 #[derive(Clone, Copy, Debug)]
@@ -52,7 +54,7 @@ where
             0b01 => self.port_b.read(address),
             0b10 => self.port_c.read(address),
             0b11 => {
-                log::warn!("Reading from invalid port. ({:02b})", address);
+                warn!("Reading from invalid port. ({:02b})", address);
                 0
             }
             _ => 0,
@@ -74,9 +76,9 @@ where
                         Mode::Output
                     }
                 }
-                log::info!("Writing to PPI control register: {:?}", self.modes);
+                info!("Writing to PPI control register: {:?}", self.modes);
             }
-            _ => log::warn!("Writing to invalid PPI address! ({:02b})", address),
+            _ => warn!("Writing to invalid PPI address! ({:02b})", address),
         }
     }
 }

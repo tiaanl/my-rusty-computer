@@ -14,6 +14,7 @@ use mrc_instruction::{
     AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize,
     Operation, RegisterEncoding, Repeat, Segment, Segment::*, SizedRegisterEncoding,
 };
+use tracing::info;
 
 #[derive(PartialEq)]
 pub enum ExecuteResult {
@@ -32,7 +33,7 @@ impl<D: Bus, I: Bus> CPU<D, I> {
             value,
         );
 
-        // log::info!("Push {:04X} to [{:04X}:{:04X}]", value, ss, sp,);
+        // info!("Push {:04X} to [{:04X}:{:04X}]", value, ss, sp,);
 
         Ok(())
     }
@@ -43,7 +44,7 @@ impl<D: Bus, I: Bus> CPU<D, I> {
             segment_and_offset(self.state.segment(SS), self.state.register(SP)),
         );
 
-        // log::info!("Pop {:04X} from [{:04X}:{:04X}]", value, ss, sp,);
+        // info!("Pop {:04X} from [{:04X}:{:04X}]", value, ss, sp,);
 
         self.state
             .set_register(SP, self.state.register(SP).wrapping_add(2));
@@ -129,6 +130,7 @@ fn indirect_address_for<D: Bus, I: Bus>(
 mod byte {
     use super::*;
     use mrc_instruction::{Immediate, SizedRegisterEncoding};
+    use tracing::warn;
 
     pub fn bus_read(bus: &impl Bus, address: Address) -> u8 {
         bus.read(address)
@@ -159,7 +161,7 @@ mod byte {
             Operand::Immediate(Immediate::Byte(value)) => *value as u8,
 
             _ => {
-                log::warn!("Invalid data access");
+                warn!("Invalid data access");
                 0
             }
         }
@@ -191,7 +193,7 @@ mod byte {
                 cpu.state.set_register(*register, value);
             }
 
-            _ => log::warn!("Invalid data access"),
+            _ => warn!("Invalid data access"),
         }
     }
 
@@ -204,6 +206,7 @@ mod byte {
 mod word {
     use super::*;
     use mrc_instruction::{Immediate, SizedRegisterEncoding};
+    use tracing::warn;
 
     pub fn bus_read(bus: &impl Bus, address: Address) -> u16 {
         let lo = byte::bus_read(bus, address);
@@ -242,7 +245,7 @@ mod word {
                 cpu.state.set_segment(*segment, value);
             }
 
-            _ => log::warn!("Invalid data access"),
+            _ => warn!("Invalid data access"),
         }
     }
 
@@ -277,7 +280,7 @@ mod word {
             Operand::Immediate(Immediate::Word(value)) => *value,
 
             _ => {
-                log::warn!("Invalid data access");
+                warn!("Invalid data access");
                 0
             }
         }
@@ -403,7 +406,7 @@ pub fn execute<D: Bus, I: Bus>(
         }
 
         Operation::HLT => {
-            log::info!("HALT");
+            info!("HALT");
             return Ok(ExecuteResult::Stop);
         }
 
@@ -447,7 +450,7 @@ pub fn execute<D: Bus, I: Bus>(
 
         Operation::INT => match instruction.operands {
             OperandSet::Destination(Operand::Immediate(Immediate::Byte(index))) => {
-                log::info!("Calling interrupt {}", index);
+                info!("Calling interrupt {}", index);
 
                 cpu.push(cpu.state.flags.bits())?;
                 cpu.push(cpu.state.segment(CS))?;
@@ -882,7 +885,7 @@ pub fn execute<D: Bus, I: Bus>(
                 cpu.io_controller.write(port as Address, value);
 
                 if port == 0x60 || port == 0x80 {
-                    log::info!("POST port out ({:04X}): {:02X}", port, value);
+                    info!("POST port out ({:04X}): {:02X}", port, value);
                 }
             }
 

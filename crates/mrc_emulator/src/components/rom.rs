@@ -1,3 +1,5 @@
+use tracing::warn;
+
 use crate::{Address, Bus};
 
 pub struct ReadOnlyMemory {
@@ -14,7 +16,7 @@ impl Bus for ReadOnlyMemory {
     fn read(&self, address: Address) -> u8 {
         let address = address as usize;
         if address >= self.data.len() {
-            log::warn!("Reading outside of bounds! ({:05X})", address);
+            warn!("Reading outside of bounds! ({:05X})", address);
             0
         } else {
             self.data[address]
@@ -22,6 +24,6 @@ impl Bus for ReadOnlyMemory {
     }
 
     fn write(&mut self, address: Address, _value: u8) {
-        log::warn!("Writing to read only memory at {:#05X}", address);
+        warn!("Writing to read only memory at {:#05X}", address);
     }
 }

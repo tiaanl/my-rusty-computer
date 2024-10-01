@@ -205,20 +205,20 @@ mod test {
 
     #[test]
     fn test_register_or_memory() {
-        struct ByteIterator<'a> {
-            data: &'a [u8],
-            position: usize,
-        }
+        // struct ByteIterator<'a> {
+        //     data: &'a [u8],
+        //     position: usize,
+        // }
 
-        impl<'a> Iterator for ByteIterator<'a> {
-            type Item = u8;
+        // impl<'a> Iterator for ByteIterator<'a> {
+        //     type Item = u8;
 
-            fn next(&mut self) -> Option<Self::Item> {
-                let byte = self.data.get(self.position)?;
-                self.position += 1;
-                Some(*byte)
-            }
-        }
+        //     fn next(&mut self) -> Option<Self::Item> {
+        //         let byte = self.data.get(self.position)?;
+        //         self.position += 1;
+        //         Some(*byte)
+        //     }
+        // }
 
         macro_rules! test_reg_or_mem {
             ($mrrm_byte:expr,$bytes:expr,$expected:expr) => {{

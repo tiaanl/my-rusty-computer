@@ -1,3 +1,5 @@
+use tracing::warn;
+
 use crate::{Address, Bus};
 
 pub struct RandomAccessMemory {
@@ -20,7 +22,7 @@ impl Bus for RandomAccessMemory {
     fn read(&self, address: Address) -> u8 {
         let address = address as usize;
         if address >= self.data.len() {
-            log::warn!("Reading outside of bounds! ({:05X})", address);
+            warn!("Reading outside of bounds! ({:05X})", address);
             0
         } else {
             self.data[address]
@@ -30,7 +32,7 @@ impl Bus for RandomAccessMemory {
     fn write(&mut self, address: Address, value: u8) {
         let address = address as usize;
         if address >= self.data.len() {
-            log::warn!("Writing outside of bounds! ({:05X})", address);
+            warn!("Writing outside of bounds! ({:05X})", address);
         } else {
             self.data[address as usize] = value;
         }
@@ -41,7 +43,7 @@ impl Bus for RandomAccessMemory {
 //     fn read(&self, address: Address) -> u8 {
 //         let address = address as usize;
 //         if address >= self.data.len() {
-//             log::warn!("Reading outside of bounds! ({:05X})", address);
+//             warn!("Reading outside of bounds! ({:05X})", address);
 //             0
 //         } else {
 //             self.data[address]
@@ -51,7 +53,7 @@ impl Bus for RandomAccessMemory {
 //     fn write(&mut self, address: Address, value: u8) {
 //         let address = address as usize;
 //         if address >= self.data.len() {
-//             log::warn!("Writing outside of bounds! ({:05X})", address);
+//             warn!("Writing outside of bounds! ({:05X})", address);
 //         } else {
 //             self.data[address as usize] = value;
 //         }

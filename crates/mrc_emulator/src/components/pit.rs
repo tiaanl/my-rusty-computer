@@ -11,6 +11,8 @@
 
 // const TICK_RATE: usize = 1193182;
 
+use tracing::{info, warn};
+
 use crate::{Address, Bus};
 use std::cell::RefCell;
 
@@ -184,7 +186,7 @@ impl Bus for ProgrammableIntervalTimer8253 {
         let counter = address & 0b11;
 
         if counter == 0b11 {
-            log::warn!("Only the 3 counters can be read from.");
+            warn!("Only the 3 counters can be read from.");
             return 0;
         }
 
@@ -205,13 +207,13 @@ impl Bus for ProgrammableIntervalTimer8253 {
             }
         };
 
-        log::info!("Read from timer port {:#06X}: {:#04X}", address, value);
+        info!("Read from timer port {:#06X}: {:#04X}", address, value);
 
         value
     }
 
     fn write(&mut self, address: Address, value: u8) {
-        // log::info!("Writing to timer port: {:#06X} <= {:#04X}", port, value);
+        // info!("Writing to timer port: {:#06X} <= {:#04X}", port, value);
 
         let counter = address & 0b11;
 
@@ -228,10 +230,9 @@ impl Bus for ProgrammableIntervalTimer8253 {
                 if counter.latched.is_none() {
                     counter.latched = Some(latched_count);
 
-                    log::info!(
+                    info!(
                         "Latched counter {} to {}",
-                        control_register.select_counter,
-                        latched_count
+                        control_register.select_counter, latched_count
                     );
                 }
             } else {
@@ -239,10 +240,9 @@ impl Bus for ProgrammableIntervalTimer8253 {
                 counter.mode = control_register.mode;
                 counter.bcd = control_register.bcd;
 
-                log::info!(
+                info!(
                     "Set counter {} to {:?}",
-                    control_register.select_counter,
-                    counter
+                    control_register.select_counter, counter
                 );
             }
         } else {
@@ -265,7 +265,7 @@ impl Bus for ProgrammableIntervalTimer8253 {
                 }
             }
 
-            log::info!("Set counter {} to {:?}", address & 0b11, counter);
+            info!("Set counter {} to {:?}", address & 0b11, counter);
         }
     }
 }
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn initialize() {
-        pretty_env_logger::init();
+        tracing_subscriber::fmt().init();
 
         let mut timer = ProgrammableIntervalTimer8253::default();
 

@@ -1,5 +1,7 @@
 //! Emulation of Intel 8259A programmable interrupt controller.
 
+use tracing::info;
+
 use crate::{Address, Bus};
 
 pub struct ProgrammableInterruptController {
@@ -35,7 +37,7 @@ impl ProgrammableInterruptController {
     }
 
     fn write_low(&mut self, value: u8) {
-        log::info!("Writing to PIC low port: {:#04X}", value);
+        info!("Writing to PIC low port: {:#04X}", value);
 
         if value & 0x10 != 0 {
             return self.write_icw1(value);
@@ -49,7 +51,7 @@ impl ProgrammableInterruptController {
             self.write_icw4(value);
         } else {
             // We have all the ICW's, so this must be an OCW1 write.
-            log::info!("Setting interrupt mask register to: {:08b}", value);
+            info!("Setting interrupt mask register to: {:08b}", value);
             self.interrupt_mask_register = value;
         }
     }
@@ -68,7 +70,7 @@ impl ProgrammableInterruptController {
     /// D4: 1 = Chip is being initialized.
     fn write_icw1(&mut self, value: u8) {
         let icw4_expected = value & 0x01 != 0;
-        log::info!(
+        info!(
             "ICW1 received | {} | {} | {} | {}",
             if icw4_expected {
                 "icw4 expected"
@@ -108,7 +110,7 @@ impl ProgrammableInterruptController {
             value
         );
 
-        log::info!("ICW2 received");
+        info!("ICW2 received");
 
         // If bit 0, 1 and 2 are set to 0, then we are in 8086/8088 mode and can process icw2.
         if value & 0x07 == 0 {
@@ -124,7 +126,7 @@ impl ProgrammableInterruptController {
             value
         );
 
-        log::info!(
+        info!(
             "ICW4: {} | {}",
             if value & 0x01 != 0 {
                 "8086/8088 mode"
@@ -166,7 +168,7 @@ mod test {
 
     #[test]
     fn test_init() {
-        // pretty_env_logger::init();
+        tracing_subscriber::fmt().init();
 
         let mut pic = ProgrammableInterruptController::default();
 

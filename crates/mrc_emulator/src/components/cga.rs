@@ -1,3 +1,5 @@
+use tracing::info;
+
 use crate::{Address, Bus};
 
 #[derive(Default)]
@@ -9,6 +11,6 @@ impl Bus for Cga {
     }
 
     fn write(&mut self, address: Address, value: u8) {
-        log::info!("Writing {:#04x} to CGA adapter on {:#06x}", value, address);
+        info!("Writing {:#04x} to CGA adapter on {:#06x}", value, address);
     }
 }

@@ -184,10 +184,10 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             return 0;
         }
 
-        self._print_state();
-        print!("{:04X}:{:04X}  ", self.segments[CS], self.ip);
+        // self._print_state();
+        // print!("{:04X}:{:04X}  ", self.segments[CS], self.ip);
 
-        self.disasm_instruction(self.flat_address());
+        // self.disasm_instruction(self.flat_address());
 
         #[cfg(debug_assertions)]
         let pre_cycles = self.to_consume;
@@ -408,6 +408,8 @@ impl<D: Bus, I: Bus> crate::Cpu for Intel8088<D, I> {
 
 #[cfg(test)]
 mod tests {
+    use tracing::warn;
+
     use super::*;
 
     struct BusPrinter {
@@ -440,7 +442,7 @@ mod tests {
         fn read(&self, address: Address) -> u8 {
             let address = address as usize;
             if address >= self.len() {
-                log::warn!("Reading outside of bounds! ({:05X})", address);
+                warn!("Reading outside of bounds! ({:05X})", address);
                 0
             } else {
                 self[address]
@@ -450,7 +452,7 @@ mod tests {
         fn write(&mut self, address: Address, value: u8) {
             let address = address as usize;
             if address >= self.len() {
-                log::warn!("Writing outside of bounds! ({:05X})", address);
+                warn!("Writing outside of bounds! ({:05X})", address);
             } else {
                 self[address as usize] = value;
             }

@@ -533,7 +533,7 @@ impl Bus for TextModeInterface {
             text_mode.buffer[index].color as u8
         };
 
-        // log::info!("Read \"{:02X}\" from VGA memory at [{:05X}]", value, address);
+        // info!("Read \"{:02X}\" from VGA memory at [{:05X}]", value, address);
 
         value
     }
@@ -548,7 +548,7 @@ impl Bus for TextModeInterface {
             text_mode.buffer[index].color = value as u32;
         }
 
-        // log::info!("Wrote \"{:02X}\" to VGA memory at [{:05X}] ", value, address);
+        // info!("Wrote \"{:02X}\" to VGA memory at [{:05X}] ", value, address);
     }
 }
 
@@ -562,7 +562,7 @@ impl InterruptHandler for TextModeInterface {
 
                 let _video_mode = cpu.state.get_byte_register_value(Register::AlAx);
 
-                // log::info!("Setting video mode. | video_mode: {:02X}", video_mode);
+                // info!("Setting video mode. | video_mode: {:02X}", video_mode);
             }
 
             0x01 => {
@@ -573,7 +573,7 @@ impl InterruptHandler for TextModeInterface {
                 let _scan_line_start = cpu.state.get_byte_register_value(Register::ChBp);
                 let _scan_line_end = cpu.state.get_byte_register_value(Register::ClCx);
 
-                // log::info!(
+                // info!(
                 //     "Setting cursor shape: {:02X}..{:02X}",
                 //     scan_line_start,
                 //     scan_line_end
@@ -588,7 +588,7 @@ impl InterruptHandler for TextModeInterface {
                 let row = cpu.state.get_byte_register_value(Register::DhSi);
                 let column = cpu.state.get_byte_register_value(Register::DlDx);
 
-                // log::info!("Set cursor position. | page_number: {:02X} | row: {:02X} | column: {:02X}", page_number, row, column);
+                // info!("Set cursor position. | page_number: {:02X} | row: {:02X} | column: {:02X}", page_number, row, column);
 
                 self.text_mode.borrow_mut().cursor_position = (column, row);
             }
@@ -599,7 +599,7 @@ impl InterruptHandler for TextModeInterface {
 
                 let _page_number = cpu.state.get_byte_register_value(Register::AlAx);
 
-                // log::info!(
+                // info!(
                 //     "Select active display page. | page_number: {:02X}",
                 //     page_number
                 // );
@@ -621,7 +621,7 @@ impl InterruptHandler for TextModeInterface {
                 let _lower_row_number = cpu.state.get_byte_register_value(Register::DhSi);
                 let _right_column_number = cpu.state.get_byte_register_value(Register::DlDx);
 
-                // log::info!("Scroll up window. | lines_to_scroll: {:02X} | color: {:02X} | upper_row_number: {:02X} | left_column_number: {:02X} | lower_row_number: {:02X} | right_column_number: {:02X}", lines_to_scroll, color, upper_row_number, left_column_number, lower_row_number, right_column_number);
+                // info!("Scroll up window. | lines_to_scroll: {:02X} | color: {:02X} | upper_row_number: {:02X} | left_column_number: {:02X} | lower_row_number: {:02X} | right_column_number: {:02X}", lines_to_scroll, color, upper_row_number, left_column_number, lower_row_number, right_column_number);
             }
 
             0x09 => {
@@ -634,7 +634,7 @@ impl InterruptHandler for TextModeInterface {
                 let _color = cpu.state.get_byte_register_value(Register::BlBx);
                 let _count = cpu.state.get_word_register_value(Register::ClCx);
 
-                // log::info!("Write character and attribute at cursor position. | character: {:02X} \"{}\" | page_number: {:02X} | color: {:02X} | count: {:04X}",
+                // info!("Write character and attribute at cursor position. | character: {:02X} \"{}\" | page_number: {:02X} | color: {:02X} | count: {:04X}",
                 //     character, character as char, page_number, color, count);
 
                 {
@@ -659,7 +659,7 @@ impl InterruptHandler for TextModeInterface {
                 let _page_number = cpu.state.get_byte_register_value(Register::BhDi);
                 let _color = cpu.state.get_byte_register_value(Register::BlBx);
 
-                // log::info!(
+                // info!(
                 //     "Teletype output. | character: {:02X} | page_number: {:02X} | color: {:02X}",
                 //     character,
                 //     page_number,
@@ -671,7 +671,7 @@ impl InterruptHandler for TextModeInterface {
 
             0x12 => {
                 // Some undocumented function??
-                // log::info!("Undocumented int 0x10 function.");
+                // info!("Undocumented int 0x10 function.");
             }
 
             _ => panic!("Invalid function number: {:02X}", ah),

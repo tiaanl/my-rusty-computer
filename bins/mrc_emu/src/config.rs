@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::io::{Error, Read};
 use std::path::Path;
+use tracing::{info, warn};
 
 #[derive(Debug)]
 #[allow(unused)]
@@ -69,7 +70,7 @@ impl Config {
             Ok(file) => file,
             Err(err) => {
                 return if matches!(err.kind(), std::io::ErrorKind::NotFound) {
-                    log::warn!(
+                    warn!(
                         "Configuration file does not exist: {}",
                         self.config_file_path.display()
                     );
@@ -80,7 +81,7 @@ impl Config {
             }
         };
 
-        log::info!(
+        info!(
             "Loading configuration from: {}",
             self.config_file_path.display()
         );

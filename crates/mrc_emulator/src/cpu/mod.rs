@@ -3,6 +3,7 @@ mod state;
 
 pub use executor::{execute, ExecuteResult};
 pub use state::{ByteRegister, Flags, State, WordRegister};
+use tracing::error;
 
 use crate::{error, Address, Bus, Cpu};
 use mrc_decoder::{decode_instruction, DecodedInstruction};
@@ -102,7 +103,7 @@ impl<D: Bus, I: Bus> Iterator for CPU<D, I> {
         let byte = self.bus.read(address);
         let (new_ip, overflow) = self.state.ip.overflowing_add(1);
         if overflow {
-            log::error!("IP overflow!");
+            error!("IP overflow!");
             None
         } else {
             self.state.ip = new_ip;
