@@ -12,7 +12,7 @@ use mrc_emulator::{
         rom::ReadOnlyMemory,
     },
     cpu::CPU,
-    Address, Bus, Cpu, Port,
+    Address, Bus, Cpu,
 };
 use std::{cell::RefCell, rc::Rc};
 
@@ -35,7 +35,7 @@ impl DataBus {
     }
 }
 
-impl Bus<Address> for DataBus {
+impl Bus for DataBus {
     fn read(&self, address: Address) -> u8 {
         if address >= BIOS_START {
             self.bios.read(address - BIOS_START)
@@ -68,8 +68,8 @@ pub struct InputOutputBus {
     ppi: ProgrammablePeripheralInterface<Latch, Keyboard, Latch>,
 }
 
-impl Bus<Port> for InputOutputBus {
-    fn read(&self, address: Port) -> u8 {
+impl Bus for InputOutputBus {
+    fn read(&self, address: Address) -> u8 {
         match address {
             0x0000..=0x000D => self.dma.read(address),
 
@@ -85,7 +85,7 @@ impl Bus<Port> for InputOutputBus {
         }
     }
 
-    fn write(&mut self, address: Port, value: u8) {
+    fn write(&mut self, address: Address, value: u8) {
         match address {
             0x0000..=0x000D => self.dma.write(address, value),
 
@@ -325,7 +325,7 @@ impl Emulator {
     // }
 }
 
-struct CPUIt<'cpu, D: Bus<Address>, I: Bus<Port>> {
+struct CPUIt<'cpu, D: Bus, I: Bus> {
     cpu: &'cpu CPU<D, I>,
     pub address: Address,
 }
@@ -336,7 +336,7 @@ struct CPUIt<'cpu, D: Bus<Address>, I: Bus<Port>> {
 //     }
 // }
 
-impl<'cpu, D: Bus<Address>, I: Bus<Port>> Iterator for CPUIt<'cpu, D, I> {
+impl<'cpu, D: Bus, I: Bus> Iterator for CPUIt<'cpu, D, I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {

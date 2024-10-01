@@ -3,7 +3,7 @@
 //! IBM PC/XT model 5150 and up uses DMA channel 0 for memory refresh cycles and channel 2 for the
 //! fixed disk controller.
 
-use crate::{Bus, Port};
+use crate::{Address, Bus};
 use std::cell::Cell;
 
 #[derive(Default)]
@@ -149,8 +149,8 @@ impl DirectMemoryAccessController {
     }
 }
 
-impl Bus<Port> for DirectMemoryAccessController {
-    fn read(&self, port: u16) -> u8 {
+impl Bus for DirectMemoryAccessController {
+    fn read(&self, port: Address) -> u8 {
         log::info!("Reading from DMA controller on port {:#06x}.", port);
 
         if port >> 7 == 0 {
@@ -168,7 +168,7 @@ impl Bus<Port> for DirectMemoryAccessController {
         }
     }
 
-    fn write(&mut self, port: u16, value: u8) {
+    fn write(&mut self, port: Address, value: u8) {
         log::info!(
             "Writing {:#04x} to DMA controller on port {:#06x}.",
             value,

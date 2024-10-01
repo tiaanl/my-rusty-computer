@@ -1,6 +1,6 @@
 //! Emulation of Intel 8259A programmable interrupt controller.
 
-use crate::{Bus, Port};
+use crate::{Address, Bus};
 
 pub struct ProgrammableInterruptController {
     /// Set to true if all the ICW's were received and the chip is ready to operate.
@@ -142,17 +142,17 @@ impl ProgrammableInterruptController {
     }
 }
 
-impl Bus<Port> for ProgrammableInterruptController {
-    fn read(&self, port: u16) -> u8 {
-        if port & 0b1 == 0 {
+impl Bus for ProgrammableInterruptController {
+    fn read(&self, address: Address) -> u8 {
+        if address & 0b1 == 0 {
             self.read_low()
         } else {
             self.read_high()
         }
     }
 
-    fn write(&mut self, port: u16, value: u8) {
-        if port & 0b1 == 0 {
+    fn write(&mut self, address: Address, value: u8) {
+        if address & 0b1 == 0 {
             self.write_low(value)
         } else {
             self.write_high(value)

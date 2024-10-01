@@ -11,7 +11,7 @@
 
 // const TICK_RATE: usize = 1193182;
 
-use crate::{Bus, Port};
+use crate::{Address, Bus};
 use std::cell::RefCell;
 
 const COUNTER_COUNT: u8 = 3;
@@ -179,9 +179,9 @@ impl ProgrammableIntervalTimer8253 {
     }
 }
 
-impl Bus<Port> for ProgrammableIntervalTimer8253 {
-    fn read(&self, port: u16) -> u8 {
-        let counter = port & 0b11;
+impl Bus for ProgrammableIntervalTimer8253 {
+    fn read(&self, address: Address) -> u8 {
+        let counter = address & 0b11;
 
         if counter == 0b11 {
             log::warn!("Only the 3 counters can be read from.");
@@ -205,15 +205,15 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
             }
         };
 
-        log::info!("Read from timer port {:#06X}: {:#04X}", port, value);
+        log::info!("Read from timer port {:#06X}: {:#04X}", address, value);
 
         value
     }
 
-    fn write(&mut self, port: u16, value: u8) {
+    fn write(&mut self, address: Address, value: u8) {
         // log::info!("Writing to timer port: {:#06X} <= {:#04X}", port, value);
 
-        let counter = port & 0b11;
+        let counter = address & 0b11;
 
         if counter == 0x03 {
             // Writing to the Mode/Command register.
@@ -265,7 +265,7 @@ impl Bus<Port> for ProgrammableIntervalTimer8253 {
                 }
             }
 
-            log::info!("Set counter {} to {:?}", port & 0b11, counter);
+            log::info!("Set counter {} to {:?}", address & 0b11, counter);
         }
     }
 }

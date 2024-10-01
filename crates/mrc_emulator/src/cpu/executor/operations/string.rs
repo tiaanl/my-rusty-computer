@@ -43,7 +43,7 @@ pub mod byte {
     };
     use Segment::{DS, ES};
 
-    pub fn load(bus: &impl Bus<Address>, state: &mut State) -> Result<()> {
+    pub fn load(bus: &impl Bus, state: &mut State) -> Result<()> {
         let value = bus_read(
             bus,
             segment_and_offset(state.segment(DS), state.register(SI)),
@@ -56,7 +56,7 @@ pub mod byte {
         Ok(())
     }
 
-    pub fn mov(bus: &mut impl Bus<Address>, state: &mut State) -> Result<()> {
+    pub fn mov(bus: &mut impl Bus, state: &mut State) -> Result<()> {
         let value = bus_read(
             bus,
             segment_and_offset(state.segment(DS), state.register(SI)),
@@ -74,7 +74,7 @@ pub mod byte {
         Ok(())
     }
 
-    pub fn store(bus: &mut impl Bus<Address>, state: &mut State) -> Result<()> {
+    pub fn store(bus: &mut impl Bus, state: &mut State) -> Result<()> {
         let value = state.register(AL);
 
         bus_write(
@@ -88,7 +88,7 @@ pub mod byte {
         Ok(())
     }
 
-    pub fn scan(bus: &mut impl Bus<Address>, state: &mut State) -> Result<()> {
+    pub fn scan(bus: &mut impl Bus, state: &mut State) -> Result<()> {
         let destination = bus_read(
             bus,
             segment_and_offset(state.segment(DS), state.register(SI)),

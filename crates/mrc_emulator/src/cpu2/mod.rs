@@ -3,7 +3,7 @@ mod calc2;
 mod mrrm;
 mod ops;
 
-use crate::{segment_and_offset, Address, Bus, Port};
+use crate::{segment_and_offset, Address, Bus};
 use bitflags::bitflags;
 use mrc_decoder::TryFromEncoding;
 
@@ -38,7 +38,7 @@ bitflags! {
     }
 }
 
-pub struct Intel8088<D: Bus<Address>, I: Bus<Port>> {
+pub struct Intel8088<D: Bus, I: Bus> {
     pub registers: [u16; 8],
     pub segments: [u16; 4],
     pub ip: u16,
@@ -74,15 +74,15 @@ impl Inc for Address {
     }
 }
 
-struct BusIter<'a, S: Inc, B: Bus<S>> {
+struct BusIter<'a, B: Bus> {
     bus: &'a B,
-    pos: S,
+    pos: Address,
 
     /// Setting to true will print out each byte it consumes.
     print: bool,
 }
 
-impl<'a, S: Inc, B: Bus<S>> Iterator for BusIter<'a, S, B> {
+impl<'a, B: Bus> Iterator for BusIter<'a, B> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -98,7 +98,7 @@ impl<'a, S: Inc, B: Bus<S>> Iterator for BusIter<'a, S, B> {
     }
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
+impl<D: Bus, I: Bus> Intel8088<D, I> {
     pub fn new(data_bus: D, io_bus: I) -> Self {
         Self {
             registers: [0; 8],
@@ -355,7 +355,7 @@ impl From<Operand> for usize {
     }
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
+impl<D: Bus, I: Bus> Intel8088<D, I> {
     fn _add_byte(dst: u8, src: u8, flags: &mut Flags) -> u8 {
         let (result, o) = dst.overflowing_add(src);
 
@@ -377,7 +377,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     }
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> crate::Cpu for Intel8088<D, I> {
+impl<D: Bus, I: Bus> crate::Cpu for Intel8088<D, I> {
     fn reset(&mut self) {
         self.registers = [0; 8];
         self.segments = [0x0000, 0xF000, 0x0000, 0x0000];
@@ -414,7 +414,7 @@ mod tests {
         name: &'static str,
     }
 
-    impl Bus<Address> for BusPrinter {
+    impl Bus for BusPrinter {
         fn read(&self, address: Address) -> u8 {
             println!("{}: r [{:04X}]", self.name, address);
             0
@@ -425,18 +425,18 @@ mod tests {
         }
     }
 
-    impl Bus<Port> for BusPrinter {
-        fn read(&self, port: Port) -> u8 {
-            println!("{}: r [{:04X}]", self.name, port);
-            0
-        }
+    // impl Bus for BusPrinter {
+    //     fn read(&self, port: Address) -> u8 {
+    //         println!("{}: r [{:04X}]", self.name, port);
+    //         0
+    //     }
 
-        fn write(&mut self, port: Port, value: u8) {
-            println!("{}: w [{:04X}] {:02X}", self.name, port, value);
-        }
-    }
+    //     fn write(&mut self, port: Address, value: u8) {
+    //         println!("{}: w [{:04X}] {:02X}", self.name, port, value);
+    //     }
+    // }
 
-    impl Bus<Address> for &mut [u8] {
+    impl Bus for &mut [u8] {
         fn read(&self, address: Address) -> u8 {
             let address = address as usize;
             if address >= self.len() {

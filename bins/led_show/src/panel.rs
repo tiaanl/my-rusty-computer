@@ -1,4 +1,4 @@
-use mrc_emulator::{Bus, Port};
+use mrc_emulator::{Address, Bus};
 
 #[derive(Default)]
 pub struct Panel {
@@ -11,13 +11,13 @@ impl Panel {
     }
 }
 
-impl Bus<Port> for Panel {
-    fn read(&self, _address: Port) -> u8 {
+impl Bus for Panel {
+    fn read(&self, _address: Address) -> u8 {
         //Err(Error::InvalidPort(address))
         0
     }
 
-    fn write(&mut self, _address: Port, value: u8) {
+    fn write(&mut self, _address: Address, value: u8) {
         let index = value >> 4;
         let color = value & 0x0F;
 

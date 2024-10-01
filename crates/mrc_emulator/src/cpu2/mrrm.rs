@@ -1,12 +1,12 @@
 use super::{Intel8088, Operand, BP, BX, DI, DS, SI, SS};
-use crate::{segment_and_offset, Address, Bus, Port};
+use crate::{segment_and_offset, Address, Bus};
 
 pub(crate) enum ModRegRMDirection {
     RegFirst,
     RegMemFirst,
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
+impl<D: Bus, I: Bus> Intel8088<D, I> {
     pub(crate) fn read_operand_byte(&self, operand: Operand) -> u8 {
         match operand {
             Operand::Register(encoding) => self.read_register_byte(encoding as usize),

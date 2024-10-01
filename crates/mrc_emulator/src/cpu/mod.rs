@@ -4,19 +4,19 @@ mod state;
 pub use executor::{execute, ExecuteResult};
 pub use state::{ByteRegister, Flags, State, WordRegister};
 
-use crate::{error, Address, Bus, Cpu, Port};
+use crate::{error, Address, Bus, Cpu};
 use mrc_decoder::{decode_instruction, DecodedInstruction};
 use mrc_instruction::Segment;
 use Segment::CS;
 
 /// An emulated 8086 CPU.  Contains all data and functions to access it.
-pub struct CPU<D: Bus<Address>, I: Bus<Port>> {
+pub struct CPU<D: Bus, I: Bus> {
     pub state: State,
     io_controller: I,
     bus: D,
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
+impl<D: Bus, I: Bus> CPU<D, I> {
     pub fn new(bus: D, io_controller: I) -> Self {
         Self {
             // By default when the CPU starts, we enable interrupts and the 2nd flag is always set.
@@ -94,7 +94,7 @@ impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
 }
 
 /// The decoder requires an iterator to fetch bytes.
-impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
+impl<D: Bus, I: Bus> Iterator for CPU<D, I> {
     type Item = u8;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -111,7 +111,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Iterator for CPU<D, I> {
     }
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> Cpu for CPU<D, I> {
+impl<D: Bus, I: Bus> Cpu for CPU<D, I> {
     fn reset(&mut self) {
         Self::reset(self)
     }

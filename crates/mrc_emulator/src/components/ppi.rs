@@ -1,6 +1,6 @@
 //! Emulation of the Intel 8255 Programmable Peripheral Interface
 
-use crate::{Bus, Port};
+use crate::{Address, Bus};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Mode {
@@ -11,9 +11,9 @@ pub enum Mode {
 #[derive(Debug)]
 pub struct ProgrammablePeripheralInterface<A, B, C>
 where
-    A: Bus<Port>,
-    B: Bus<Port>,
-    C: Bus<Port>,
+    A: Bus,
+    B: Bus,
+    C: Bus,
 {
     port_a: A,
     port_b: B,
@@ -24,9 +24,9 @@ where
 
 impl<A, B, C> ProgrammablePeripheralInterface<A, B, C>
 where
-    A: Bus<Port>,
-    B: Bus<Port>,
-    C: Bus<Port>,
+    A: Bus,
+    B: Bus,
+    C: Bus,
 {
     pub fn new(port_a: A, port_b: B, port_c: C) -> Self {
         Self {
@@ -38,13 +38,13 @@ where
     }
 }
 
-impl<A, B, C> Bus<Port> for ProgrammablePeripheralInterface<A, B, C>
+impl<A, B, C> Bus for ProgrammablePeripheralInterface<A, B, C>
 where
-    A: Bus<Port>,
-    B: Bus<Port>,
-    C: Bus<Port>,
+    A: Bus,
+    B: Bus,
+    C: Bus,
 {
-    fn read(&self, address: Port) -> u8 {
+    fn read(&self, address: Address) -> u8 {
         let address = address & 0b11;
 
         match address {
@@ -59,7 +59,7 @@ where
         }
     }
 
-    fn write(&mut self, address: Port, value: u8) {
+    fn write(&mut self, address: Address, value: u8) {
         let address = address & 0b11;
 
         match address {
@@ -83,12 +83,12 @@ where
 
 pub struct Latch(pub u8);
 
-impl Bus<Port> for Latch {
-    fn read(&self, _address: Port) -> u8 {
+impl Bus for Latch {
+    fn read(&self, _address: Address) -> u8 {
         self.0
     }
 
-    fn write(&mut self, _address: Port, value: u8) {
+    fn write(&mut self, _address: Address, value: u8) {
         self.0 = value;
     }
 }

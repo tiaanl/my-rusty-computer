@@ -7,8 +7,8 @@ use super::{
         logic::{logic, Compare, Test},
     },
     mrrm::{ModRegRMDirection::RegFirst, ModRegRMDirection::RegMemFirst},
-    segment_and_offset, Address, Bus, Flags, Intel8088, Operand, Port, AX, BP, BX, CS, CX, DI, DS,
-    DX, ES, SI, SP, SS,
+    segment_and_offset, Address, Bus, Flags, Intel8088, Operand, AX, BP, BX, CS, CX, DI, DS, DX,
+    ES, SI, SP, SS,
 };
 use std::ops::Not;
 
@@ -20,11 +20,11 @@ macro_rules! op {
 
 type OpFunc<D, I> = fn(&mut Intel8088<D, I>);
 
-struct OpCodeEntry<D: Bus<Address>, I: Bus<Port>> {
+struct OpCodeEntry<D: Bus, I: Bus> {
     exec: OpFunc<D, I>,
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
+impl<D: Bus, I: Bus> Intel8088<D, I> {
     pub fn execute_op_code(&mut self, op_code: u8) {
         (Self::OP_CODE_TABLE[op_code as usize].exec)(self);
     }
@@ -980,7 +980,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     // E4
     fn op_in_al_imm8(&mut self) {
         let port = self.fetch();
-        self.write_register_byte(AX, self.io_bus.read(port as Port));
+        self.write_register_byte(AX, self.io_bus.read(port as Address));
         self.consume_cycles(11);
     }
 
@@ -1032,7 +1032,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     // EC
     fn op_in_al_dx(&mut self) {
         let port = self.read_register_word(DX);
-        let value = self.io_bus.read(port);
+        let value = self.io_bus.read(port as Address);
         self.write_register_byte(AX, value);
 
         self.consume_cycles(9);
@@ -1041,8 +1041,8 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
     // ED
     fn op_in_ax_dx(&mut self) {
         let port = self.read_register_word(DX);
-        let lo = self.io_bus.read(port);
-        let hi = self.io_bus.read(port.wrapping_add(1));
+        let lo = self.io_bus.read(port as Address);
+        let hi = self.io_bus.read(port.wrapping_add(1) as Address);
         let value = u16::from_le_bytes([lo, hi]);
         self.write_register_word(AX, value);
 
@@ -1054,7 +1054,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
         let dx = self.read_register_word(DX);
         let al = self.read_register_byte(AX);
 
-        self.io_bus.write(dx, al);
+        self.io_bus.write(dx as Address, al);
 
         self.consume_cycles(9);
     }
@@ -1183,7 +1183,7 @@ impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
 }
 
 // Helpers
-impl<D: Bus<Address>, I: Bus<Port>> Intel8088<D, I> {
+impl<D: Bus, I: Bus> Intel8088<D, I> {
     // 40..47
     fn inc_reg16(&mut self, encoding: usize) {
         let dst = self.read_register_word(encoding);

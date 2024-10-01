@@ -522,7 +522,7 @@ impl TextModeInterface {
     }
 }
 
-impl Bus<Address> for TextModeInterface {
+impl Bus for TextModeInterface {
     fn read(&self, address: Address) -> u8 {
         let text_mode = self.text_mode.read().unwrap();
 

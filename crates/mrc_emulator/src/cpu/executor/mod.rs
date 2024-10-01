@@ -8,7 +8,7 @@ use crate::{
         Flags, CPU,
     },
     error::{Error, Result},
-    segment_and_offset, Address, Bus, Port,
+    segment_and_offset, Address, Bus,
 };
 use mrc_instruction::{
     AddressingMode, Displacement, Immediate, Instruction, Operand, OperandSet, OperandSize,
@@ -21,7 +21,7 @@ pub enum ExecuteResult {
     Stop,
 }
 
-impl<D: Bus<Address>, I: Bus<Port>> CPU<D, I> {
+impl<D: Bus, I: Bus> CPU<D, I> {
     fn push(&mut self, value: u16) -> Result<()> {
         self.state
             .set_register(SP, self.state.register(SP).wrapping_add(2));
@@ -70,7 +70,7 @@ fn illegal_operands(instruction: &Instruction) {
     panic!("Illegal operands! {:?}", instruction)
 }
 
-fn indirect_address_for<D: Bus<Address>, I: Bus<Port>>(
+fn indirect_address_for<D: Bus, I: Bus>(
     cpu: &CPU<D, I>,
     segment: Segment,
     addressing_mode: &AddressingMode,
@@ -130,18 +130,15 @@ mod byte {
     use super::*;
     use mrc_instruction::{Immediate, SizedRegisterEncoding};
 
-    pub fn bus_read(bus: &impl Bus<Address>, address: Address) -> u8 {
+    pub fn bus_read(bus: &impl Bus, address: Address) -> u8 {
         bus.read(address)
     }
 
-    pub fn bus_write(bus: &mut impl Bus<Address>, address: Address, value: u8) {
+    pub fn bus_write(bus: &mut impl Bus, address: Address, value: u8) {
         bus.write(address, value);
     }
 
-    pub fn get_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
-        cpu: &CPU<D, I>,
-        operand_type: &Operand,
-    ) -> u8 {
+    pub fn get_operand_type_value<D: Bus, I: Bus>(cpu: &CPU<D, I>, operand_type: &Operand) -> u8 {
         match operand_type {
             Operand::Direct(segment, offset, OperandSize::Byte) => {
                 // TODO: Handle segment override.
@@ -168,15 +165,12 @@ mod byte {
         }
     }
 
-    pub fn get_operand_value<D: Bus<Address>, I: Bus<Port>>(
-        cpu: &CPU<D, I>,
-        operand: &Operand,
-    ) -> u8 {
+    pub fn get_operand_value<D: Bus, I: Bus>(cpu: &CPU<D, I>, operand: &Operand) -> u8 {
         assert_eq!(OperandSize::Byte, operand.operand_size());
         byte::get_operand_type_value(cpu, operand)
     }
 
-    pub fn set_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
+    pub fn set_operand_type_value<D: Bus, I: Bus>(
         cpu: &mut CPU<D, I>,
         operand_type: &Operand,
         value: u8,
@@ -201,11 +195,7 @@ mod byte {
         }
     }
 
-    pub fn set_operand_value<D: Bus<Address>, I: Bus<Port>>(
-        cpu: &mut CPU<D, I>,
-        operand: &Operand,
-        value: u8,
-    ) {
+    pub fn set_operand_value<D: Bus, I: Bus>(cpu: &mut CPU<D, I>, operand: &Operand, value: u8) {
         assert_eq!(OperandSize::Byte, operand.operand_size());
         byte::set_operand_type_value(cpu, operand, value)
     }
@@ -215,19 +205,19 @@ mod word {
     use super::*;
     use mrc_instruction::{Immediate, SizedRegisterEncoding};
 
-    pub fn bus_read(bus: &impl Bus<Address>, address: Address) -> u16 {
+    pub fn bus_read(bus: &impl Bus, address: Address) -> u16 {
         let lo = byte::bus_read(bus, address);
         let hi = byte::bus_read(bus, address + 1);
         u16::from_le_bytes([lo, hi])
     }
 
-    pub fn bus_write(bus: &mut impl Bus<Address>, address: Address, value: u16) {
+    pub fn bus_write(bus: &mut impl Bus, address: Address, value: u16) {
         let bytes = value.to_le_bytes();
         byte::bus_write(bus, address, bytes[0]);
         byte::bus_write(bus, address + 1, bytes[1]);
     }
 
-    pub fn set_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
+    pub fn set_operand_type_value<D: Bus, I: Bus>(
         cpu: &mut CPU<D, I>,
         operand_type: &Operand,
         value: u16,
@@ -256,19 +246,12 @@ mod word {
         }
     }
 
-    pub fn set_operand_value<D: Bus<Address>, I: Bus<Port>>(
-        cpu: &mut CPU<D, I>,
-        operand: &Operand,
-        value: u16,
-    ) {
+    pub fn set_operand_value<D: Bus, I: Bus>(cpu: &mut CPU<D, I>, operand: &Operand, value: u16) {
         assert_eq!(OperandSize::Word, operand.operand_size());
         set_operand_type_value(cpu, operand, value);
     }
 
-    pub fn get_operand_type_value<D: Bus<Address>, I: Bus<Port>>(
-        cpu: &CPU<D, I>,
-        operand_type: &Operand,
-    ) -> u16 {
+    pub fn get_operand_type_value<D: Bus, I: Bus>(cpu: &CPU<D, I>, operand_type: &Operand) -> u16 {
         match operand_type {
             Operand::Direct(segment, offset, OperandSize::Word) => {
                 // Get a single byte from DS:offset
@@ -300,17 +283,14 @@ mod word {
         }
     }
 
-    pub fn get_operand_value<D: Bus<Address>, I: Bus<Port>>(
-        cpu: &CPU<D, I>,
-        operand: &Operand,
-    ) -> u16 {
+    pub fn get_operand_value<D: Bus, I: Bus>(cpu: &CPU<D, I>, operand: &Operand) -> u16 {
         assert_eq!(OperandSize::Word, operand.operand_size());
 
         word::get_operand_type_value(cpu, operand)
     }
 }
 
-pub fn execute<D: Bus<Address>, I: Bus<Port>>(
+pub fn execute<D: Bus, I: Bus>(
     cpu: &mut CPU<D, I>,
     instruction: &Instruction,
 ) -> Result<ExecuteResult> {
@@ -429,18 +409,18 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
 
         Operation::IN => match instruction.operands {
             OperandSet::DestinationAndSource(ref destination, ref port) => {
-                let port = match port.operand_size() {
+                let address = match port.operand_size() {
                     OperandSize::Byte => byte::get_operand_value(cpu, port) as u16,
                     OperandSize::Word => word::get_operand_value(cpu, port),
                 };
 
                 match destination.operand_size() {
                     OperandSize::Byte => {
-                        let value = cpu.io_controller.read(port);
+                        let value = cpu.io_controller.read(address as Address);
                         byte::set_operand_value(cpu, destination, value);
                     }
                     OperandSize::Word => {
-                        let value = cpu.io_controller.read(port) as u16;
+                        let value = cpu.io_controller.read(address as Address) as u16;
                         word::set_operand_value(cpu, destination, value);
                     }
                 };
@@ -899,7 +879,7 @@ pub fn execute<D: Bus<Address>, I: Bus<Port>>(
                 };
 
                 let value = byte::get_operand_type_value(cpu, value);
-                cpu.io_controller.write(port, value);
+                cpu.io_controller.write(port as Address, value);
 
                 if port == 0x60 || port == 0x80 {
                     log::info!("POST port out ({:04X}): {:02X}", port, value);

@@ -10,7 +10,7 @@ impl ReadOnlyMemory {
     }
 }
 
-impl Bus<Address> for ReadOnlyMemory {
+impl Bus for ReadOnlyMemory {
     fn read(&self, address: Address) -> u8 {
         let address = address as usize;
         if address >= self.data.len() {

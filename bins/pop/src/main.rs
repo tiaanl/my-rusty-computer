@@ -2,7 +2,7 @@ use mrc_dos::mz;
 use mrc_emulator::components::ram::RandomAccessMemory;
 use mrc_emulator::cpu::ExecuteResult;
 use mrc_emulator::cpu::WordRegister::SP;
-use mrc_emulator::{cpu::CPU, segment_and_offset, Address, Bus, Port};
+use mrc_emulator::{cpu::CPU, segment_and_offset, Address, Bus};
 use mrc_instruction::Segment;
 use std::io::{Read, Seek};
 use structopt::StructOpt;
@@ -15,7 +15,7 @@ struct Opt {
 
 struct DataBus;
 
-impl Bus<Address> for DataBus {
+impl Bus for DataBus {
     fn read(&self, _address: Address) -> u8 {
         0
     }
@@ -25,12 +25,12 @@ impl Bus<Address> for DataBus {
 
 struct IO;
 
-impl Bus<Port> for IO {
-    fn read(&self, _port: u16) -> u8 {
+impl Bus for IO {
+    fn read(&self, _port: Address) -> u8 {
         0
     }
 
-    fn write(&mut self, _port: u16, _value: u8) {}
+    fn write(&mut self, _port: Address, _value: u8) {}
 }
 
 fn load_executable(

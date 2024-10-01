@@ -6,8 +6,10 @@ edition = "2021"
 [dependencies]
 bitflags = "1.3.2"
 dirs = "4.0"
-#glium = "0.31"
-log = { version = "0.4", features = ["max_level_debug", "release_max_level_warn"] }
+log = { version = "0.4", features = [
+    "max_level_debug",
+    "release_max_level_warn",
+] }
 mrc_decoder = { path = "../../crates/mrc_decoder" }
 mrc_dos = { path = "../../crates/mrc_dos" }
 mrc_emulator = { path = "../../crates/mrc_emulator" }
