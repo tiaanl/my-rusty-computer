@@ -290,22 +290,22 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
     // 00
     fn op_add_rm8_reg8(&mut self) {
-        self.mod_reg_rm_arithmetic_byte(Add, RegMemFirst, 3, 16);
+        self.mod_reg_rm_arithmetic_byte(Add, RegMemFirst);
     }
 
     // 01
     fn op_add_rm16_reg16(&mut self) {
-        self.mod_reg_rm_arithmetic_word(Add, RegMemFirst, 3, 16);
+        self.mod_reg_rm_arithmetic_word(Add, RegMemFirst);
     }
 
     // 02
     fn op_add_reg8_rm8(&mut self) {
-        self.mod_reg_rm_arithmetic_byte(Add, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_byte(Add, RegFirst);
     }
 
     // 03
     fn op_add_reg16_rm16(&mut self) {
-        self.mod_reg_rm_arithmetic_word(Add, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_word(Add, RegFirst);
     }
 
     // 04
@@ -316,36 +316,31 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let result = arithmetic(Add, al, imm, &mut self.flags);
 
         self.write_register_byte(AX, result);
-
-        self.consume_cycles(4);
     }
 
     // 0A
     fn op_or_reg8_rm8(&mut self) {
-        self.mod_reg_rm_arithmetic_byte(Or, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_byte(Or, RegFirst);
     }
 
     // 0B
     fn op_or_reg16_rm16(&mut self) {
-        self.mod_reg_rm_arithmetic_word(Or, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_word(Or, RegFirst);
     }
 
     // 0E
     fn op_push_cs(&mut self) {
         self._push(self.segments[CS]);
-        self.consume_cycles(10);
     }
 
     // 17
     fn op_pop_ss(&mut self) {
         self.segments[SS] = self.pop();
-
-        self.consume_cycles(8);
     }
 
     // 22
     fn op_and_reg8_rm8(&mut self) {
-        self.mod_reg_rm_arithmetic_byte(And, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_byte(And, RegFirst);
     }
 
     // 24
@@ -356,33 +351,31 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let result = arithmetic(And, al, imm, &mut self.flags);
 
         self.write_register_byte(AX, result);
-
-        self.consume_cycles(4);
     }
 
     // 2A
     fn op_sub_reg8_rm8(&mut self) {
-        self.mod_reg_rm_arithmetic_byte(Subtract, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_byte(Subtract, RegFirst);
     }
 
     // 2B
     fn op_sub_reg16_rm16(&mut self) {
-        self.mod_reg_rm_arithmetic_word(Subtract, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_word(Subtract, RegFirst);
     }
 
     // 32
     fn op_xor_reg8_rm8(&mut self) {
-        self.mod_reg_rm_arithmetic_byte(ExclusiveOr, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_byte(ExclusiveOr, RegFirst);
     }
 
     // 33
     fn op_xor_reg16_rm16(&mut self) {
-        self.mod_reg_rm_arithmetic_word(ExclusiveOr, RegFirst, 3, 9);
+        self.mod_reg_rm_arithmetic_word(ExclusiveOr, RegFirst);
     }
 
     // 3B
     fn op_cmp_reg16_rm16(&mut self) {
-        self.mod_reg_rm_logic_word(Compare, RegFirst, 3, 9);
+        self.mod_reg_rm_logic_word(Compare, RegFirst);
     }
 
     // 40
@@ -561,28 +554,23 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         // Sign extended byte into word.
         let src = self.fetch();
 
-        let (reg_cycles, mem_cycles) = if xop == 0b111 {
+        if xop == 0b111 {
             logic(Compare, dst, src, &mut self.flags);
-            (4, 10)
         } else {
-            let (result, reg_cycles, mem_cycles) = match xop {
-                0b000 => (arithmetic(Add, dst, src, &mut self.flags), 4, 17),
-                0b001 => (arithmetic(Or, dst, src, &mut self.flags), 4, 17),
-                0b010 => todo!(), // (cpu_arith::byte::adc(dst, src, &mut self.flags), 4, 17),
-                0b011 => todo!(), // (cpu_arith::byte::sbb(dst, src, &mut self.flags), 4, 17),
-                0b100 => todo!(), // (cpu_arith::byte::and(dst, src, &mut self.flags), 4, 17),
-                0b101 => (arithmetic(Subtract, dst, src, &mut self.flags), 4, 17),
-                0b110 => (arithmetic(ExclusiveOr, dst, src, &mut self.flags), 4, 17),
+            let result = match xop {
+                0b000 => arithmetic(Add, dst, src, &mut self.flags),
+                0b001 => arithmetic(Or, dst, src, &mut self.flags),
+                0b010 => todo!(), // cpu_arith::byte::adc(dst, src, &mut self.flags),
+                0b011 => todo!(), // cpu_arith::byte::sbb(dst, src, &mut self.flags),
+                0b100 => todo!(), // cpu_arith::byte::and(dst, src, &mut self.flags),
+                0b101 => arithmetic(Subtract, dst, src, &mut self.flags),
+                0b110 => arithmetic(ExclusiveOr, dst, src, &mut self.flags),
                 // 0b111 - already hadled above
                 _ => unreachable!(),
             };
 
             self.write_operand_byte(dst_op, result);
-
-            (reg_cycles, mem_cycles)
         };
-
-        self.consume_cycles_for_operand(dst_op, reg_cycles, mem_cycles);
     }
 
     // 81
@@ -596,28 +584,23 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let hi = self.fetch();
         let src = u16::from_le_bytes([lo, hi]);
 
-        let (reg_cycles, mem_cycles) = if xop == 0b111 {
+        if xop == 0b111 {
             logic(Compare, dst, src, &mut self.flags);
-            (4, 10)
         } else {
-            let (result, reg_cycles, mem_cycles) = match xop {
-                0b000 => (arithmetic(Add, dst, src, &mut self.flags), 4, 17),
-                0b001 => (arithmetic(Or, dst, src, &mut self.flags), 4, 17),
-                0b010 => todo!(), // (cpu_arith::byte::adc(dst, src, &mut self.flags), 4, 17),
-                0b011 => todo!(), // (cpu_arith::byte::sbb(dst, src, &mut self.flags), 4, 17),
-                0b100 => todo!(), // (cpu_arith::byte::and(dst, src, &mut self.flags), 4, 17),
-                0b101 => (arithmetic(Subtract, dst, src, &mut self.flags), 4, 17),
-                0b110 => (arithmetic(ExclusiveOr, dst, src, &mut self.flags), 4, 17),
+            let result = match xop {
+                0b000 => arithmetic(Add, dst, src, &mut self.flags),
+                0b001 => arithmetic(Or, dst, src, &mut self.flags),
+                0b010 => todo!(), // cpu_arith::byte::adc(dst, src, &mut self.flags),
+                0b011 => todo!(), // cpu_arith::byte::sbb(dst, src, &mut self.flags),
+                0b100 => todo!(), // cpu_arith::byte::and(dst, src, &mut self.flags),
+                0b101 => arithmetic(Subtract, dst, src, &mut self.flags),
+                0b110 => arithmetic(ExclusiveOr, dst, src, &mut self.flags),
                 // 0b111 - already hadled above
                 _ => unreachable!(),
             };
 
             self.write_operand_word(dst_op, result);
-
-            (reg_cycles, mem_cycles)
         };
-
-        self.consume_cycles_for_operand(dst_op, reg_cycles, mem_cycles);
     }
 
     // 83
@@ -635,21 +618,17 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             src & 0xFF
         };
 
-        let (result, reg_cycles, mem_cycles) = match xop {
-            0b000 => (Some(arithmetic(Add, dst, src, &mut self.flags)), 4, 17),
-            0b001 => (Some(arithmetic(Or, dst, src, &mut self.flags)), 4, 17),
-            0b010 => todo!(), // (cpu_arith::word::adc(dst, src, &mut self.flags), 4, 17),
-            0b011 => todo!(), // (cpu_arith::word::sbb(dst, src, &mut self.flags), 4, 17),
-            0b100 => todo!(), // (cpu_arith::word::and(dst, src, &mut self.flags), 4, 17),
-            0b101 => (Some(arithmetic(Subtract, dst, src, &mut self.flags)), 4, 17),
-            0b110 => (
-                Some(arithmetic(ExclusiveOr, dst, src, &mut self.flags)),
-                4,
-                17,
-            ),
+        let result = match xop {
+            0b000 => Some(arithmetic(Add, dst, src, &mut self.flags)),
+            0b001 => Some(arithmetic(Or, dst, src, &mut self.flags)),
+            0b010 => todo!(), // cpu_arith::word::adc(dst, src, &mut self.flags),
+            0b011 => todo!(), // cpu_arith::word::sbb(dst, src, &mut self.flags),
+            0b100 => todo!(), // cpu_arith::word::and(dst, src, &mut self.flags),
+            0b101 => Some(arithmetic(Subtract, dst, src, &mut self.flags)),
+            0b110 => Some(arithmetic(ExclusiveOr, dst, src, &mut self.flags)),
             0b111 => {
                 logic(Compare, dst, src, &mut self.flags);
-                (None, 4, 10)
+                None
             }
             _ => unreachable!(),
         };
@@ -657,8 +636,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         if let Some(result) = result {
             self.write_operand_word(rm, result);
         }
-
-        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
     }
 
     // 88
@@ -668,8 +645,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         let src = self.read_operand_byte(reg);
         self.write_operand_byte(rm, src);
-
-        self.consume_cycles_for_operand(rm, 2, 9);
     }
 
     // 89
@@ -679,8 +654,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         let src = self.read_operand_word(reg);
         self.write_operand_word(rm, src);
-
-        self.consume_cycles_for_operand(rm, 2, 9);
     }
 
     // 8A
@@ -690,7 +663,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         let src = self.read_operand_byte(rm);
         self.write_operand_byte(reg, src);
-        self.consume_cycles_for_operand(rm, 2, 8);
     }
 
     // 8B
@@ -700,7 +672,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         let src = self.read_operand_word(rm);
         self.write_operand_word(reg, src);
-        self.consume_cycles_for_operand(rm, 2, 8);
     }
 
     // 8C
@@ -710,7 +681,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         let src = self.segments[seg];
         self.write_operand_word(rm, src);
-        self.consume_cycles_for_operand(rm, 2, 9);
     }
 
     // 8E
@@ -720,7 +690,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         let src = self.read_operand_word(rm);
         self.segments[seg] = src;
-        self.consume_cycles_for_operand(rm, 2, 8);
     }
 
     // 9E
@@ -733,8 +702,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             .set(Flags::AUX_CARRY, flags.contains(Flags::AUX_CARRY));
         self.flags.set(Flags::ZERO, flags.contains(Flags::ZERO));
         self.flags.set(Flags::SIGN, flags.contains(Flags::SIGN));
-
-        self.consume_cycles(4);
     }
 
     // 9F
@@ -743,8 +710,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             & (Flags::CARRY | Flags::PARITY | Flags::AUX_CARRY | Flags::ZERO | Flags::SIGN);
 
         self.write_register_byte(0x04, flags.bits as u8);
-
-        self.consume_cycles(4);
     }
 
     // AA
@@ -762,8 +727,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             di.wrapping_sub(1)
         };
         self.write_register_word(DI, di);
-
-        self.consume_cycles(11);
     }
 
     // AB
@@ -805,8 +768,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
                 self.write_register_word(CX, cx.wrapping_sub(1));
             }
 
-            self.consume_cycles(12);
-
             if self.read_register_word(CX) == 0 {
                 self.repeat = false;
             } else {
@@ -816,7 +777,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             let src = self.data_bus.read(segment_and_offset(ds, si));
             self.write_register_byte(AX, src);
             self.write_register_word(SI, si.wrapping_add(increment));
-            self.consume_cycles(12);
         }
     }
 
@@ -903,7 +863,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
     // C3
     fn op_ret(&mut self) {
         self.ip = self.pop();
-        self.consume_cycles(16);
     }
 
     // C6
@@ -913,8 +872,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         let src = self.fetch();
         self.write_operand_byte(rm, src);
-
-        self.consume_cycles_for_operand(rm, 4, 10);
     }
 
     // C7
@@ -926,8 +883,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let hi = self.fetch();
         let src = u16::from_le_bytes([lo, hi]);
         self.write_operand_word(rm, src);
-
-        self.consume_cycles_for_operand(rm, 4, 10);
     }
 
     // D0
@@ -956,9 +911,7 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         if cx != 0 && self.flags.contains(Flags::ZERO) {
             self.ip = self.ip.wrapping_add(rel as i8 as i16 as u16);
-            self.consume_cycles(18);
         } else {
-            self.consume_cycles(5);
         }
     }
 
@@ -971,9 +924,7 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         if cx != 0 {
             self.ip = self.ip.wrapping_add(rel as i8 as i16 as u16);
-            self.consume_cycles(18);
         } else {
-            self.consume_cycles(5);
         }
     }
 
@@ -981,7 +932,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
     fn op_in_al_imm8(&mut self) {
         let port = self.fetch();
         self.write_register_byte(AX, self.io_bus.read(port as Address));
-        self.consume_cycles(11);
     }
 
     // E6
@@ -990,7 +940,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let al = self.read_register_byte(AX);
 
         self.io_bus.write(port.into(), al);
-        self.consume_cycles(11);
     }
 
     // E8
@@ -1002,15 +951,12 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let new_ip = u16::from_le_bytes([lo, hi]);
 
         self.ip = self.ip.wrapping_add(new_ip);
-
-        self.consume_cycles(19);
     }
 
     // E9
     fn op_jmp_imm16(&mut self) {
         let addr = self.read_data_bus_word(self.flat_address());
         self.ip = self.ip.wrapping_add(addr);
-        self.consume_cycles(15);
     }
 
     // EA
@@ -1025,8 +971,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         self.ip = offset;
         self.segments[CS] = segment;
-
-        self.consume_cycles(15);
     }
 
     // EC
@@ -1034,8 +978,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let port = self.read_register_word(DX);
         let value = self.io_bus.read(port as Address);
         self.write_register_byte(AX, value);
-
-        self.consume_cycles(9);
     }
 
     // ED
@@ -1045,8 +987,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let hi = self.io_bus.read(port.wrapping_add(1) as Address);
         let value = u16::from_le_bytes([lo, hi]);
         self.write_register_word(AX, value);
-
-        self.consume_cycles(13);
     }
 
     // EE
@@ -1055,20 +995,16 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let al = self.read_register_byte(AX);
 
         self.io_bus.write(dx as Address, al);
-
-        self.consume_cycles(9);
     }
 
     // F3
     fn op_rep(&mut self) {
         self.repeat = true;
-        self.consume_cycles(2);
     }
 
     // F4
     fn op_hlt(&mut self) {
         self.halted = true;
-        self.consume_cycles(2);
     }
 
     // F6
@@ -1087,7 +1023,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             0b000 => {
                 let src = self.fetch();
                 logic(Test, dst, src, &mut self.flags);
-                self.consume_cycles_for_operand(dst_op, 5, 11);
             }
 
             0b001 => unreachable!(),
@@ -1095,13 +1030,11 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             0b010 => {
                 let result = dst.not();
                 self.write_operand_byte(dst_op, result);
-                self.consume_cycles_for_operand(dst_op, 3, 16);
             }
 
             0b011 => {
                 // Test is just a sub that doesn't use the result.
                 let _ = arithmetic(Subtract, 0, dst, &mut self.flags);
-                self.consume_cycles_for_operand(dst_op, 3, 16);
             }
 
             0b100 => todo!(),
@@ -1119,43 +1052,31 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
     // F8
     fn op_clc(&mut self) {
         self.flags.set(Flags::CARRY, false);
-
-        self.consume_cycles(2);
     }
 
     // F9
     fn op_stc(&mut self) {
         self.flags.set(Flags::CARRY, true);
-
-        self.consume_cycles(2);
     }
 
     // FA
     fn op_cli(&mut self) {
         self.flags.set(Flags::INTERRUPT, false);
-
-        self.consume_cycles(2);
     }
 
     // FB
     fn op_sti(&mut self) {
         self.flags.set(Flags::INTERRUPT, true);
-
-        self.consume_cycles(2);
     }
 
     // FC
     fn op_cld(&mut self) {
         self.flags.set(Flags::DIRECTION, false);
-
-        self.consume_cycles(2);
     }
 
     // FD
     fn op_std(&mut self) {
         self.flags.set(Flags::DIRECTION, true);
-
-        self.consume_cycles(2);
     }
 
     // FE
@@ -1171,8 +1092,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             _ => unreachable!(),
         };
         self.write_operand_byte(rm, result);
-
-        self.consume_cycles_for_operand(rm, 3, 15);
     }
 
     fn op_invalid(&mut self) {
@@ -1189,7 +1108,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let dst = self.read_register_word(encoding);
         let result = arithmetic(Add, dst, 1, &mut self.flags);
         self.write_register_word(encoding, result);
-        self.consume_cycles(3);
     }
 
     // 48..4F
@@ -1197,7 +1115,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let dst = self.read_register_word(encoding);
         let result = arithmetic(Subtract, dst, 1, &mut self.flags);
         self.write_register_word(encoding, result);
-        self.consume_cycles(3);
     }
 
     // 70..7F
@@ -1206,9 +1123,7 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         if condition(self.flags) {
             self.ip = self.ip.wrapping_add(rel as u16);
-            self.consume_cycles(16);
         } else {
-            self.consume_cycles(4);
         }
     }
 
@@ -1216,7 +1131,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
     fn mov_reg8_imm8(&mut self, reg: usize) {
         let value = self.fetch();
         self.write_register_byte(reg, value);
-        self.consume_cycles(4);
     }
 
     // B8..BF
@@ -1226,8 +1140,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let value = u16::from_le_bytes([lo, hi]);
 
         self.write_register_word(reg as usize, value);
-
-        self.consume_cycles(4);
     }
 
     // D0, D2
@@ -1238,7 +1150,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         if count == 0 {
             // 8 for register
             // 20 for mem
-            self.consume_cycles(20);
             return;
         }
 
@@ -1261,8 +1172,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             .set(Flags::OVERFLOW, ((result ^ value) & 0x80) != 0);
 
         self.write_operand_byte(src_op, result);
-
-        self.consume_cycles_for_operand(src_op, 8 + 4 * count as usize, 20 + 4 * count as usize);
     }
 
     // D1, D3
@@ -1273,7 +1182,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         if count == 0 {
             // 8 for register
             // 20 for mem
-            self.consume_cycles(20);
             return;
         }
 
@@ -1296,8 +1204,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             .set(Flags::OVERFLOW, ((result ^ value) & 0x8000) != 0);
 
         self.write_operand_word(src_op, result);
-
-        self.consume_cycles_for_operand(src_op, 8 + 4 * count as usize, 20 + 4 * count as usize);
     }
 }
 

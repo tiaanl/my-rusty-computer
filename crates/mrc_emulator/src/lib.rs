@@ -21,5 +21,5 @@ pub trait Cpu {
     fn reset(&mut self);
 
     /// Cycle the CPU by the amount of clock cycles given.
-    fn cycle(&mut self, cycles: usize);
+    fn step(&mut self);
 }

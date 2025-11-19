@@ -7,7 +7,7 @@ fn main() {
     println!("cargo:rerun-if-changed=ext/mrc_bios/cpu_test.asm");
 
     let success = Command::new("nasm")
-        .args(&[
+        .args([
             "-f",
             "bin",
             "-Iext/mrc_bios/",

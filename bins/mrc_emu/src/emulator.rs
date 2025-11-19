@@ -159,6 +159,6 @@ impl Emulator {
         self.pit.borrow_mut().tick();
 
         // For not just run for an arbitraty amount of cycles.
-        self.cpu.cycle(50);
+        self.cpu.step();
     }
 }

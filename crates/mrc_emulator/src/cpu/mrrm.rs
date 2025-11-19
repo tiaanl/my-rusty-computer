@@ -39,8 +39,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         &mut self,
         op: impl super::calc::arithmetic::Operation<u8>,
         direction: ModRegRMDirection,
-        reg_cycles: usize,
-        mem_cycles: usize,
     ) {
         let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
@@ -50,15 +48,12 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let result = op.op(dst, src, &mut self.flags);
 
         self.write_operand_byte(res_op, result);
-        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
     }
 
     pub(crate) fn _mod_reg_rm_logic_byte(
         &mut self,
         op: impl super::calc::logic::Operation<u8>,
         direction: ModRegRMDirection,
-        reg_cycles: usize,
-        mem_cycles: usize,
     ) {
         let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
@@ -66,16 +61,12 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let (dst, src, _) = self.mod_reg_rm_operands_byte(reg, rm, direction);
 
         op.op(dst, src, &mut self.flags);
-
-        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
     }
 
     pub(crate) fn mod_reg_rm_arithmetic_word(
         &mut self,
         op: impl super::calc::arithmetic::Operation<u16>,
         direction: ModRegRMDirection,
-        reg_cycles: usize,
-        mem_cycles: usize,
     ) {
         let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
@@ -85,15 +76,12 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let result = op.op(dst, src, &mut self.flags);
 
         self.write_operand_word(res_op, result);
-        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
     }
 
     pub(crate) fn mod_reg_rm_logic_word(
         &mut self,
         op: impl super::calc::logic::Operation<u16>,
         direction: ModRegRMDirection,
-        reg_cycles: usize,
-        mem_cycles: usize,
     ) {
         let mrrm = self.fetch();
         let (reg, rm) = self.mod_reg_rm_to_operands(mrrm);
@@ -101,8 +89,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         let (dst, src, _) = self.mod_reg_rm_operands_word(reg, rm, direction);
 
         op.op(dst, src, &mut self.flags);
-
-        self.consume_cycles_for_operand(rm, reg_cycles, mem_cycles);
     }
 
     fn mod_reg_rm_operands_byte(

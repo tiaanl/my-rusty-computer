@@ -55,12 +55,6 @@ pub struct Intel8088<D: Bus, I: Bus> {
     halted: bool,
     repeat: bool,
 
-    /// The amount of cycles that was consumed so far and that needs to be processed.
-    to_consume: usize,
-
-    /// Amount of cycles since power on.
-    cycles: usize,
-
     last_op_code: u8,
 }
 
@@ -114,9 +108,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             halted: false,
             repeat: false,
 
-            to_consume: 0,
-            cycles: 0,
-
             last_op_code: 0x00,
         }
     }
@@ -149,7 +140,7 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
         );
 
         println!(
-            "AX:{:04X} BX:{:04X} CX:{:04X} DX:{:04X} SP:{:04X} BP:{:04X} SI:{:04X} DI:{:04X} | ES:{:04X} CS:{:04X} SS:{:04X} DS:{:04X} | IP:{:04X} FL:{} | {}",
+            "AX:{:04X} BX:{:04X} CX:{:04X} DX:{:04X} SP:{:04X} BP:{:04X} SI:{:04X} DI:{:04X} | ES:{:04X} CS:{:04X} SS:{:04X} DS:{:04X} | IP:{:04X} FL:{}",
             self.registers[AX],
             self.registers[BX],
             self.registers[CX],
@@ -164,7 +155,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
             self.segments[DS],
             self.ip,
             flags,
-            self.cycles,
         );
     }
 
@@ -189,9 +179,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         // self.disasm_instruction(self.flat_address());
 
-        #[cfg(debug_assertions)]
-        let pre_cycles = self.to_consume;
-
         let mut op_code = self.fetch();
 
         // Handle segment prefixes.
@@ -206,15 +193,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
 
         // Reset any prefixes after the instruction ran.
         self.segment_override = None;
-
-        // Ignore prefix op_codes.
-        #[cfg(debug_assertions)]
-        if op_code != 0x2E {
-            debug_assert_ne!(
-                pre_cycles, self.to_consume,
-                "Operation should have consumed cycles (op_code: {op_code:02X})"
-            );
-        }
 
         0
     }
@@ -240,24 +218,6 @@ impl<D: Bus, I: Bus> Intel8088<D, I> {
                     .map(|enc| mrc_instruction::Segment::try_from_encoding(enc as u8).unwrap()),
             }
         );
-    }
-
-    #[inline(always)]
-    fn consume_cycles(&mut self, cycles: usize) {
-        self.to_consume += cycles;
-    }
-
-    #[inline(always)]
-    fn consume_cycles_for_operand(
-        &mut self,
-        operand: Operand,
-        reg_cycles: usize,
-        mem_cycles: usize,
-    ) {
-        self.consume_cycles(match operand {
-            Operand::Register(..) => reg_cycles,
-            Operand::Memory(..) => mem_cycles,
-        });
     }
 
     #[inline(always)]
@@ -384,25 +344,10 @@ impl<D: Bus, I: Bus> crate::Cpu for Intel8088<D, I> {
         self.ip = 0xFFF0;
         self.flags = Flags::RESERVED_1;
         self.segment_override = None;
-        self.cycles = 0;
     }
 
-    fn cycle(&mut self, cycles: usize) {
-        let mut cycles_to_run = cycles;
-
-        while cycles_to_run >= self.to_consume {
-            cycles_to_run -= self.to_consume;
-            self.cycles += self.to_consume;
-            self.to_consume = 0;
-
-            // Execute the next instructon.
-            self.execute_instruction();
-        }
-
-        // If the amount of cycles to consume did not fit into this run, then we will do it on the
-        // next run.
-        self.to_consume -= cycles_to_run;
-        self.cycles += cycles_to_run;
+    fn step(&mut self) {
+        self.execute_instruction();
     }
 }
 
@@ -468,14 +413,14 @@ mod tests {
         let mut cpu = Intel8088::new(&mut data[..], BusPrinter { name: "io" });
         cpu.registers[AX] = 0x0101;
         cpu.registers[CX] = 0x0102;
-        cpu.cycle(1);
+        cpu.step();
         assert_eq!(0x0103, cpu.registers[AX]);
 
         let data = &mut [0x00_u8, 0b00_001_110, 0x04, 0x00, 0x01];
 
         let mut cpu = Intel8088::new(&mut data[..], BusPrinter { name: "io" });
         cpu.registers[CX] = 0x0102;
-        cpu.cycle(1);
+        cpu.step();
         assert_eq!(0x03, data[4]);
     }
 
@@ -488,14 +433,14 @@ mod tests {
         let mut cpu = Intel8088::new(&mut data[..], BusPrinter { name: "io" });
         cpu.registers[AX] = 0x0101;
         cpu.registers[CX] = 0x0102;
-        cpu.cycle(1);
+        cpu.step();
         assert_eq!(0x0203, cpu.registers[AX]);
 
         let data = &mut [0x01_u8, 0b00_001_110, 0x04, 0x00, 0x02, 0x01];
 
         let mut cpu = Intel8088::new(&mut data[..], BusPrinter { name: "io" });
         cpu.registers[CX] = 0x0102;
-        cpu.cycle(1);
+        cpu.step();
         assert_eq!(0x04, data[4]);
         assert_eq!(0x02, data[5]);
     }
